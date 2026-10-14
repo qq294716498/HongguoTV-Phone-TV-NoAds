@@ -1,8 +1,8 @@
-name: Validate 0.1.7 candidate
+name: Validate 0.1.9 candidate
 
 on:
   push:
-    branches: [candidate/mobile-danmaku-0.1.7-29]
+    branches: [candidate/viewing-reminders-0.1.9-31]
   workflow_dispatch:
 
 permissions:
