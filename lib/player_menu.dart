@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'models.dart';
 import 'episode_browser.dart';
 import 'playback_preferences.dart';
+import 'watch_reminder_settings.dart';
 import 'video_enhancement.dart';
 import 'video_enhancement_settings.dart';
 import 'diary_service.dart';
@@ -27,6 +28,7 @@ class PlayerMenu extends StatefulWidget {
     required this.onPreferences,
     required this.onFavorite,
     this.showDanmaku = false,
+    this.mobileReminders = true,
     this.danmakuStatus = '',
     this.onRetryDanmaku,
     this.preloadStatus = '',
@@ -44,6 +46,7 @@ class PlayerMenu extends StatefulWidget {
   final bool favorite;
   final bool mobile;
   final bool showDanmaku;
+  final bool mobileReminders;
   final String danmakuStatus;
   final VoidCallback? onRetryDanmaku;
   final String preloadStatus;
@@ -254,6 +257,57 @@ class _PlayerMenuState extends State<PlayerMenu> {
                     ),
                   ),
           ),
+          if (widget.mobile) ...[
+            const Text('弹幕速度（独立于视频倍速）'),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final speed in danmakuSpeeds)
+                  ChoiceChip(
+                    key: ValueKey('menu-danmaku-speed-$speed'),
+                    label: Text('${speed}x${speed == 1.15 ? '（默认）' : ''}'),
+                    selected:
+                        speed ==
+                        preferences.effectiveDanmakuSpeed(mobile: true),
+                    onSelected: _busy
+                        ? null
+                        : (_) => _run(
+                            () => widget.onPreferences(
+                              preferences.copyWith(danmakuSpeed: speed),
+                            ),
+                          ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+          ],
+          const Text('弹幕不透明度（越低越透明）'),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final opacity in danmakuOpacities)
+                ChoiceChip(
+                  key: ValueKey('menu-danmaku-opacity-$opacity'),
+                  label: Text('${(opacity * 100).round()}%'),
+                  selected:
+                      opacity ==
+                      preferences.effectiveDanmakuOpacity(
+                        mobile: widget.mobile,
+                      ),
+                  onSelected: _busy
+                      ? null
+                      : (_) => _run(
+                          () => widget.onPreferences(
+                            preferences.copyWith(danmakuOpacity: opacity),
+                          ),
+                        ),
+                ),
+            ],
+          ),
           if (widget.onRetryDanmaku != null)
             TextButton.icon(
               key: const ValueKey('player-danmaku-retry'),
@@ -262,6 +316,16 @@ class _PlayerMenuState extends State<PlayerMenu> {
               label: const Text('重试弹幕'),
             ),
           const SizedBox(height: 8),
+        ],
+        if (all && widget.mobile && widget.mobileReminders) ...[
+          WatchReminderSettings(
+            preferences: preferences.reminders,
+            busy: _busy,
+            onChanged: (value) => _run(
+              () =>
+                  widget.onPreferences(preferences.copyWith(reminders: value)),
+            ),
+          ),
         ],
         if (all) ...[
           SwitchListTile.adaptive(

@@ -11,6 +11,7 @@ import 'package:duanju_app/player_screen.dart';
 import 'package:duanju_app/playback_preferences.dart';
 import 'package:duanju_app/television_controls.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -442,6 +443,19 @@ void main() {
       await settle(tester);
       expect(chosen?.danmaku, isFalse);
       expect(tester.takeException(), isNull);
+      final faster = find.byKey(const ValueKey('menu-danmaku-speed-2.0'));
+      await tester.ensureVisible(faster);
+      await tester.tap(faster);
+      await settle(tester);
+      expect(chosen?.danmakuSpeed, 2);
+      final opacity = find.byKey(const ValueKey('menu-danmaku-opacity-0.35'));
+      await tester.ensureVisible(opacity);
+      await tester.tap(opacity);
+      await settle(tester);
+      expect(chosen?.danmakuOpacity, .35);
+
+      expect(chosen?.speed, 1);
+      expect(tester.takeException(), isNull);
       TelevisionPlaybackSetting? selected;
       await tester.pumpWidget(
         MaterialApp(
@@ -477,6 +491,39 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('tv-danmaku-enabled')));
       await settle(tester);
       expect(selected?.danmaku, isFalse);
+      await tester.tap(find.text('打开电视设置'));
+      await settle(tester);
+      final tvFaster = find.byKey(const ValueKey('tv-danmaku-speed-1.5'));
+      await tester.ensureVisible(tvFaster);
+      Focus.of(
+        tester.element(
+          find
+              .descendant(of: tvFaster, matching: find.byType(GestureDetector))
+              .first,
+        ),
+      ).requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await settle(tester);
+      expect(selected?.danmakuSpeed, 1.5);
+      await tester.tap(find.text('打开电视设置'));
+      await settle(tester);
+      final tvOpacity = find.byKey(const ValueKey('tv-danmaku-opacity-0.35'));
+      await tester.ensureVisible(tvOpacity);
+      Focus.of(
+        tester.element(
+          find
+              .descendant(of: tvOpacity, matching: find.byType(GestureDetector))
+              .first,
+        ),
+      ).requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await settle(tester);
+      expect(selected?.danmakuOpacity, .35);
+
+      expect(selected?.speed, isNull);
+
       expect(tester.takeException(), isNull);
     },
   );

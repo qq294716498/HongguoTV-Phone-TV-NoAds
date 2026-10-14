@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:duanju_app/app_layout.dart';
 import 'package:duanju_app/app_theme.dart';
 import 'package:duanju_app/local_store.dart';
@@ -123,6 +125,50 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets('display version fallbacks match the package release version', (
+    tester,
+  ) async {
+    final packageVersion = RegExp(
+      r'^version:\s*([^+\s]+)',
+      multiLine: true,
+    ).firstMatch(File('pubspec.yaml').readAsStringSync())!.group(1);
+    expect(appVersion, packageVersion);
+    expect(const AppDevice().version, packageVersion);
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    expect((await AppDevice.detect()).version, packageVersion);
+    debugDefaultTargetPlatformOverride = null;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(builder: (context) => Text(AppLayout.versionOf(context))),
+      ),
+    );
+    expect(find.text(packageVersion!), findsOneWidget);
+    await tester.pumpWidget(
+      AppLayout(
+        television: false,
+        child: MaterialApp(
+          home: Builder(
+            builder: (context) => Text(AppLayout.versionOf(context)),
+          ),
+        ),
+      ),
+    );
+    expect(find.text(packageVersion), findsOneWidget);
+    await tester.pumpWidget(
+      AppLayout(
+        television: false,
+        version: '9.8.7',
+        child: MaterialApp(
+          home: Builder(
+            builder: (context) => Text(AppLayout.versionOf(context)),
+          ),
+        ),
+      ),
+    );
+    expect(find.text('9.8.7'), findsOneWidget);
+  });
+
   testWidgets(
     'Android TV detection falls back safely when the platform channel is unavailable',
     (tester) async {
@@ -135,16 +181,23 @@ void main() {
       );
       messenger.setMockMethodCallHandler(AppDevice.channel, (call) async {
         expect(call.method, 'deviceInfo');
-        return {'television': true, 'version': appVersion};
+        return {'television': true, 'version': '9.8.7'};
       });
       final detected = await AppDevice.detect();
       expect(detected.television, isTrue);
-      expect(detected.version, appVersion);
+      expect(detected.version, '9.8.7');
+      messenger.setMockMethodCallHandler(
+        AppDevice.channel,
+        (call) async => {'television': false, 'version': ''},
+      );
+      expect((await AppDevice.detect()).version, appVersion);
       messenger.setMockMethodCallHandler(
         AppDevice.channel,
         (call) async => throw MissingPluginException(),
       );
-      expect((await AppDevice.detect()).television, isFalse);
+      final fallback = await AppDevice.detect();
+      expect(fallback.television, isFalse);
+      expect(fallback.version, appVersion);
       debugDefaultTargetPlatformOverride = null;
     },
   );

@@ -43,6 +43,9 @@ void main() {
   Future<void> mount(
     WidgetTester tester, {
     Size size = const Size(420, 880),
+    double? speed,
+    double? opacity,
+    bool television = false,
   }) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = size;
@@ -56,7 +59,10 @@ void main() {
           body: DanmakuOverlay(
             controller: controller,
             aspectRatio: 16 / 9,
-            mobile: true,
+            mobile: !television,
+            television: television,
+            speed: speed,
+            opacity: opacity,
           ),
         ),
       ),
@@ -73,6 +79,85 @@ void main() {
     now = now.add(duration);
     await tester.pump(duration);
   }
+
+  for (final television in [false, true]) {
+    testWidgets(
+      'opacity changes text and emoji without resetting flight on TV=$television',
+      (tester) async {
+        await mount(tester, television: television);
+        await advance(tester, const Duration(seconds: 1));
+        final before = x(tester);
+        await mount(tester, television: television, opacity: .35);
+        expect(x(tester), closeTo(before, .1));
+        final text = tester.widget<Text>(find.text('合成弹幕 0'));
+        expect(text.style!.color!.a, closeTo(.35, .01));
+        await advance(tester, const Duration(seconds: 1));
+        expect(x(tester), lessThan(before));
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
+  for (final television in [false, true]) {
+    testWidgets(
+      'live speed changes preserve positions and pauses on TV=$television',
+      (tester) async {
+        await mount(tester, television: television);
+        await advance(tester, const Duration(seconds: 1));
+        final before = x(tester);
+        final pixels = television ? 420 / 32 : 42.0;
+        await mount(tester, speed: 2, television: television);
+        expect(x(tester), closeTo(before, .15));
+        await advance(tester, const Duration(seconds: 1));
+        expect(before - x(tester), closeTo(pixels * 2, .15));
+        updateDanmaku(controller, position: 1000, playing: false);
+        await tester.pump();
+        final paused = x(tester);
+        await mount(tester, speed: .5, television: television);
+        expect(x(tester), closeTo(paused, .15));
+        await advance(tester, const Duration(seconds: 2));
+        expect(x(tester), closeTo(paused, .15));
+        updateDanmaku(controller, position: 1000, speed: 3);
+        await tester.pump();
+        await advance(tester, const Duration(seconds: 1));
+        expect(paused - x(tester), closeTo(pixels * .5, .15));
+        expect(
+          find.byKey(const ValueKey('danmaku-item-1001-0-0')),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
+  testWidgets(
+    'changing speed during seek keeps flights and does not replay skipped items',
+    (tester) async {
+      await mount(tester);
+      await advance(tester, const Duration(seconds: 1));
+      controller.beginSeek();
+      await tester.pump();
+      final before = x(tester);
+      await mount(tester, speed: 1.5);
+      expect(x(tester), closeTo(before, .15));
+      await advance(tester, const Duration(seconds: 1));
+      expect(before - x(tester), closeTo(63, .15));
+      expect(x(tester, '1001-0-1'), closeTo(x(tester), .15));
+      controller.endSeek(const Duration(seconds: 30));
+      await tester.pump();
+      expect(before - x(tester), closeTo(63, .15));
+      expect(find.text('跳过的弹幕不补刷'), findsNothing);
+      await mount(tester, speed: .5);
+      expect(before - x(tester), closeTo(63, .15));
+      expect(
+        find.byKey(const ValueKey('danmaku-item-1001-0-0')),
+        findsOneWidget,
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 
   testWidgets(
     'mobile uses four top lanes above a letterboxed landscape video',
@@ -101,7 +186,7 @@ void main() {
       await mount(tester);
       final start = x(tester);
       await advance(tester, const Duration(seconds: 2));
-      expect(start - x(tester), closeTo(84, .1));
+      expect(start - x(tester), closeTo(96.6, .1));
       expect(x(tester, '1001-0-1'), closeTo(x(tester), .1));
       updateDanmaku(controller, position: 2000, speed: 2);
       await tester.pump();
@@ -109,16 +194,16 @@ void main() {
       await advance(tester, const Duration(seconds: 1));
       updateDanmaku(controller, position: 4000, speed: 2);
       await tester.pump();
-      expect(beforeDouble - x(tester), closeTo(42, .1));
+      expect(beforeDouble - x(tester), closeTo(48.3, .1));
       final beforeSeek = x(tester);
       controller.beginSeek();
       await tester.pump();
       expect(x(tester), closeTo(beforeSeek, .1));
       await advance(tester, const Duration(milliseconds: 500));
-      expect(beforeSeek - x(tester), closeTo(21, .1));
+      expect(beforeSeek - x(tester), closeTo(24.15, .1));
       controller.endSeek(const Duration(seconds: 30));
       await tester.pump();
-      expect(beforeSeek - x(tester), closeTo(21, .1));
+      expect(beforeSeek - x(tester), closeTo(24.15, .1));
       expect(find.text('跳过的弹幕不补刷'), findsNothing);
       controller.beginSeek();
       controller.endSeek(Duration.zero);
@@ -127,7 +212,7 @@ void main() {
         find.byKey(const ValueKey('danmaku-item-1001-0-0')),
         findsOneWidget,
       );
-      expect(beforeSeek - x(tester), closeTo(21, .1));
+      expect(beforeSeek - x(tester), closeTo(24.15, .1));
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     },
@@ -150,7 +235,7 @@ void main() {
       updateDanmaku(controller, position: 1000);
       await tester.pump();
       await advance(tester, const Duration(seconds: 1));
-      expect(paused - x(tester), closeTo(42, .1));
+      expect(paused - x(tester), closeTo(48.3, .1));
       updateDanmaku(controller, position: 2000, foreground: false);
       await tester.pump();
       expect(find.byKey(const ValueKey('danmaku-item-1001-0-0')), findsNothing);
@@ -251,7 +336,7 @@ void main() {
       updateDanmaku(controller, position: 1000);
       await tester.pump();
       await advance(tester, const Duration(seconds: 1));
-      expect(paused - x(tester), closeTo(42, .1));
+      expect(paused - x(tester), closeTo(48.3, .1));
       updateDanmaku(controller, position: 1000, buffering: true);
       await tester.pump();
       final buffered = x(tester);
@@ -260,10 +345,10 @@ void main() {
       updateDanmaku(controller, position: 1000);
       await tester.pump();
       await advance(tester, const Duration(seconds: 1));
-      expect(buffered - x(tester), closeTo(42, .1));
+      expect(buffered - x(tester), closeTo(48.3, .1));
       controller.endSeek(const Duration(seconds: 30));
       await tester.pump();
-      expect(buffered - x(tester), closeTo(42, .1));
+      expect(buffered - x(tester), closeTo(48.3, .1));
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     },
@@ -280,7 +365,7 @@ void main() {
       expect(x(tester), closeTo(420, .1));
       expect(find.byKey(const ValueKey('danmaku-item-1001-0-3')), findsNothing);
       await advance(tester, const Duration(seconds: 1));
-      expect(x(tester), closeTo(378, .1));
+      expect(x(tester), closeTo(371.7, .1));
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     },

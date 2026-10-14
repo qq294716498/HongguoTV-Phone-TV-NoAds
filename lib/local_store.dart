@@ -7,6 +7,7 @@ import 'local_profiles.dart';
 import 'local_snapshot.dart';
 import 'models.dart';
 import 'playback_preferences.dart';
+import 'watch_reminder_models.dart';
 import 'download_preferences.dart';
 import 'catalog_sort.dart';
 import 'follow_state.dart';
@@ -400,6 +401,26 @@ class LocalStore extends ChangeNotifier {
       return const PlaybackPreferences();
     }
   }
+
+  WatchReminderProgress get watchReminderProgress {
+    if (locked) return WatchReminderProgress();
+    try {
+      return WatchReminderProgress.fromJson(
+        jsonDecode(_string(_key('watchReminderProgress')) ?? '{}'),
+      );
+    } catch (_) {
+      return WatchReminderProgress();
+    }
+  }
+
+  Future<void> saveWatchReminderProgress(String profileId, String content) =>
+      _queue(() async {
+        if (!_profiles.any((profile) => profile.id == profileId)) return;
+        final value = WatchReminderProgress.fromJson(jsonDecode(content));
+        await _commit({
+          _key('watchReminderProgress', profileId): jsonEncode(value.toJson()),
+        }, trackSync: false);
+      });
 
   CatalogView get catalogView {
     if (locked) return const CatalogView();
@@ -1010,6 +1031,9 @@ class LocalStore extends ChangeNotifier {
             'playback': jsonDecode(
               _string(_key('playback', profile.id)) ?? '{}',
             ),
+            'watchReminderProgress': jsonDecode(
+              _string(_key('watchReminderProgress', profile.id)) ?? '{}',
+            ),
             'downloadPreferences': jsonDecode(
               _string(_key('downloadPreferences', profile.id)) ?? '{}',
             ),
@@ -1085,6 +1109,7 @@ class LocalStore extends ChangeNotifier {
       PlaybackPreferences.fromJson(
         Map<String, dynamic>.from(library['playback'] as Map? ?? {}),
       );
+      WatchReminderProgress.fromJson(library['watchReminderProgress']);
       DownloadPreferences.fromJson(
         Map<String, dynamic>.from(library['downloadPreferences'] as Map? ?? {}),
       );
@@ -1143,6 +1168,9 @@ class LocalStore extends ChangeNotifier {
         _key('source', profile.id): library['source'] as String,
         _key('hideVip', profile.id): library['hideVip'] as bool,
         _key('playback', profile.id): jsonEncode(library['playback'] ?? {}),
+        _key('watchReminderProgress', profile.id): jsonEncode(
+          library['watchReminderProgress'] ?? {},
+        ),
         _key('downloadPreferences', profile.id): jsonEncode(
           library['downloadPreferences'] ?? {},
         ),

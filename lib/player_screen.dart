@@ -16,6 +16,8 @@ import 'diary_service.dart';
 import 'luna_exo_player.dart';
 import 'danmaku_controller.dart';
 import 'danmaku_overlay.dart';
+import 'watch_reminder_models.dart';
+import 'watch_reminder_runtime.dart';
 import 'download_picker.dart';
 import 'downloads_screen.dart';
 import 'follow_state.dart';
@@ -88,6 +90,8 @@ class _PlayerScreenState extends State<PlayerScreen>
   late final DanmakuController _danmaku;
   int _seekSequence = 0;
   bool _danmakuEnabled = true;
+  double? _danmakuSpeed;
+  double? _danmakuOpacity;
   late final PlayerInteractions _interactions;
   final _playerFocus = FocusNode(debugLabel: 'player-surface');
   final _televisionControls = GlobalKey<TelevisionControlsState>();
@@ -102,6 +106,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   final _health = PlaybackHealth();
   Timer? _saveTimer;
   Timer? _healthTimer;
+  WatchReminderRuntime? _watchReminders;
   Timer? _errorTimer;
   Timer? _pictureInPictureExitTimer;
   Future<void> _operations = Future<void>.value();
@@ -171,7 +176,10 @@ class _PlayerScreenState extends State<PlayerScreen>
     quality: _requestedQuality,
     autoAdvance: _autoAdvance,
     danmaku: _danmakuEnabled,
+    danmakuSpeed: _danmakuSpeed,
+    danmakuOpacity: _danmakuOpacity,
     preload: _preloadEnabled,
+    reminders: widget.store.playbackPreferences.reminders,
     enhancement: _enhancement.preferences,
   );
   String get _qualityLabel => _plan?.local == true
@@ -212,6 +220,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     _requestedQuality = preferences.quality;
     _autoAdvance = true;
     _danmakuEnabled = preferences.danmaku;
+    _danmakuSpeed = preferences.danmakuSpeed;
+    _danmakuOpacity = preferences.danmakuOpacity;
     _preloadEnabled = true;
     _loader = PlaybackLoader(widget.repository);
     _preloader = PlaybackPreloader(
@@ -238,6 +248,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     _danmaku = DanmakuController(widget.repository)
       ..setEnabled(_danmakuEnabled);
     widget.store.addListener(_accessChanged);
+    _watchReminders = WatchReminderRuntime.current;
+    _watchReminders?.addListener(_reminderChanged);
     _player =
         widget.playerFactory?.call() ??
         (Platform.isAndroid
@@ -385,6 +397,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
     _healthTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       _syncScreenOn();
+      _syncWatchReminders();
       if (!_closed &&
           _acceptErrors &&
           !_loading &&
@@ -835,8 +848,91 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
   }
 
+  bool get _mobileRemindersAllowed =>
+      _mobile &&
+      (context.getInheritedWidgetOfExactType<AppLayout>()?.mobileReminders ??
+          true);
+
+  bool get _watchingForReminders =>
+      !_closed &&
+      _mobileRemindersAllowed &&
+      _lifecycleState == AppLifecycleState.resumed &&
+      !_pictureInPictureVisible &&
+      !_loading &&
+      _error == null &&
+      _openedCurrent &&
+      _playIntent &&
+      _player.state.playing &&
+      !_player.state.buffering &&
+      !_player.state.completed &&
+      !_danmaku.seeking &&
+      widget.store.profileEpoch == _profileEpoch &&
+      !widget.store.locked &&
+      (_panelOpen || (ModalRoute.of(context)?.isCurrent ?? true));
+
+  bool get _reminderVisible =>
+      _watchingForReminders &&
+      !_panelOpen &&
+      (ModalRoute.of(context)?.isCurrent ?? true) &&
+      (_watchReminders?.notice.isNotEmpty ?? false);
+
+  void _reminderChanged() {
+    if (mounted && !_closed) setState(() {});
+  }
+
+  void _syncWatchReminders() {
+    if (_watchReminders == null) return;
+    _watchReminders!.setPlayback(
+      this,
+      watching: _watchingForReminders,
+      canShow:
+          _watchingForReminders &&
+          !_panelOpen &&
+          (ModalRoute.of(context)?.isCurrent ?? true),
+    );
+  }
+
+  Widget _watchReminderDialog() {
+    final kinds = _watchReminders!.notice;
+    return Positioned.fill(
+      child: Stack(
+        children: [
+          const ModalBarrier(dismissible: false, color: Color(0x66000000)),
+          Center(
+            child: AlertDialog(
+              key: const ValueKey('watch-reminder-dialog'),
+              title: const Text('休息一下吧'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (kinds.contains(WatchReminderKind.daily))
+                      const Text('今天的观看时间已达到你设置的上限，起来活动一下吧。'),
+                    if (kinds.contains(WatchReminderKind.bedtime))
+                      const Text('已到你设置的睡觉时间，早点休息吧。'),
+                    if (_watchReminders!.persistenceError != null)
+                      Text(_watchReminders!.persistenceError!),
+                  ],
+                ),
+              ),
+              actions: [
+                FilledButton(
+                  key: const ValueKey('watch-reminder-dismiss'),
+                  onPressed: _watchReminders!.dismiss,
+                  child: const Text('知道了'),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _syncDanmaku({bool discontinuity = false}) {
     if (_closed) return;
+    _syncWatchReminders();
     final state = _player.state;
     _danmaku.update(
       position: state.position,
@@ -875,6 +971,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
     _lastOrientation = orientation;
     _scheduleSystemUi();
+    _syncWatchReminders();
   }
 
   void _scheduleSystemUi() {
@@ -1674,6 +1771,8 @@ class _PlayerScreenState extends State<PlayerScreen>
       _requestedQuality = nextPreferences.quality;
       _autoAdvance = true;
       _danmakuEnabled = nextPreferences.danmaku;
+      _danmakuSpeed = nextPreferences.danmakuSpeed;
+      _danmakuOpacity = nextPreferences.danmakuOpacity;
       _preloadEnabled = true;
     });
     _danmaku.setEnabled(_danmakuEnabled);
@@ -1774,6 +1873,7 @@ class _PlayerScreenState extends State<PlayerScreen>
               local: _plan?.local == true,
               favorite: widget.store.isFavorite(_detail.drama.id),
               mobile: _mobile,
+              mobileReminders: _mobileRemindersAllowed,
               onEpisode: (index) => Navigator.pop(menuContext, index),
               onPreferences: _setPreferences,
               showDanmaku: _detail.drama.source == 'hongguo',
@@ -1812,6 +1912,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     final intentSequence = _seasonSequence;
     final resume = resumeAfterSeek && !_player.state.playing;
     _danmaku.beginSeek();
+    _syncWatchReminders();
     _enhancement.ignorePerformance();
     var succeeded = false;
     try {
@@ -1822,6 +1923,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     } finally {
       if (!_closed && ticket == _seekSequence && generation == _generation) {
         _danmaku.endSeek(succeeded ? target : _player.state.position);
+        _syncWatchReminders();
       }
     }
     if (succeeded &&
@@ -1918,6 +2020,8 @@ class _PlayerScreenState extends State<PlayerScreen>
               onFavorite: _toggleFavorite,
               autoAdvance: _autoAdvance,
               danmaku: _danmakuEnabled,
+              danmakuSpeed: _danmakuSpeed,
+              danmakuOpacity: _danmakuOpacity,
               showDanmaku: _detail.drama.source == 'hongguo',
               danmakuStatus: _danmaku.status,
               onRetryDanmaku: _danmaku.canRetry ? _danmaku.retry : null,
@@ -1944,6 +2048,8 @@ class _PlayerScreenState extends State<PlayerScreen>
           quality: selection.quality,
           autoAdvance: true,
           danmaku: selection.danmaku,
+          danmakuSpeed: selection.danmakuSpeed,
+          danmakuOpacity: selection.danmakuOpacity,
           preload: true,
           enhancement: selection.enhancement,
         ),
@@ -1954,6 +2060,10 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   void _back() {
+    if (_reminderVisible) {
+      _watchReminders?.dismiss();
+      return;
+    }
     _cancelSeasonAdvance();
     _dismissSeasonNotice();
     if (_television) {
@@ -1971,6 +2081,8 @@ class _PlayerScreenState extends State<PlayerScreen>
   @override
   void dispose() {
     _transitionWaitTimer?.cancel();
+    _watchReminders?.removeListener(_reminderChanged);
+    _watchReminders?.detachPlayback(this);
     _closed = true;
     if (_player is LunaExoPlayer) {
       _player.frameHold.removeListener(_retainedFrameChanged);
@@ -2041,7 +2153,12 @@ class _PlayerScreenState extends State<PlayerScreen>
               : Theme.of(context).brightness;
           return AnnotatedRegion<SystemUiOverlayStyle>(
             value: AppTheme.systemBars(overlayBrightness),
-            child: _buildPlayer(context),
+            child: Stack(
+              children: [
+                _buildPlayer(context),
+                if (_reminderVisible) _watchReminderDialog(),
+              ],
+            ),
           );
         },
       ),
@@ -2054,8 +2171,14 @@ class _PlayerScreenState extends State<PlayerScreen>
     final fullscreen = _showFullscreen;
     final pictureInPicture = _pictureInPictureVisible;
     return PopScope(
-      canPop: _television ? !_televisionOverlayVisible : !fullscreen,
+      canPop: _television
+          ? !_televisionOverlayVisible
+          : !fullscreen && !_reminderVisible,
       onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _reminderVisible) {
+          _watchReminders?.dismiss();
+          return;
+        }
         _cancelSeasonAdvance();
         _dismissSeasonNotice();
         if (!didPop && _television) {
@@ -2301,6 +2424,11 @@ class _PlayerScreenState extends State<PlayerScreen>
         if (!hideOverlayForPictureInPicture && !_hasRetainedFrame)
           DanmakuOverlay(
             controller: _danmaku,
+            speed: _preferences.effectiveDanmakuSpeed(mobile: _mobile),
+            opacity: _preferences.effectiveDanmakuOpacity(
+              mobile: _mobile,
+              television: _television,
+            ),
             aspectRatio: _aspectRatio,
             television: _television,
             mobile: _mobile,

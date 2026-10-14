@@ -809,6 +809,8 @@ class TelevisionPlaybackSetting {
     this.quality,
     this.autoAdvance,
     this.danmaku,
+    this.danmakuSpeed,
+    this.danmakuOpacity,
     this.preload,
     this.enhancement,
   });
@@ -817,6 +819,8 @@ class TelevisionPlaybackSetting {
   final int? quality;
   final bool? autoAdvance;
   final bool? danmaku;
+  final double? danmakuSpeed;
+  final double? danmakuOpacity;
   final bool? preload;
   final VideoEnhancementPreferences? enhancement;
 }
@@ -832,6 +836,8 @@ class TelevisionSettingsDialog extends StatelessWidget {
     required this.onFavorite,
     this.autoAdvance = true,
     this.danmaku = true,
+    this.danmakuSpeed,
+    this.danmakuOpacity,
     this.showDanmaku = false,
     this.danmakuStatus = '',
     this.onRetryDanmaku,
@@ -848,6 +854,8 @@ class TelevisionSettingsDialog extends StatelessWidget {
   final VoidCallback onFavorite;
   final bool autoAdvance;
   final bool danmaku;
+  final double? danmakuSpeed;
+  final double? danmakuOpacity;
   final bool showDanmaku;
   final String danmakuStatus;
   final VoidCallback? onRetryDanmaku;
@@ -947,6 +955,44 @@ class TelevisionSettingsDialog extends StatelessWidget {
                   context,
                   TelevisionPlaybackSetting(danmaku: !danmaku),
                 ),
+              ),
+              const SizedBox(height: 8),
+              const Text('弹幕速度（独立于视频倍速）'),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final value in danmakuSpeeds)
+                    RemoteButton(
+                      key: ValueKey('tv-danmaku-speed-$value'),
+                      label: '${value}x${value == 1 ? '（默认）' : ''}',
+                      selected: value == (danmakuSpeed ?? 1),
+                      onPressed: () => Navigator.pop(
+                        context,
+                        TelevisionPlaybackSetting(danmakuSpeed: value),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              const Text('弹幕不透明度（越低越透明）'),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final value in danmakuOpacities)
+                    RemoteButton(
+                      key: ValueKey('tv-danmaku-opacity-$value'),
+                      label: '${(value * 100).round()}%',
+                      selected: value == (danmakuOpacity ?? .55),
+                      onPressed: () => Navigator.pop(
+                        context,
+                        TelevisionPlaybackSetting(danmakuOpacity: value),
+                      ),
+                    ),
+                ],
               ),
               const SizedBox(height: 8),
               Text(danmakuStatus, style: const TextStyle(fontSize: 14)),

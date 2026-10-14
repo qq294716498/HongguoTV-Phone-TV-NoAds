@@ -23,6 +23,7 @@ import 'video_enhancement_assets.dart';
 import 'danmaku_emoji_assets.dart';
 import 'diary_service.dart';
 import 'app_updates.dart';
+import 'watch_reminder_runtime.dart';
 
 Future<void> main(List<String> arguments) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -71,6 +72,8 @@ class _AppBootstrapState extends State<AppBootstrap>
     MediaLibrary.current = null;
     AppUpdates.current?.dispose();
     AppUpdates.current = null;
+    WatchReminderRuntime.current?.dispose();
+    WatchReminderRuntime.current = null;
     store?.dispose();
     super.dispose();
   }
@@ -84,6 +87,7 @@ class _AppBootstrapState extends State<AppBootstrap>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    WatchReminderRuntime.current?.lifecycle(state);
     if (state == AppLifecycleState.resumed && Platform.isAndroid) {
       unawaited(_refreshDevice());
       unawaited(AppUpdates.current?.returnedFromSettings());
@@ -134,6 +138,10 @@ class _AppBootstrapState extends State<AppBootstrap>
         setState(() {
           store = LocalStore(preferences);
           repository.access = store;
+          if ((Platform.isAndroid || Platform.isIOS) && !device.television) {
+            WatchReminderRuntime.current?.dispose();
+            WatchReminderRuntime.current = WatchReminderRuntime(store!);
+          }
           MediaLibrary.attach(repository, store!);
           LanController.current?.dispose();
           final link = LanController(
@@ -253,6 +261,8 @@ class DuanjuApp extends StatelessWidget {
             child: AppLayout(
               television: tv,
               version: version,
+              mobileReminders:
+                  !television && (Platform.isAndroid || Platform.isIOS),
               child: Theme(
                 data: tv ? televisionTheme(theme) : theme,
                 child: Shortcuts(

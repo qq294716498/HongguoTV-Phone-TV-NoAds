@@ -11,13 +11,14 @@ import 'app_theme.dart';
 import 'background_downloads.dart';
 import 'local_store.dart';
 import 'profiles_screen.dart';
-import 'app_build.dart';
 import 'sources_screen.dart';
 import 'widgets.dart';
 import 'resource_settings_screen.dart';
 import 'lan_screen.dart';
 import 'diary_service.dart';
 import 'app_update_screen.dart';
+import 'watch_reminder_settings.dart';
+import 'app_layout.dart';
 
 String storageSize(int bytes) {
   if (bytes < 0) return '暂不可用';
@@ -145,6 +146,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
             padding: const EdgeInsets.all(16),
             children: [
               const AppUpdateTile(),
+              if ((Platform.isAndroid || Platform.isIOS) &&
+                  !AppLayout.isTelevision(context) &&
+                  (context
+                          .dependOnInheritedWidgetOfExactType<AppLayout>()
+                          ?.mobileReminders ??
+                      true))
+                WatchReminderSettings(
+                  preferences: widget.store.playbackPreferences.reminders,
+                  busy: _busy,
+                  onChanged: (value) async {
+                    if (_busy) return;
+                    setState(() => _busy = true);
+                    try {
+                      await saveUserChange(
+                        context,
+                        () => widget.store.setPlaybackPreferences(
+                          widget.store.playbackPreferences.copyWith(
+                            reminders: value,
+                          ),
+                        ),
+                      );
+                    } finally {
+                      if (mounted) setState(() => _busy = false);
+                    }
+                  },
+                ),
               ListTile(
                 key: const ValueKey('lan-settings'),
                 leading: const Icon(Icons.devices_rounded),

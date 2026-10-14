@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 
 export 'app_build.dart';
 
-const appVersion = '0.1.6';
+const appVersion = '0.1.9';
 
 ThemeData televisionTheme(ThemeData theme) {
   final colors = theme.colorScheme;
@@ -137,10 +137,12 @@ class AppLayout extends InheritedWidget {
     super.key,
     required this.television,
     this.version = appVersion,
+    this.mobileReminders = true,
     required super.child,
   });
   final bool television;
   final String version;
+  final bool mobileReminders;
 
   static bool isTelevision(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<AppLayout>()?.television ??
@@ -151,5 +153,7 @@ class AppLayout extends InheritedWidget {
 
   @override
   bool updateShouldNotify(AppLayout oldWidget) =>
-      television != oldWidget.television || version != oldWidget.version;
+      television != oldWidget.television ||
+      version != oldWidget.version ||
+      mobileReminders != oldWidget.mobileReminders;
 }

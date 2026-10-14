@@ -84,11 +84,15 @@ class DanmakuOverlay extends StatefulWidget {
     required this.aspectRatio,
     this.television = false,
     this.mobile = false,
+    this.speed,
+    this.opacity,
   });
   final DanmakuController controller;
   final double aspectRatio;
   final bool television;
   final bool mobile;
+  final double? speed;
+  final double? opacity;
 
   @override
   State<DanmakuOverlay> createState() => _DanmakuOverlayState();
@@ -99,7 +103,8 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
   Object? _layout;
   List<DanmakuFlight> _schedule = const [];
   int _realtimePositionMs = 0;
-  int _realtimeBaseMs = 0;
+  double _realtimeBaseMs = 0;
+  int _realtimeElapsedMs = 0;
   late final Ticker _realtimeTicker;
   final _realtimeSeen = <String>{};
   List<DanmakuFlight> _realtimeFlights = [];
@@ -110,13 +115,20 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
 
   bool get _mobile => widget.mobile && !widget.television;
   bool get _realtime => widget.television || _mobile;
+  double get _realtimeSpeed {
+    final speed = widget.speed ?? (_mobile ? 1.15 : 1.0);
+    return speed.isFinite ? speed.clamp(.5, 2.0) : (_mobile ? 1.15 : 1.0);
+  }
 
   @override
   void initState() {
     super.initState();
     _emojiCache.addListener(_emojiReady);
     _realtimeTicker = createTicker((elapsed) {
-      _realtimePositionMs = _realtimeBaseMs + elapsed.inMilliseconds;
+      final delta = elapsed.inMilliseconds - _realtimeElapsedMs;
+      _realtimeElapsedMs = elapsed.inMilliseconds;
+      _realtimeBaseMs += delta * _realtimeSpeed;
+      _realtimePositionMs = _realtimeBaseMs.round();
     });
   }
 
@@ -134,13 +146,14 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
     if (_realtimeLayout != layout) {
       _realtimeLayout = layout;
       _realtimeTicker.stop();
-      _realtimePositionMs = _realtimeBaseMs = 0;
+      _realtimePositionMs = 0;
+      _realtimeBaseMs = 0;
       _realtimeSeen.clear();
       _realtimeFlights.clear();
     }
     if (_mobile ? controller.mobileMoving : controller.moving) {
       if (!_realtimeTicker.isActive) {
-        _realtimeBaseMs = _realtimePositionMs;
+        _realtimeElapsedMs = 0;
         _realtimeTicker.start();
       }
     } else {
@@ -283,7 +296,11 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
               fontSize: fontSize,
               fontWeight: FontWeight.w400,
               color: Colors.white.withValues(
-                alpha: _mobile ? .95 : (widget.television ? .55 : .62),
+                alpha: widget.opacity?.isFinite == true
+                    ? widget.opacity!.clamp(.2, 1.0)
+                    : _mobile
+                    ? .95
+                    : (widget.television ? .55 : .62),
               ),
               height: 1.2,
               shadows: const [
@@ -393,7 +410,9 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
                                   moving: _mobile
                                       ? controller.mobileMoving
                                       : controller.moving,
-                                  rate: _realtime ? 1 : controller.rate,
+                                  rate: _realtime
+                                      ? _realtimeSpeed
+                                      : controller.rate,
                                   revision: _mobile
                                       ? (
                                           controller.motionRevision,
