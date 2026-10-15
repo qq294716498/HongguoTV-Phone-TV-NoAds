@@ -1,0 +1,39 @@
+name: Hongguo playback diagnosis
+
+on:
+  push:
+    branches: [fix/hongguo-playback-20261015]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hongguo-playback-diagnosis-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: native/go.mod
+          cache-dependency-path: native/go.sum
+      - name: Go formatting
+        working-directory: native
+        run: |
+          gofmt -w core/provider_hongguo_probe_test.go
+          git diff -- core/provider_hongguo_probe_test.go
+      - name: Go regression tests
+        working-directory: native
+        run: go test -race ./...
+      - name: Live address resolution without media or images
+        working-directory: native
+        env:
+          CHECK_LIVE_HONGGUO: "true"
+        run: go test ./core -run '^TestLiveHongguoPlaybackResolution$' -v -count=1
