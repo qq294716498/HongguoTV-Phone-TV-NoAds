@@ -7,12 +7,15 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"sort"
 	"strings"
 	"testing"
 	"time"
 )
+
+type hongguoComicProbeKey struct{}
 
 type hongguoProbeTransport struct {
 	base http.RoundTripper
@@ -22,6 +25,9 @@ type hongguoProbeTransport struct {
 func (transport hongguoProbeTransport) RoundTrip(request *http.Request) (*http.Response, error) {
 	if strings.HasSuffix(strings.ToLower(request.URL.Path), ".png") || strings.HasSuffix(strings.ToLower(request.URL.Path), ".jpg") {
 		return nil, fmt.Errorf("image requests are disabled")
+	}
+	if comic, _ := request.Context().Value(hongguoComicProbeKey{}).(bool); comic {
+		request.Header.Set("User-Agent", strings.ReplaceAll(strings.ReplaceAll(hongguoAppUserAgent, "com.phoenix.read", "com.kylin.read"), "/73532 ", "/74032 "))
 	}
 	response, err := transport.base.RoundTrip(request)
 	if err != nil {
@@ -37,6 +43,14 @@ func (transport hongguoProbeTransport) RoundTrip(request *http.Request) (*http.R
 			keys = append(keys, key)
 		}
 		sort.Strings(keys)
+	}
+	if request.URL.Path == "/novel/player/video_detail/v1/" {
+		detail := nestedMap(result, "data", "video_data")
+		transport.test.Logf("detail contentType=%v videoContentType=%v genreType=%v platform=%v", detail["content_type"], detail["video_content_type"], detail["genre_type"], detail["video_platform"])
+		if rows := anyList(detail["video_list"]); len(rows) > 0 {
+			first, _ := rows[0].(map[string]any)
+			transport.test.Logf("first contentType=%v platform=%v hasModel=%t", first["content_type"], first["video_platform"], first["video_model"] != nil)
+		}
 	}
 	transport.test.Logf("response host=%s path=%s status=%d type=%q bytes=%d fields=%v", request.URL.Hostname(), request.URL.Path, response.StatusCode, response.Header.Get("Content-Type"), len(body), keys)
 	if readErr != nil {
@@ -75,29 +89,14 @@ func TestLiveHongguoPlaybackResolution(t *testing.T) {
 		resolve func() (providerMedia, error)
 	}{
 		{"app", func() (providerMedia, error) { return d.resolveHongguoAppMedia(ctx, videoID) }},
-		{"official-single-request", func() (providerMedia, error) {
-			payload := map[string]any{"video_id": videoID, "video_platform": 3, "need_all_video_definition": true}
-			result, err := d.hongguoAppRequest(ctx, http.MethodPost, "/novel/player/video_model/v1/", nil, payload)
-			if err != nil {
-				return providerMedia{}, err
-			}
-			data := nestedMap(result, "data")
-			keys := []string{}
-			for key := range data {
-				keys = append(keys, key)
-			}
-			sort.Strings(keys)
-			t.Logf("official single data fields=%v", keys)
-			model, _ := data["video_model"].(map[string]any)
-			if encoded, ok := data["video_model"].(string); ok {
-				if err := json.Unmarshal([]byte(encoded), &model); err != nil {
-					return providerMedia{}, err
-				}
-			}
-			return selectHongguoAppMedia(model)
+		{"official-manga-content-type", func() (providerMedia, error) {
+			return probeHongguoOfficialModel(ctx, d, videoID, nil)
 		}},
-		{"web", func() (providerMedia, error) { return d.resolveHongguoWebMedia(ctx, seriesID, videoID) }},
-		{"backup", func() (providerMedia, error) { return d.resolveHongguoPlaybackAPI(ctx, seriesID, videoID) }},
+		{"official-manga-client", func() (providerMedia, error) {
+			comicContext := context.WithValue(ctx, hongguoComicProbeKey{}, true)
+			profile := url.Values{"aid": {"8704"}, "app_name": {"kylin_read"}, "version_code": {"74032"}, "version_name": {"7.4.0.32"}, "manifest_version_code": {"74032"}, "update_version_code": {"74032"}}
+			return probeHongguoOfficialModel(comicContext, d, videoID, profile)
+		}},
 	}
 	playable := false
 	for _, resolver := range resolvers {
@@ -108,4 +107,20 @@ func TestLiveHongguoPlaybackResolution(t *testing.T) {
 	if !playable {
 		t.Fatal("all Hongguo playback address routes failed; no restoration verified")
 	}
+}
+
+func probeHongguoOfficialModel(ctx context.Context, d *Downloader, videoID string, profile url.Values) (providerMedia, error) {
+	payload := map[string]any{"video_id": videoID, "content_type": 1004, "biz_param": map[string]any{"video_platform": 3, "need_all_video_definition": true}}
+	result, err := d.hongguoAppRequest(ctx, http.MethodPost, "/novel/player/video_model/v1/", profile, payload)
+	if err != nil {
+		return providerMedia{}, err
+	}
+	data := nestedMap(result, "data")
+	model, _ := data["video_model"].(map[string]any)
+	if encoded, ok := data["video_model"].(string); ok {
+		if err := json.Unmarshal([]byte(encoded), &model); err != nil {
+			return providerMedia{}, err
+		}
+	}
+	return selectHongguoAppMedia(model)
 }
