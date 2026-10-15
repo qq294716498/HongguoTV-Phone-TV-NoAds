@@ -71,7 +71,7 @@ func TestLiveHongguoPlaybackResolution(t *testing.T) {
 	videoID := strings.TrimPrefix(chapters[0].VideoURL, "hongguo-cenc://")
 	t.Logf("detail episodes=%d firstVideoID=%s", len(chapters), videoID)
 	resolvers := []struct {
-		name string
+		name    string
 		resolve func() (providerMedia, error)
 	}{
 		{"app", func() (providerMedia, error) { return d.resolveHongguoAppMedia(ctx, videoID) }},
