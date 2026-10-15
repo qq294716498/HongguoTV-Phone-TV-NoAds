@@ -97,7 +97,8 @@ jobs:
           for apk in dist/android/*.apk; do
             output=$("$apksigner" verify --verbose --print-certs "$apk")
             printf '%s\n' "$output"
-            actual=$(printf '%s\n' "$output" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | tr -d ':' | tr '[:upper:]' '[:lower:]')
+            printf '%s\n' "$output" | grep -Fxq 'Number of signers: 1'
+          actual=$(printf '%s\n' "$output" | sed -En 's/^(Signer #[0-9]+|V[0-9]+([.][0-9]+)? Signer):? certificate SHA-256 digest: //p' | tr -d ':' | tr '[:upper:]' '[:lower:]' | sort -u)
             test "$actual" = "$expected"
           done
       - name: Remove signing files
