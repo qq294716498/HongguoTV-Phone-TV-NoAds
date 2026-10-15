@@ -9,6 +9,10 @@ on:
         description: Run the limited live guest registration comparison
         type: boolean
         default: false
+      protocol_probe:
+        description: Run the limited APK routing and request comparison
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -41,7 +45,7 @@ jobs:
           go test -race -ldflags="-X duanjuapp/native/core.buildAllSources=true" ./...
       - name: Preserve source snapshot
         run: |
-          python3 scripts/finish_task.py --message "访客注册成功但取址仍为空，保留诊断与验证记录"
+          python3 scripts/finish_task.py --message "增加基于原 APK 的路由与协议对照；真实取址结果单独记录"
           python3 scripts/sync_source.py --check
       - name: Live guest registration without media or images
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.guest_registration }}
@@ -49,3 +53,9 @@ jobs:
         env:
           CHECK_LIVE_HONGGUO_REGISTRATION: "true"
         run: go test ./core -run '^TestLiveHongguoGuestRegistration$' -v -count=1
+      - name: Live APK protocol comparison without media or images
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.protocol_probe) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[probe-protocol]')) }}
+        working-directory: native
+        env:
+          CHECK_LIVE_HONGGUO_PROTOCOL: "true"
+        run: go test ./core -run '^TestLiveHongguoProtocolComparison$' -v -count=1
