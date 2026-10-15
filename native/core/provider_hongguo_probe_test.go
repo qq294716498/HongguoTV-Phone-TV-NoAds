@@ -89,6 +89,7 @@ func TestLiveHongguoPlaybackResolution(t *testing.T) {
 		resolve func() (providerMedia, error)
 	}{
 		{"app", func() (providerMedia, error) { return d.resolveHongguoAppMedia(ctx, videoID) }},
+		{"candidate-episode-content-type", func() (providerMedia, error) { return d.resolveHongguoAppMedia(ctx, videoID, chapters[0].ContentType) }},
 		{"official-manga-content-type", func() (providerMedia, error) {
 			return probeHongguoOfficialModel(ctx, d, videoID, nil)
 		}},

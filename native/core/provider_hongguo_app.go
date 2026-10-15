@@ -218,8 +218,16 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 			}
 			continue
 		}
-		if len(content) == 0 || len(content) > providerMaxBodyBytes {
-			return nil, errors.New("红果 App 接口未返回有效数据")
+		if len(content) == 0 {
+			downloader.recordDiagnostic(diagnosticEvent{
+				Event: "hongguo.app_empty_response", Level: "warning", Source: sourceHongguo,
+				Host: request.URL.Hostname(), HTTPStatus: response.StatusCode, Protocol: response.Proto,
+				Attempt: attempt + 1, Message: "App 接口返回空响应：" + request.URL.Path,
+			})
+			return nil, fmt.Errorf("红果 App 接口返回空响应（HTTP %d，正文 0 字节）；未收到明确的登录错误", response.StatusCode)
+		}
+		if len(content) > providerMaxBodyBytes {
+			return nil, errors.New("红果 App 接口响应超过大小限制")
 		}
 		var result map[string]any
 		decoder := json.NewDecoder(bytes.NewReader(content))

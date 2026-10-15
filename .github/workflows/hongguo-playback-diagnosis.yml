@@ -26,13 +26,17 @@ jobs:
           cache-dependency-path: native/go.sum
       - name: Go formatting
         working-directory: native
-        run: test -z "$(gofmt -l core/provider_hongguo_probe_test.go)"
+        run: |
+          gofmt -d core/models.go core/provider_hongguo*.go
+          test -z "$(gofmt -l core/models.go core/provider_hongguo*.go)"
       - name: Go regression tests
         working-directory: native
-        run: go test -race ./...
+        run: |
+          go test -race ./...
+          go test -race -ldflags="-X duanjuapp/native/core.buildAllSources=true" ./...
       - name: Preserve source snapshot
         run: |
-          python3 scripts/finish_task.py --message "按本地官方 APK 单集请求模型验证取址差异；尚未确认恢复"
+          python3 scripts/finish_task.py --message "保留官方剧集内容类型并修正空响应诊断；真实取址仍失败，未恢复播放"
           python3 scripts/sync_source.py --check
       - name: Live address resolution without media or images
         working-directory: native
