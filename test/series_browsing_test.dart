@@ -565,6 +565,7 @@ void main() {
     expect(platform.opened.last.uri, contains('synthetic-2'));
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 100));
+    debugDefaultTargetPlatformOverride = null;
     expect(tester.takeException(), isNull);
   });
 
@@ -613,31 +614,45 @@ void main() {
           ? 'TV selection dialog opens all seasons and returns to playback'
           : 'phone portrait selection sheet opens all seasons and returns to playback',
       (tester) async {
-        viewport(tester, television ? const Size(1280, 720) : const Size(390, 844));
+        viewport(
+          tester,
+          television ? const Size(1280, 720) : const Size(390, 844),
+        );
         debugDefaultTargetPlatformOverride = TargetPlatform.android;
         addTearDown(() => debugDefaultTargetPlatformOverride = null);
         final store = await createStore();
         final repository = SeasonRepository();
         final platform = ScriptedPlayer();
-        await tester.pumpWidget(AppLayout(
-          television: television,
-          child: MaterialApp(home: PlayerScreen(
-            detail: repository.makeDetail(firstSeason), initialIndex: 0,
-            repository: repository, store: store,
-            playerFactory: () => Player(platformPlayer: platform),
-            videoBuilder: (controls) => ColoredBox(color: Colors.black, child: controls),
-          )),
-        ));
+        await tester.pumpWidget(
+          AppLayout(
+            television: television,
+            child: MaterialApp(
+              home: PlayerScreen(
+                detail: repository.makeDetail(firstSeason),
+                initialIndex: 0,
+                repository: repository,
+                store: store,
+                playerFactory: () => Player(platformPlayer: platform),
+                videoBuilder: (controls) =>
+                    ColoredBox(color: Colors.black, child: controls),
+              ),
+            ),
+          ),
+        );
         for (var index = 0; index < 16; index++) {
           await tester.pump(const Duration(milliseconds: 20));
         }
-        await tester.tap(find.byKey(ValueKey(
-          television ? 'tv-episodes' : 'player-portrait-episodes',
-        )));
+        await tester.tap(
+          find.byKey(
+            ValueKey(television ? 'tv-episodes' : 'player-portrait-episodes'),
+          ),
+        );
         await tester.pumpAndSettle();
-        await tester.tap(find.byKey(ValueKey(
-          television ? 'tv-all-seasons' : 'player-all-seasons',
-        )));
+        await tester.tap(
+          find.byKey(
+            ValueKey(television ? 'tv-all-seasons' : 'player-all-seasons'),
+          ),
+        );
         await tester.pumpAndSettle();
         expect(find.byType(SeriesBrowserScreen), findsOneWidget);
         expect(find.byTooltip('收起面板'), findsNothing);
@@ -650,9 +665,9 @@ void main() {
         expect(repository.resolutions.last, (thirdSeason.id, 2));
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pump(const Duration(milliseconds: 100));
+        debugDefaultTargetPlatformOverride = null;
         expect(tester.takeException(), isNull);
       },
     );
   }
-
 }

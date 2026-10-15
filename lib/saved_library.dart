@@ -53,7 +53,8 @@ class _SavedLibraryState extends State<SavedLibrary> {
   @override
   void didUpdateWidget(SavedLibrary oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final reset = oldWidget.repository != widget.repository ||
+    final reset =
+        oldWidget.repository != widget.repository ||
         oldWidget.store != widget.store ||
         _updatesEpoch != widget.store.profileEpoch;
     if (reset) {
@@ -62,8 +63,10 @@ class _SavedLibraryState extends State<SavedLibrary> {
       _updatesEpoch = widget.store.profileEpoch;
       _search.clear();
     }
-    if (!widget.history && (reset || oldWidget.history ||
-        oldWidget.refreshToken != widget.refreshToken)) {
+    if (!widget.history &&
+        (reset ||
+            oldWidget.history ||
+            oldWidget.refreshToken != widget.refreshToken)) {
       unawaited(_updates.refresh());
     }
   }
@@ -112,16 +115,18 @@ class _SavedLibraryState extends State<SavedLibrary> {
     final target = widget.history
         ? drama
         : widget.store.seriesWatch(drama)?.drama ?? drama;
-    unawaited(showDramaActions(
-      context,
-      drama: target,
-      store: widget.store,
-      history: widget.history,
-      onContinue: () => _open(target, resume: true),
-      onDownload: widget.onDownload == null
-          ? null
-          : () => widget.onDownload!(target),
-    ));
+    unawaited(
+      showDramaActions(
+        context,
+        drama: target,
+        store: widget.store,
+        history: widget.history,
+        onContinue: () => _open(target, resume: true),
+        onDownload: widget.onDownload == null
+            ? null
+            : () => widget.onDownload!(target),
+      ),
+    );
   }
 
   Widget _tile(Drama drama, {FocusNode? focusNode, VoidCallback? onFocus}) {
@@ -168,7 +173,9 @@ class _SavedLibraryState extends State<SavedLibrary> {
             ? drama
             : widget.store.seriesWatch(drama)?.drama ?? drama;
         if (!matchesDramaQuery(drama, _search.text) &&
-            !matchesDramaQuery(target, _search.text)) return false;
+            !matchesDramaQuery(target, _search.text)) {
+          return false;
+        }
         return true;
       }).toList();
       final resume = widget.history
@@ -329,9 +336,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
           }
           final padding = constraints.maxWidth < 600 ? 16.0 : 24.0;
           return CustomScrollView(
-            key: PageStorageKey(
-              'saved-${widget.history}-${_search.text}',
-            ),
+            key: PageStorageKey('saved-${widget.history}-${_search.text}'),
             slivers: [
               SliverToBoxAdapter(child: Column(children: header)),
               if (items.isEmpty)

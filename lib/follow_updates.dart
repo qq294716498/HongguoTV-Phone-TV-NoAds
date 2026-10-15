@@ -50,8 +50,8 @@ class FollowUpdates extends ChangeNotifier {
             await store.refreshDramas(
               catalog.entries.map((entry) => entry.drama),
             );
+            if (catalog.error.isNotEmpty || catalog.hasMore) failed++;
           }
-          if (catalog.error.isNotEmpty || catalog.hasMore) failed++;
         } catch (_) {
           if (current()) failed++;
         } finally {

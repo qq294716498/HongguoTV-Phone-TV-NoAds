@@ -729,6 +729,12 @@ class _HomeScreenState extends State<HomeScreen> {
       _selectionMode = false;
       _selectedDramas.clear();
     });
+    if (tab == 0 &&
+        !_showRecommendations &&
+        _items.isEmpty &&
+        widget.store.sources.isNotEmpty) {
+      unawaited(_load(useCache: true));
+    }
   }
 
   /// 连点「最近观看」6 次弹出站源密码锁（用于启用 / 关闭密码功能）。

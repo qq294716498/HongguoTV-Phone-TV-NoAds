@@ -143,6 +143,9 @@ class _SeriesBrowserScreenState extends State<SeriesBrowserScreen> {
         index >= detail.episodes.length) {
       return;
     }
+    if (!(ModalRoute.of(context)?.isCurrent ?? false)) {
+      return;
+    }
     _choosing = true;
     final sequence = _detailSequence;
     try {
@@ -167,7 +170,10 @@ class _SeriesBrowserScreenState extends State<SeriesBrowserScreen> {
         );
         if (accepted != true) return;
       }
-      if (!_allowed || sequence != _detailSequence) return;
+      if (!mounted || !_allowed || sequence != _detailSequence) return;
+      if (!(ModalRoute.of(context)?.isCurrent ?? false)) {
+        return;
+      }
       final watch = widget.store.watched(detail.drama.id);
       final position =
           resume &&

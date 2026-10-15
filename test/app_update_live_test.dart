@@ -22,8 +22,9 @@ void main() {
       expect(data['prerelease'], staging);
       final expectedTag = Platform.environment['EXPECTED_UPDATE_TAG']!;
       expect(data['tag_name'], expectedTag);
-      final expected = RegExp(r'^app-v(\d+\.\d+\.\d+)-(\d+)$')
-          .firstMatch(expectedTag)!;
+      final expected = RegExp(
+        r'^app-v(\d+\.\d+\.\d+)-(\d+)$',
+      ).firstMatch(expectedTag)!;
       final stableData = Map<String, dynamic>.of(data)..['prerelease'] = false;
       final download = Platform.environment['CHECK_UPDATE_DOWNLOAD'] == 'true';
       final directory = Directory('dist/update-check');
