@@ -58,4 +58,4 @@ jobs:
         working-directory: native
         env:
           CHECK_LIVE_HONGGUO_PROTOCOL: "true"
-        run: go test ./core -run '^TestLiveHongguoProtocolComparison$' -v -count=1
+        run: go test ./core -run '^TestLiveHongguoSignatureControl$' -v -count=1

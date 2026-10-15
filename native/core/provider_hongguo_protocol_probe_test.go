@@ -203,3 +203,44 @@ func probeHongguoProtocolMedia(result map[string]any, videoID string) (providerM
 	}
 	return providerMedia{}, errors.New("no supported playback model in text response")
 }
+
+func TestLiveHongguoSignatureControl(t *testing.T) {
+	if os.Getenv("CHECK_LIVE_HONGGUO_PROTOCOL") != "true" {
+		t.Skip("set CHECK_LIVE_HONGGUO_PROTOCOL=true to compare the existing client signature")
+	}
+	engine, err := newNativeEngine(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(engine.downloads.close)
+	d := engine.downloader
+	d.cfg.Retries = 1
+	base := d.client.Transport
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	limited := false
+	d.client.Transport = hongguoProtocolProbeTransport{base: hongguoProbeTransport{base: base, test: t}, test: t, limited: &limited}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	client := d.hongguoClient()
+	success := false
+	for _, host := range []string{hongguoAppBaseURL, "https://api5-normal.fqnovel.com"} {
+		client.mu.Lock()
+		client.baseURL = host
+		client.mu.Unlock()
+		for _, unsigned := range []bool{false, true} {
+			requestContext := context.WithValue(ctx, hongguoProtocolProbeKey{}, unsigned)
+			media, resolveErr := d.resolveHongguoAppMedia(requestContext, "7695722622981508121", 1004)
+			resolved := resolveErr == nil && media.URL != ""
+			t.Logf("existing-profile host=%s generatedIds=true unsigned=%t resolved=%t variants=%d keyBytes=%d errorType=%T", host, unsigned, resolved, len(media.Variants), len(media.CENCKey), resolveErr)
+			if limited {
+				t.Fatal("provider rate limit received; stopped the comparison")
+			}
+			success = success || unsigned && resolved
+		}
+	}
+	if !success {
+		t.Fatal("removing the current signature did not resolve playback with the existing client profile")
+	}
+}
