@@ -75,6 +75,27 @@ func TestLiveHongguoPlaybackResolution(t *testing.T) {
 		resolve func() (providerMedia, error)
 	}{
 		{"app", func() (providerMedia, error) { return d.resolveHongguoAppMedia(ctx, videoID) }},
+		{"official-single-request", func() (providerMedia, error) {
+			payload := map[string]any{"video_id": videoID, "video_platform": 3, "need_all_video_definition": true}
+			result, err := d.hongguoAppRequest(ctx, http.MethodPost, "/novel/player/video_model/v1/", nil, payload)
+			if err != nil {
+				return providerMedia{}, err
+			}
+			data := nestedMap(result, "data")
+			keys := []string{}
+			for key := range data {
+				keys = append(keys, key)
+			}
+			sort.Strings(keys)
+			t.Logf("official single data fields=%v", keys)
+			model, _ := data["video_model"].(map[string]any)
+			if encoded, ok := data["video_model"].(string); ok {
+				if err := json.Unmarshal([]byte(encoded), &model); err != nil {
+					return providerMedia{}, err
+				}
+			}
+			return selectHongguoAppMedia(model)
+		}},
 		{"web", func() (providerMedia, error) { return d.resolveHongguoWebMedia(ctx, seriesID, videoID) }},
 		{"backup", func() (providerMedia, error) { return d.resolveHongguoPlaybackAPI(ctx, seriesID, videoID) }},
 	}
