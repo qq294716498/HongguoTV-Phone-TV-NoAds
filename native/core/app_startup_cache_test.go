@@ -87,11 +87,60 @@ func TestEpisodeStartupSharesPrefixBeforeCompletionAndPromotesSameResource(t *te
 
 func TestEpisodeStartupPrioritizesHLSAudioVideoDependencies(t *testing.T) {
 	release := make(chan struct{})
+	beginBackground := make(chan struct{})
+	backgroundStarted := make(chan struct{}, 1)
 	var once sync.Once
 	defer once.Do(func() { close(release) })
-	var requests atomic.Int32
+	startupPaths := []string{
+		"/master.m3u8", "/audio.m3u8", "/video.m3u8", "/key",
+		"/audio-init.mp4", "/video-init.mp4", "/audio-first.m4s", "/video-first.m4s",
+	}
+	allPaths := append(append([]string{}, startupPaths...), "/audio-second.m4s", "/video-second.m4s")
+	knownPaths := make(map[string]bool, len(allPaths))
+	for _, path := range allPaths {
+		knownPaths[path] = true
+	}
+	var requestsMu sync.Mutex
+	requests := make(map[string]int)
+	assertRequests := func(required []string) {
+		t.Helper()
+		requestsMu.Lock()
+		defer requestsMu.Unlock()
+		for path, count := range requests {
+			if !knownPaths[path] || count != 1 {
+				t.Fatalf("unexpected or repeated HLS request: path=%s count=%d requests=%v", path, count, requests)
+			}
+		}
+		for _, path := range required {
+			if requests[path] != 1 {
+				t.Fatalf("HLS dependency was not downloaded exactly once: path=%s count=%d requests=%v", path, requests[path], requests)
+			}
+		}
+	}
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requests.Add(1)
+		second := r.URL.Path == "/audio-second.m4s" || r.URL.Path == "/video-second.m4s"
+		if second {
+			select {
+			case <-beginBackground:
+			case <-release:
+			case <-r.Context().Done():
+				return
+			}
+		}
+		requestsMu.Lock()
+		requests[r.URL.Path]++
+		requestsMu.Unlock()
+		if !knownPaths[r.URL.Path] {
+			t.Errorf("unknown HLS request: %s", r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		if second {
+			select {
+			case backgroundStarted <- struct{}{}:
+			default:
+			}
+		}
 		switch r.URL.Path {
 		case "/master.m3u8":
 			io.WriteString(w, "#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"audio\",DEFAULT=YES,URI=\"audio.m3u8\"\n#EXT-X-STREAM-INF:BANDWIDTH=200000,RESOLUTION=1280x720,AUDIO=\"audio\"\nvideo.m3u8\n")
@@ -101,7 +150,7 @@ func TestEpisodeStartupPrioritizesHLSAudioVideoDependencies(t *testing.T) {
 		case "/key":
 			io.WriteString(w, "0123456789abcdef")
 		default:
-			if strings.Contains(r.URL.Path, "second") {
+			if second {
 				select {
 				case <-release:
 				case <-r.Context().Done():
@@ -120,6 +169,7 @@ func TestEpisodeStartupPrioritizesHLSAudioVideoDependencies(t *testing.T) {
 	if ready.PreloadComplete || ready.MediaType != "hls" {
 		t.Fatalf("HLS startup did not precede completion: %+v", ready)
 	}
+	assertRequests(startupPaths)
 	read := func(address string) string {
 		t.Helper()
 		response, err := http.Get(address)
@@ -133,8 +183,13 @@ func TestEpisodeStartupPrioritizesHLSAudioVideoDependencies(t *testing.T) {
 		}
 		return string(body)
 	}
-	before := requests.Load()
 	root := read(plan.URL)
+	close(beginBackground)
+	select {
+	case <-backgroundStarted:
+	case <-time.After(8 * time.Second):
+		t.Fatal("background HLS download did not start during cached playback")
+	}
 	var children, segments []string
 	for _, match := range nativePlaylistURI.FindAllStringSubmatch(root, -1) {
 		children = append(children, match[1])
@@ -163,17 +218,17 @@ func TestEpisodeStartupPrioritizesHLSAudioVideoDependencies(t *testing.T) {
 			}
 		}
 	}
-	if requests.Load() != before {
-		t.Fatalf("startup HLS dependencies were downloaded twice: before=%d after=%d", before, requests.Load())
-	}
+	assertRequests(startupPaths)
 	once.Do(func() { close(release) })
 	waitTestEpisodeCache(t, engine, plan, func(p nativePlan) bool { return p.PreloadComplete })
+	assertRequests(allPaths)
 	upstream.Close()
 	for _, segment := range segments {
 		if !strings.HasPrefix(read(segment), "synthetic /") {
 			t.Fatal("original HLS resource URL did not become available offline")
 		}
 	}
+	assertRequests(allPaths)
 }
 
 func TestSharedPrefixIsImmediateAndRejectsChangedRemainder(t *testing.T) {
