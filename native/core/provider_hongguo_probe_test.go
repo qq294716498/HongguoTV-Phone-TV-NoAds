@@ -97,6 +97,29 @@ func TestLiveHongguoPlaybackResolution(t *testing.T) {
 			profile := url.Values{"aid": {"8704"}, "app_name": {"kylin_read"}, "version_code": {"74032"}, "version_name": {"7.4.0.32"}, "manifest_version_code": {"74032"}, "update_version_code": {"74032"}}
 			return probeHongguoOfficialModel(comicContext, d, videoID, profile)
 		}},
+		{"official-manga-batch", func() (providerMedia, error) {
+			comicContext := context.WithValue(ctx, hongguoComicProbeKey{}, true)
+			profile := url.Values{"aid": {"8704"}, "app_name": {"kylin_read"}, "version_code": {"74032"}, "version_name": {"7.4.0.32"}, "manifest_version_code": {"74032"}, "update_version_code": {"74032"}}
+			payload := map[string]any{"mixed_video_id_map": map[string]any{"1004": []string{videoID}}, "biz_param": map[string]any{"video_platform": 3, "need_all_video_definition": true}}
+			result, err := d.hongguoAppRequest(comicContext, http.MethodPost, "/novel/player/multi_video_model/v1/", profile, payload)
+			if err != nil {
+				return providerMedia{}, err
+			}
+			entry := nestedMap(result, "data", videoID)
+			keys := []string{}
+			for key := range entry {
+				keys = append(keys, key)
+			}
+			sort.Strings(keys)
+			t.Logf("official batch entry fields=%v", keys)
+			model, _ := entry["video_model"].(map[string]any)
+			if encoded, ok := entry["video_model"].(string); ok {
+				if err := json.Unmarshal([]byte(encoded), &model); err != nil {
+					return providerMedia{}, err
+				}
+			}
+			return selectHongguoAppMedia(model)
+		}},
 	}
 	playable := false
 	for _, resolver := range resolvers {
