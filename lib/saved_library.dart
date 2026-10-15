@@ -162,7 +162,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
-    animation: Listenable.merge([widget.store, _updates]),
+    animation: widget.store,
     builder: (context, _) {
       final history = widget.store.history;
       final all = widget.history
@@ -241,7 +241,9 @@ class _SavedLibraryState extends State<SavedLibrary> {
           ),
         ),
         if (!widget.history && all.isNotEmpty)
-          Padding(
+          ListenableBuilder(
+            listenable: _updates,
+            builder: (context, _) => Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: Row(
               children: [
@@ -262,6 +264,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
                   icon: const Icon(Icons.refresh_rounded),
                 ),
               ],
+            ),
             ),
           ),
         if (resume != null)

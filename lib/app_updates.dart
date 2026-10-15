@@ -118,6 +118,7 @@ class AppRelease {
   }
 
   Map<String, Object> get validation => {
+    'version': version,
     'code': code,
     'abi': abi,
     'bytes': bytes,
@@ -187,7 +188,10 @@ class GithubUpdateTransport implements UpdateTransport {
         HttpHeaders.acceptHeader,
         metadata ? 'application/vnd.github+json' : 'application/octet-stream',
       );
-      if (metadata) request.headers.set('X-GitHub-Api-Version', '2022-11-28');
+      if (metadata) {
+        request.headers.set('X-GitHub-Api-Version', '2022-11-28');
+        request.headers.set(HttpHeaders.cacheControlHeader, 'no-cache');
+      }
       final response = await request.close().timeout(
         const Duration(seconds: 20),
       );
@@ -271,6 +275,7 @@ class GithubUpdateTransport implements UpdateTransport {
         }
         sink = output.openWrite();
         var received = 0;
+        var buffered = 0;
         await for (final chunk in response.timeout(
           const Duration(seconds: 30),
         )) {
@@ -282,12 +287,17 @@ class GithubUpdateTransport implements UpdateTransport {
             throw const FormatException('安装包超出预期大小');
           }
           sink!.add(chunk);
-          await sink!.flush();
+          buffered += chunk.length;
+          if (buffered >= 1024 * 1024) {
+            await sink!.flush();
+            buffered = 0;
+          }
           progress(received);
         }
         if (_cancelled || !identical(_active, client)) {
           throw const UpdateCancelled();
         }
+        await sink!.flush();
         if (received != release.bytes) throw const FormatException('下载不完整，请重试');
       })().timeout(const Duration(minutes: 30));
     } finally {
@@ -462,10 +472,30 @@ class AppUpdates extends ChangeNotifier {
       message = candidate == null ? '已是最新稳定版本' : '发现稳定版本 ${candidate.version}';
     } catch (error) {
       if (_disposed) return;
+      release = null;
       stage = UpdateStage.failed;
       message = '暂时无法检查更新：${_error(error)}';
     }
     _notify();
+  }
+
+  Future<bool> _candidateStillNewer(AppRelease candidate) async {
+    final current = await platform.installed().timeout(const Duration(seconds: 5));
+    if (_disposed) return false;
+    installedApp = current;
+    if (candidate.abi != current.abi) {
+      release = null;
+      throw const FormatException('安装架构已变化，请重新检查更新');
+    }
+    if (candidate.code > current.code) return true;
+    await _removeFile();
+    await preferences.remove('app_update_installing_code');
+    if (_disposed) return false;
+    release = null;
+    stage = UpdateStage.idle;
+    message = '当前已安装 ${current.version}，无需重复下载或安装';
+    _notify();
+    return false;
   }
 
   Future<void> download() async {
@@ -480,9 +510,14 @@ class AppUpdates extends ChangeNotifier {
     _cancelled = false;
     stage = UpdateStage.downloading;
     downloaded = 0;
-    message = '正在下载，可取消';
+    message = '正在确认当前版本…';
     _notify();
     try {
+      if (!await _candidateStillNewer(candidate)) return;
+      if (_cancelled || _disposed) throw const UpdateCancelled();
+      message = '正在下载 ${candidate.version}，可取消';
+      final progressClock = Stopwatch()..start();
+      var notifiedAt = -200;
       final directory = Directory(await platform.directory());
       await directory.create(recursive: true);
       _file = File('${directory.path}/pending.apk');
@@ -492,7 +527,10 @@ class AppUpdates extends ChangeNotifier {
       await transport.download(candidate, _partial!, (bytes) {
         if (_cancelled || _disposed || stage != UpdateStage.downloading) return;
         downloaded = bytes;
-        _notify();
+        if (bytes == candidate.bytes || progressClock.elapsedMilliseconds - notifiedAt >= 200) {
+          notifiedAt = progressClock.elapsedMilliseconds;
+          _notify();
+        }
       });
       if (_cancelled || _disposed) throw const UpdateCancelled();
       await _partial!.rename(_file!.path);
@@ -535,6 +573,7 @@ class AppUpdates extends ChangeNotifier {
     message = '正在重新验证安装包…';
     _notify();
     try {
+      if (!await _candidateStillNewer(candidate)) return;
       await platform.validate(candidate);
       if (_disposed) return;
       final allowed = await platform.canInstall();

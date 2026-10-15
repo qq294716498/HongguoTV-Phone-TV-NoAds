@@ -37,6 +37,13 @@ class LocalStore extends ChangeNotifier {
   final Map<String, Drama> _favorites = {};
   final Map<String, FollowState> _followStates = {};
   final Map<String, Drama> _seriesCandidates = {};
+  final _seriesIndex = <String, List<Drama>>{};
+  final _seriesEntriesCache = <(String, String, String), List<HongguoSeriesEntry>>{};
+  final _seriesWatchCache = <(String, String, String), WatchEntry?>{};
+  final _seriesFollowCache = <(String, String, String), Drama?>{};
+  List<Drama>? _trackedSeriesCache;
+  bool _seriesIndexReady = false;
+  final _favoriteRanks = <String, int>{};
   Future<void> _writes = Future<void>.value();
   List<LocalProfile> _profiles = [];
   String _current = 'default';
@@ -112,7 +119,18 @@ class LocalStore extends ChangeNotifier {
     _epoch++;
   }
 
+  void _invalidateSeries() {
+    _seriesIndexReady = false;
+    _seriesIndex.clear();
+    _favoriteRanks.clear();
+    _seriesEntriesCache.clear();
+    _seriesWatchCache.clear();
+    _seriesFollowCache.clear();
+    _trackedSeriesCache = null;
+  }
+
   void _notify() {
+    _invalidateSeries();
     if (!_disposed) notifyListeners();
   }
 
@@ -249,6 +267,7 @@ class LocalStore extends ChangeNotifier {
   });
 
   void _loadLibrary() {
+    _invalidateSeries();
     _lanDocumentCache = null;
     _history.clear();
     _favorites.clear();
@@ -319,42 +338,64 @@ class LocalStore extends ChangeNotifier {
       _favorites[id] != null && allowsSource(_favorites[id]!.source);
   FollowState? following(String id) =>
       isFavorite(id) ? _followStates[id] : null;
+  String _seriesKey(Drama drama) =>
+      hongguoSeriesInfo(drama)?.key ?? normalizedSearchText(drama.title);
+
+  (String, String, String) _anchorKey(Drama drama) =>
+      (drama.source, drama.id, drama.title);
+
+  void _ensureSeriesIndex() {
+    if (_seriesIndexReady) return;
+    var rank = 0;
+    for (final id in _favorites.keys) {
+      _favoriteRanks[id] = rank++;
+    }
+    final items = <String, Drama>{
+      ..._seriesCandidates,
+      ..._favorites,
+      for (final entry in _history.values) entry.drama.id: entry.drama,
+    };
+    for (final state in _followStates.values) {
+      for (final notice in state.seriesSeasons.values) {
+        items.putIfAbsent(
+          notice.id,
+          () => Drama(
+            id: notice.id,
+            source: SourceSite.hongguo.id,
+            sourceId: notice.id.substring(SourceSite.hongguo.id.length + 1),
+            title: notice.title,
+          ),
+        );
+      }
+    }
+    for (final drama in items.values) {
+      if (drama.source == SourceSite.hongguo.id && allowsSource(drama.source)) {
+        (_seriesIndex[_seriesKey(drama)] ??= []).add(drama);
+      }
+    }
+    _seriesIndexReady = true;
+  }
+
   List<Drama> seriesDramasFor(Drama anchor) {
-    if (!allowsSource(SourceSite.hongguo.id) ||
-        anchor.source != SourceSite.hongguo.id) {
+    if (anchor.source != SourceSite.hongguo.id || !allowsSource(anchor.source)) {
       return const [];
     }
-    final items = <String, Drama>{};
-    for (final drama in _seriesCandidates.values) {
-      if (allowsSource(drama.source)) items[drama.id] = drama;
+    _ensureSeriesIndex();
+    final candidates = _seriesIndex[_seriesKey(anchor)] ?? const <Drama>[];
+    final current = candidates.where((drama) => drama.id == anchor.id).firstOrNull;
+    return [current ?? anchor, ...candidates.where((drama) => drama.id != anchor.id)];
+  }
+
+  List<HongguoSeriesEntry> _seriesEntries(Drama drama) {
+    if (!allowsSource(drama.source)) return const [];
+    final key = _anchorKey(drama);
+    if (_seriesEntriesCache.length >= 2048 && !_seriesEntriesCache.containsKey(key)) {
+      _seriesEntriesCache.clear();
     }
-    for (final drama in _favorites.values) {
-      if (allowsSource(drama.source)) items[drama.id] = drama;
-    }
-    for (final entry in _history.values) {
-      if (allowsSource(entry.drama.source)) items[entry.drama.id] = entry.drama;
-    }
-    final notices = <SeriesSeasonNotice>[
-      ...?_followStates[anchor.id]?.seriesSeasons.values,
-      for (final state in _followStates.values)
-        if (state.seriesSeasons.containsKey(anchor.id))
-          state.seriesSeasons[anchor.id]!,
-    ];
-    for (final notice in notices) {
-      items.putIfAbsent(
-        notice.id,
-        () => Drama(
-          id: notice.id,
-          source: SourceSite.hongguo.id,
-          sourceId: notice.id.substring(SourceSite.hongguo.id.length + 1),
-          title: notice.title,
-        ),
-      );
-    }
-    final current = items.remove(anchor.id) ?? anchor;
-    final rest = items.values.toList()
-      ..sort((a, b) => naturalTitleCompare(a.title, b.title));
-    return [current, ...rest];
+    return _seriesEntriesCache.putIfAbsent(
+      key,
+      () => hongguoSeriesEntries(drama, seriesDramasFor(drama)),
+    );
   }
 
   bool get hideVip =>
@@ -574,28 +615,51 @@ class LocalStore extends ChangeNotifier {
 
   Set<String> _seriesIds(Drama drama) => {
     drama.id,
-    ...hongguoSeriesEntries(
-      drama,
-      seriesDramasFor(drama),
-    ).map((entry) => entry.drama.id),
+    ..._seriesEntries(drama).map((entry) => entry.drama.id),
   };
 
   Drama? followedSeries(Drama drama) {
-    if (!allowsSource(drama.source)) return null;
+    if (!allowsSource(drama.source) || _favorites.isEmpty) return null;
     final exact = _favorites[drama.id];
     if (exact != null) return exact;
+    final key = _anchorKey(drama);
+    if (_seriesFollowCache.containsKey(key)) return _seriesFollowCache[key];
+    if (_seriesFollowCache.length >= 2048) _seriesFollowCache.clear();
     final ids = _seriesIds(drama);
-    return favorites.where((entry) => ids.contains(entry.id)).firstOrNull;
+    Drama? result;
+    var rank = -1;
+    for (final id in ids) {
+      final favorite = _favorites[id];
+      final candidateRank = _favoriteRanks[id] ?? -1;
+      if (favorite != null && candidateRank > rank && allowsSource(favorite.source)) {
+        result = favorite;
+        rank = candidateRank;
+      }
+    }
+    _seriesFollowCache[key] = result;
+    return result;
   }
 
   WatchEntry? seriesWatch(Drama drama) {
-    final ids = _seriesIds(drama);
-    return history.where((entry) => ids.contains(entry.drama.id)).firstOrNull;
+    if (!allowsSource(drama.source) || _history.isEmpty) return null;
+    final key = _anchorKey(drama);
+    if (_seriesWatchCache.containsKey(key)) return _seriesWatchCache[key];
+    if (_seriesWatchCache.length >= 2048) _seriesWatchCache.clear();
+    WatchEntry? latest;
+    for (final id in _seriesIds(drama)) {
+      final entry = _history[id];
+      if (entry != null && allowsSource(entry.drama.source) &&
+          (latest == null || entry.updatedAt.isAfter(latest.updatedAt))) {
+        latest = entry;
+      }
+    }
+    _seriesWatchCache[key] = latest;
+    return latest;
   }
 
   bool hasNextSeason(Drama drama) {
     final current = seriesWatch(drama)?.drama ?? drama;
-    final entries = hongguoSeriesEntries(current, seriesDramasFor(current));
+    final entries = _seriesEntries(current);
     final season = entries
         .where((entry) => entry.drama.id == current.id)
         .firstOrNull
@@ -604,6 +668,7 @@ class LocalStore extends ChangeNotifier {
   }
 
   List<Drama> get trackedSeries {
+    if (_trackedSeriesCache != null) return _trackedSeriesCache!;
     final seen = <String>{};
     final result = <Drama>[];
     for (final drama in favorites) {
@@ -611,14 +676,15 @@ class LocalStore extends ChangeNotifier {
       result.add(drama);
       seen.addAll(_seriesIds(drama));
     }
+    final watched = {for (final drama in result) drama.id: seriesWatch(drama)?.updatedAt};
     result.sort((a, b) {
-      final first = seriesWatch(a)?.updatedAt;
-      final second = seriesWatch(b)?.updatedAt;
+      final first = watched[a.id];
+      final second = watched[b.id];
       if (first == null) return second == null ? 0 : 1;
       if (second == null) return -1;
       return second.compareTo(first);
     });
-    return result;
+    return _trackedSeriesCache = List.unmodifiable(result);
   }
 
   Future<void> toggleSeriesFavorite(Drama drama) {
