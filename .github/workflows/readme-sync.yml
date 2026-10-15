@@ -24,9 +24,11 @@ jobs:
           python3 -c "from pathlib import Path; text = Path('README.md').read_text(encoding='utf-8'); assert text.startswith('# 红果TV'); assert '## 下载安装' in text; assert '## 应用内更新' in text"
           python3 scripts/finish_task.py --message "README 更新为面向使用者的版本说明"
           python3 scripts/sync_source.py --check
+          mkdir -p dist/readme
+          cp ../真果·鉴-*.zip dist/readme/
       - uses: actions/upload-artifact@v4
         with:
           name: readme-source-snapshot
-          path: ../真果·鉴-*.zip
+          path: dist/readme/*.zip
           if-no-files-found: error
           retention-days: 14
