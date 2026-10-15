@@ -17,13 +17,14 @@ class FollowUpdates extends ChangeNotifier {
   bool _disposed = false;
   int _generation = 0;
 
-  bool get _valid => !_disposed &&
-      !store.locked && store.profileEpoch == _epoch;
+  bool get _valid =>
+      !_disposed && !store.locked && store.profileEpoch == _epoch;
 
   Future<void> refresh() async {
     if (!_valid || checking) return;
     final dramas = store.trackedSeries
-        .where((drama) => drama.source == SourceSite.hongguo.id).toList();
+        .where((drama) => drama.source == SourceSite.hongguo.id)
+        .toList();
     final generation = ++_generation;
     bool current() => _valid && generation == _generation;
     checking = true;

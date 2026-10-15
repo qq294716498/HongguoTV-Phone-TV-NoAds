@@ -16,7 +16,7 @@ def main():
     version = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(),
                         re.MULTILINE).group(1)
     name, build = version.split('+')
-    if name != '0.1.10' or build != '34':
+    if not re.fullmatch(r'\d+\.\d+\.\d+', name) or not 1 <= int(build) < 1000:
         raise SystemExit('Unexpected release version')
     tools = Path(os.environ['ANDROID_HOME']) / 'build-tools'
     sdk = max(tools.iterdir(), key=lambda p: tuple(int(n) for n in re.findall(r'\d+', p.name)))

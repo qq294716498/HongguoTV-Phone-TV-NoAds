@@ -292,7 +292,9 @@ class _DetailScreenState extends State<DetailScreen> {
   Future<void> _openAllSeasons() async {
     if (_profileEpoch != widget.store.profileEpoch ||
         widget.store.locked ||
-        !widget.store.allowsSource(widget.drama.source)) return;
+        !widget.store.allowsSource(widget.drama.source)) {
+      return;
+    }
     final selection = await Navigator.of(context).push<SeriesEpisodeSelection>(
       MaterialPageRoute(
         builder: (_) => SeriesBrowserScreen(
@@ -307,7 +309,9 @@ class _DetailScreenState extends State<DetailScreen> {
         selection == null ||
         _profileEpoch != widget.store.profileEpoch ||
         widget.store.locked ||
-        !widget.store.allowsSource(selection.detail.drama.source)) return;
+        !widget.store.allowsSource(selection.detail.drama.source)) {
+      return;
+    }
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => PlayerScreen(

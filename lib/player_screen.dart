@@ -1858,23 +1858,26 @@ class _PlayerScreenState extends State<PlayerScreen>
     _interactions.cancel();
     setState(() => _panelOpen = true);
     try {
-      final selection = await Navigator.of(context).push<SeriesEpisodeSelection>(
-        MaterialPageRoute(
-          builder: (_) => SeriesBrowserScreen(
-            anchor: _detail.drama,
-            initialDetail: _detail,
-            currentEpisode: _detail.episodes[_index].number,
-            repository: widget.repository,
-            store: widget.store,
-          ),
-        ),
-      );
+      final selection = await Navigator.of(context)
+          .push<SeriesEpisodeSelection>(
+            MaterialPageRoute(
+              builder: (_) => SeriesBrowserScreen(
+                anchor: _detail.drama,
+                initialDetail: _detail,
+                currentEpisode: _detail.episodes[_index].number,
+                repository: widget.repository,
+                store: widget.store,
+              ),
+            ),
+          );
       if (!mounted ||
           _closed ||
           selection == null ||
           widget.store.profileEpoch != _profileEpoch ||
           widget.store.locked ||
-          !widget.store.allowsSource(selection.detail.drama.source)) return;
+          !widget.store.allowsSource(selection.detail.drama.source)) {
+        return;
+      }
       await _saveProgress(flush: true);
       if (!mounted || _closed) return;
       await _play(
@@ -1933,7 +1936,8 @@ class _PlayerScreenState extends State<PlayerScreen>
                 unawaited(_enhancement.toggleCompare());
                 Navigator.pop(menuContext);
               },
-              onFavorite: () => widget.store.toggleSeriesFavorite(_detail.drama),
+              onFavorite: () =>
+                  widget.store.toggleSeriesFavorite(_detail.drama),
             ),
           ),
         ),

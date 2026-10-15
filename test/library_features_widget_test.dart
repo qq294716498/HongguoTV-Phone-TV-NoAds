@@ -99,15 +99,26 @@ void main() {
     },
   );
 
-  testWidgets('follow page keeps legacy favorites without status controls', (tester) async {
+  testWidgets('follow page keeps legacy favorites without status controls', (
+    tester,
+  ) async {
     viewport(tester, const Size(390, 844));
     final store = await create();
     await store.setFollowStatus(first, FollowStatus.planned);
     await store.setFollowStatus(second, FollowStatus.watching);
-    await tester.pumpWidget(MaterialApp(home: Scaffold(body: SavedLibrary(
-      repository: LibraryFeatureRepository(), store: store, history: false,
-      onOpen: (_) {}, onContinue: (_) {},
-    ))));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SavedLibrary(
+            repository: LibraryFeatureRepository(),
+            store: store,
+            history: false,
+            onOpen: (_) {},
+            onContinue: (_) {},
+          ),
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.byKey(ValueKey('saved-${first.id}')), findsOneWidget);
     expect(find.byKey(ValueKey('saved-${second.id}')), findsOneWidget);
@@ -124,74 +135,75 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('series season availability appears on the follow card and detail', (
-    tester,
-  ) async {
-    viewport(tester, const Size(390, 844));
-    const seasonOne = Drama(
-      id: 'hongguo:series-one',
-      source: 'hongguo',
-      title: '合成系列 第一季',
-      episodes: 12,
-    );
-    const seasonTwo = Drama(
-      id: 'hongguo:series-two',
-      source: 'hongguo',
-      title: '合成系列 第二季',
-      episodes: 10,
-    );
-    final store = await create();
-    await store.toggleFavorite(seasonOne);
-    await store.refreshDramas([seasonOne, seasonTwo]);
-    expect(store.following(seasonOne.id)!.newSeasons, 1);
-    final repository = LibraryFeatureRepository()
-      ..details[seasonOne.id] = LibraryFeatureRepository.makeDetail(
-        seasonOne,
-        12,
-      )
-      ..details[seasonTwo.id] = LibraryFeatureRepository.makeDetail(
-        seasonTwo,
-        10,
+  testWidgets(
+    'series season availability appears on the follow card and detail',
+    (tester) async {
+      viewport(tester, const Size(390, 844));
+      const seasonOne = Drama(
+        id: 'hongguo:series-one',
+        source: 'hongguo',
+        title: '合成系列 第一季',
+        episodes: 12,
       );
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: SavedLibrary(
-            repository: repository,
-            store: store,
-            history: false,
-            onOpen: (_) {},
-            onContinue: (_) {},
+      const seasonTwo = Drama(
+        id: 'hongguo:series-two',
+        source: 'hongguo',
+        title: '合成系列 第二季',
+        episodes: 10,
+      );
+      final store = await create();
+      await store.toggleFavorite(seasonOne);
+      await store.refreshDramas([seasonOne, seasonTwo]);
+      expect(store.following(seasonOne.id)!.newSeasons, 1);
+      final repository = LibraryFeatureRepository()
+        ..details[seasonOne.id] = LibraryFeatureRepository.makeDetail(
+          seasonOne,
+          12,
+        )
+        ..details[seasonTwo.id] = LibraryFeatureRepository.makeDetail(
+          seasonTwo,
+          10,
+        );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SavedLibrary(
+              repository: repository,
+              store: store,
+              history: false,
+              onOpen: (_) {},
+              onContinue: (_) {},
+            ),
           ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(find.byKey(ValueKey('saved-${seasonOne.id}')), findsOneWidget);
-    expect(find.text('已有下季'), findsOneWidget);
-    await tester.pumpWidget(
-      MaterialApp(
-        home: DetailScreen(
-          drama: seasonOne,
-          repository: repository,
-          store: store,
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(ValueKey('saved-${seasonOne.id}')), findsOneWidget);
+      expect(find.text('已有下季'), findsOneWidget);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: DetailScreen(
+            drama: seasonOne,
+            repository: repository,
+            store: store,
+          ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('同剧其他季'), findsOneWidget);
-    expect(find.byKey(ValueKey('series-${seasonOne.id}')), findsOneWidget);
-    expect(find.byKey(ValueKey('series-${seasonTwo.id}')), findsOneWidget);
-    final seasonTwoChip = find.byKey(ValueKey('series-${seasonTwo.id}'));
-    await tester.ensureVisible(seasonTwoChip);
-    await tester.tap(seasonTwoChip);
-    await tester.pumpAndSettle();
-    expect(store.following(seasonOne.id)!.newSeasons, 0);
-    expect(find.text('合成系列 第二季'), findsWidgets);
-    expect(repository.detailRequests, contains(seasonTwo.id));
-    expect(tester.takeException(), isNull);
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('同剧其他季'), findsOneWidget);
+      expect(find.byKey(ValueKey('series-${seasonOne.id}')), findsOneWidget);
+      expect(find.byKey(ValueKey('series-${seasonTwo.id}')), findsOneWidget);
+      final seasonTwoChip = find.byKey(ValueKey('series-${seasonTwo.id}'));
+      await tester.ensureVisible(seasonTwoChip);
+      await tester.tap(seasonTwoChip);
+      await tester.pumpAndSettle();
+      expect(store.following(seasonOne.id)!.newSeasons, 0);
+      expect(find.text('合成系列 第二季'), findsWidgets);
+      expect(repository.detailRequests, contains(seasonTwo.id));
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 
   testWidgets('detail related series can use refreshed catalog candidates', (
     tester,

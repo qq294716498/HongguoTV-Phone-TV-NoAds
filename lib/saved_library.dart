@@ -39,24 +39,30 @@ class SavedLibrary extends StatefulWidget {
 
 class _SavedLibraryState extends State<SavedLibrary> {
   final _search = TextEditingController();
-  final _filter = '';
   late FollowUpdates _updates;
+  late int _updatesEpoch;
 
   @override
   void initState() {
     super.initState();
     _updates = FollowUpdates(widget.repository, widget.store);
+    _updatesEpoch = widget.store.profileEpoch;
     if (!widget.history) unawaited(_updates.refresh());
   }
 
   @override
   void didUpdateWidget(SavedLibrary oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.repository != widget.repository || oldWidget.store != widget.store) {
+    final reset = oldWidget.repository != widget.repository ||
+        oldWidget.store != widget.store ||
+        _updatesEpoch != widget.store.profileEpoch;
+    if (reset) {
       _updates.dispose();
       _updates = FollowUpdates(widget.repository, widget.store);
+      _updatesEpoch = widget.store.profileEpoch;
+      _search.clear();
     }
-    if (!widget.history && (oldWidget.history ||
+    if (!widget.history && (reset || oldWidget.history ||
         oldWidget.refreshToken != widget.refreshToken)) {
       unawaited(_updates.refresh());
     }
@@ -102,16 +108,21 @@ class _SavedLibraryState extends State<SavedLibrary> {
     }
   }
 
-  void _actions(Drama drama) => showDramaActions(
-    context,
-    drama: drama,
-    store: widget.store,
-    history: widget.history,
-    onContinue: () => _open(widget.store.seriesWatch(drama)?.drama ?? drama, resume: true),
-    onDownload: widget.onDownload == null
-        ? null
-        : () => widget.onDownload!(drama),
-  );
+  void _actions(Drama drama) {
+    final target = widget.history
+        ? drama
+        : widget.store.seriesWatch(drama)?.drama ?? drama;
+    unawaited(showDramaActions(
+      context,
+      drama: target,
+      store: widget.store,
+      history: widget.history,
+      onContinue: () => _open(target, resume: true),
+      onDownload: widget.onDownload == null
+          ? null
+          : () => widget.onDownload!(target),
+    ));
+  }
 
   Widget _tile(Drama drama, {FocusNode? focusNode, VoidCallback? onFocus}) {
     final watched = widget.history
@@ -121,7 +132,9 @@ class _SavedLibraryState extends State<SavedLibrary> {
     final followed = widget.store.followedSeries(drama) != null;
     final badge = !widget.history && widget.store.hasNextSeason(drama)
         ? '已有下季'
-        : followed ? '已追剧' : null;
+        : followed
+        ? '已追剧'
+        : null;
     final season = watched == null ? null : hongguoSeriesInfo(watched.drama);
     return DramaTile(
       key: ValueKey('saved-${drama.id}'),
@@ -151,17 +164,33 @@ class _SavedLibraryState extends State<SavedLibrary> {
           ? history.map((entry) => entry.drama).toList()
           : widget.store.trackedSeries;
       final items = all.where((drama) {
-        if (!matchesDramaQuery(drama, _search.text)) return false;
+        final target = widget.history
+            ? drama
+            : widget.store.seriesWatch(drama)?.drama ?? drama;
+        if (!matchesDramaQuery(drama, _search.text) &&
+            !matchesDramaQuery(target, _search.text)) return false;
         return true;
       }).toList();
       final resume = widget.history
-          ? history.where((entry) => items.any((drama) => drama.id == entry.drama.id) &&
-              (!entry.finished || entry.drama.episodes <= 0 ||
-                  entry.episode < entry.drama.episodes)).firstOrNull
-          : items.map(widget.store.seriesWatch).whereType<WatchEntry>()
-              .where((entry) => !entry.finished ||
-                  entry.drama.episodes <= 0 || entry.episode < entry.drama.episodes)
-              .firstOrNull;
+          ? history
+                .where(
+                  (entry) =>
+                      items.any((drama) => drama.id == entry.drama.id) &&
+                      (!entry.finished ||
+                          entry.drama.episodes <= 0 ||
+                          entry.episode < entry.drama.episodes),
+                )
+                .firstOrNull
+          : items
+                .map(widget.store.seriesWatch)
+                .whereType<WatchEntry>()
+                .where(
+                  (entry) =>
+                      !entry.finished ||
+                      entry.drama.episodes <= 0 ||
+                      entry.episode < entry.drama.episodes,
+                )
+                .firstOrNull;
       final header = [
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 12, 12, 8),
@@ -282,7 +311,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
                       ? empty
                       : RemoteGrid(
                           key: ValueKey(
-                            'saved-tv-${widget.history}-$_filter-${_search.text}',
+                            'saved-tv-${widget.history}-${_search.text}',
                           ),
                           itemKeys: items.map((item) => item.id).toList(),
                           columns: columns,
@@ -301,7 +330,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
           final padding = constraints.maxWidth < 600 ? 16.0 : 24.0;
           return CustomScrollView(
             key: PageStorageKey(
-              'saved-${widget.history}-$_filter-${_search.text}',
+              'saved-${widget.history}-${_search.text}',
             ),
             slivers: [
               SliverToBoxAdapter(child: Column(children: header)),

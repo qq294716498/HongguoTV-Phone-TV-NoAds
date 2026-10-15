@@ -574,8 +574,10 @@ class LocalStore extends ChangeNotifier {
 
   Set<String> _seriesIds(Drama drama) => {
     drama.id,
-    ...hongguoSeriesEntries(drama, seriesDramasFor(drama))
-        .map((entry) => entry.drama.id),
+    ...hongguoSeriesEntries(
+      drama,
+      seriesDramasFor(drama),
+    ).map((entry) => entry.drama.id),
   };
 
   Drama? followedSeries(Drama drama) {
@@ -594,8 +596,10 @@ class LocalStore extends ChangeNotifier {
   bool hasNextSeason(Drama drama) {
     final current = seriesWatch(drama)?.drama ?? drama;
     final entries = hongguoSeriesEntries(current, seriesDramasFor(current));
-    final season = entries.where((entry) => entry.drama.id == current.id)
-        .firstOrNull?.season;
+    final season = entries
+        .where((entry) => entry.drama.id == current.id)
+        .firstOrNull
+        ?.season;
     return season != null && entries.any((entry) => entry.season > season);
   }
 

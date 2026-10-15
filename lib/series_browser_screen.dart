@@ -60,8 +60,11 @@ class _SeriesBrowserScreenState extends State<SeriesBrowserScreen> {
     _epoch = widget.store.profileEpoch;
     _selected = widget.anchor;
     final initial = widget.initialDetail;
-    _detail = initial?.drama.id == widget.anchor.id &&
-        initial?.drama.source == widget.anchor.source ? initial : null;
+    _detail =
+        initial?.drama.id == widget.anchor.id &&
+            initial?.drama.source == widget.anchor.source
+        ? initial
+        : null;
     _catalog = SeriesCatalog(
       anchor: widget.anchor,
       repository: widget.repository,
@@ -109,9 +112,10 @@ class _SeriesBrowserScreenState extends State<SeriesBrowserScreen> {
       final initial = widget.initialDetail;
       final detail = initial?.drama.id == drama.id
           ? initial!
-          : await widget.repository.detail(drama)
+          : await widget.repository
+                .detail(drama)
                 .timeout(const Duration(seconds: 25));
-      if (!_allowed || sequence != _detailSequence) return;
+      if (!mounted || !_allowed || sequence != _detailSequence) return;
       if (detail.drama.id != drama.id ||
           detail.drama.source != widget.anchor.source) {
         throw AppFailure('季信息不一致，请刷新重试');
@@ -136,7 +140,9 @@ class _SeriesBrowserScreenState extends State<SeriesBrowserScreen> {
         _choosing ||
         detail == null ||
         index < 0 ||
-        index >= detail.episodes.length) return;
+        index >= detail.episodes.length) {
+      return;
+    }
     _choosing = true;
     final sequence = _detailSequence;
     try {
@@ -163,7 +169,8 @@ class _SeriesBrowserScreenState extends State<SeriesBrowserScreen> {
       }
       if (!_allowed || sequence != _detailSequence) return;
       final watch = widget.store.watched(detail.drama.id);
-      final position = resume &&
+      final position =
+          resume &&
               watch?.episode == detail.episodes[index].number &&
               !watch!.finished
           ? watch.position
@@ -194,9 +201,7 @@ class _SeriesBrowserScreenState extends State<SeriesBrowserScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            _catalog.loading
-                ? '正在查找各季…'
-                : '已找到 ${entries.length} 季',
+            _catalog.loading ? '正在查找各季…' : '已找到 ${entries.length} 季',
             style: Theme.of(context).textTheme.titleSmall,
           ),
           const SizedBox(height: 8),
@@ -212,7 +217,8 @@ class _SeriesBrowserScreenState extends State<SeriesBrowserScreen> {
                   for (final entry in entries)
                     ChoiceChip(
                       key: ValueKey('all-season-${entry.drama.id}'),
-                      autofocus: AppLayout.isTelevision(context) &&
+                      autofocus:
+                          AppLayout.isTelevision(context) &&
                           entry.drama.id == widget.anchor.id,
                       label: Text(
                         '${entry.label}${entry.drama.episodes > 0 ? ' · ${entry.drama.episodes} 集' : ''}',
@@ -252,12 +258,8 @@ class _SeriesBrowserScreenState extends State<SeriesBrowserScreen> {
                   key: const ValueKey('all-seasons-load-more'),
                   onPressed: _catalog.loading
                       ? null
-                      : () => _loadCatalog(
-                          refresh: !_catalog.hasMore,
-                        ),
-                  child: Text(
-                    _catalog.error.isNotEmpty ? '重试' : '继续查找',
-                  ),
+                      : () => _loadCatalog(refresh: !_catalog.hasMore),
+                  child: Text(_catalog.error.isNotEmpty ? '重试' : '继续查找'),
                 ),
               ],
             ),
@@ -351,10 +353,7 @@ class _SeriesBrowserScreenState extends State<SeriesBrowserScreen> {
         ],
       ),
       body: !_allowed
-          ? const StatusPanel(
-              title: '当前用户无权访问',
-              message: '请返回后重新选择。',
-            )
+          ? const StatusPanel(title: '当前用户无权访问', message: '请返回后重新选择。')
           : SafeArea(
               top: false,
               child: Column(

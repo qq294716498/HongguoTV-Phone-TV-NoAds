@@ -71,29 +71,32 @@ class SeasonRepository extends FixtureRepository {
       if (failingPage == page) throw AppFailure('合成搜索失败');
       if (pendingCatalog != null) return await pendingCatalog!.future;
       return results[page] ??
-          CatalogPage([firstSeason, secondSeason, thirdSeason, unrelatedSeason]);
+          CatalogPage([
+            firstSeason,
+            secondSeason,
+            thirdSeason,
+            unrelatedSeason,
+          ]);
     } finally {
       activeCatalogs--;
     }
   }
 
-  DramaDetail makeDetail(Drama drama, {bool vip = false}) => DramaDetail(
-    drama,
-    [
-      for (var index = 1; index <= drama.episodes; index++)
-        Episode({
-          'id': '${drama.id}:$index',
-          'currentEpisode': index,
-          'vip': vip && index == 2,
-        }, index),
-    ],
-  );
+  DramaDetail makeDetail(Drama drama, {bool vip = false}) =>
+      DramaDetail(drama, [
+        for (var index = 1; index <= drama.episodes; index++)
+          Episode({
+            'id': '${drama.id}:$index',
+            'currentEpisode': index,
+            'vip': vip && index == 2,
+          }, index),
+      ]);
 
   @override
   Future<DramaDetail> detail(Drama drama) async =>
       pendingDetails[drama.id] == null
-          ? detailResults[drama.id] ?? makeDetail(drama)
-          : await pendingDetails[drama.id]!.future;
+      ? detailResults[drama.id] ?? makeDetail(drama)
+      : await pendingDetails[drama.id]!.future;
 
   @override
   Future<PlaybackPlan> resolve(
@@ -134,76 +137,101 @@ void main() {
     updatedAt: DateTime.utc(2026, 10, 15, 12, minute),
   );
 
-  test('season lookup paginates and excludes unrelated titles and sources', () async {
-    final repository = SeasonRepository()
-      ..results[1] = CatalogPage([thirdSeason, unrelatedSeason], hasMore: true)
-      ..results[2] = CatalogPage([
-        secondSeason,
-        const Drama(
-          id: 'huangdou:copy',
-          source: 'huangdou',
-          title: '合成故事 第二季',
-        ),
+  test(
+    'season lookup paginates and excludes unrelated titles and sources',
+    () async {
+      final repository = SeasonRepository()
+        ..results[1] = CatalogPage([
+          thirdSeason,
+          unrelatedSeason,
+        ], hasMore: true)
+        ..results[2] = CatalogPage([
+          secondSeason,
+          const Drama(
+            id: 'huangdou:copy',
+            source: 'huangdou',
+            title: '合成故事 第二季',
+          ),
+        ]);
+      final catalog = SeriesCatalog(
+        anchor: firstSeason,
+        repository: repository,
+        knownDramas: const [],
+        allowed: () => true,
+      );
+      addTearDown(catalog.dispose);
+      await catalog.load();
+      expect(repository.catalogCalls, [('合成故事', 1, true), ('合成故事', 2, false)]);
+      expect(catalog.entries.map((entry) => entry.drama.id), [
+        firstSeason.id,
+        secondSeason.id,
+        thirdSeason.id,
       ]);
+      expect(catalog.hasMore, isFalse);
+    },
+  );
+
+  test(
+    'partial search retains its seasons and retries the failed page',
+    () async {
+      final repository = SeasonRepository()
+        ..results[1] = CatalogPage([secondSeason], hasMore: true)
+        ..results[2] = CatalogPage([thirdSeason])
+        ..failingPage = 2;
+      final catalog = SeriesCatalog(
+        anchor: firstSeason,
+        repository: repository,
+        knownDramas: const [],
+        allowed: () => true,
+      );
+      addTearDown(catalog.dispose);
+      await catalog.load();
+      expect(catalog.error, isNotEmpty);
+      expect(
+        catalog.entries.map((entry) => entry.drama.id),
+        contains(secondSeason.id),
+      );
+      repository.failingPage = null;
+      await catalog.load();
+      expect(repository.catalogCalls.map((call) => call.$2), [1, 2, 2]);
+      expect(catalog.error, isEmpty);
+      expect(catalog.entries, hasLength(3));
+    },
+  );
+
+  test(
+    'lookup keeps a bounded page budget and exposes remaining results',
+    () async {
+      final repository = SeasonRepository();
+      for (var page = 1; page <= 6; page++) {
+        repository.results[page] = CatalogPage([], hasMore: true);
+      }
+      repository.results[7] = CatalogPage([secondSeason]);
+      final catalog = SeriesCatalog(
+        anchor: firstSeason,
+        repository: repository,
+        knownDramas: const [],
+        allowed: () => true,
+      );
+      addTearDown(catalog.dispose);
+      await catalog.load();
+      expect(repository.catalogCalls, hasLength(5));
+      expect(catalog.hasMore, isTrue);
+      await catalog.load();
+      expect(repository.catalogCalls, hasLength(7));
+      expect(catalog.hasMore, isFalse);
+      expect(catalog.entries, hasLength(2));
+    },
+  );
+
+  test('a disposed lookup ignores its late response', () async {
+    final repository = SeasonRepository()
+      ..pendingCatalog = Completer<CatalogPage>();
     final catalog = SeriesCatalog(
       anchor: firstSeason,
       repository: repository,
       knownDramas: const [],
       allowed: () => true,
-    );
-    addTearDown(catalog.dispose);
-    await catalog.load();
-    expect(repository.catalogCalls, [('合成故事', 1, true), ('合成故事', 2, false)]);
-    expect(catalog.entries.map((entry) => entry.drama.id),
-        [firstSeason.id, secondSeason.id, thirdSeason.id]);
-    expect(catalog.hasMore, isFalse);
-  });
-
-  test('partial search retains its seasons and retries the failed page', () async {
-    final repository = SeasonRepository()
-      ..results[1] = CatalogPage([secondSeason], hasMore: true)
-      ..results[2] = CatalogPage([thirdSeason])
-      ..failingPage = 2;
-    final catalog = SeriesCatalog(
-      anchor: firstSeason, repository: repository,
-      knownDramas: const [], allowed: () => true,
-    );
-    addTearDown(catalog.dispose);
-    await catalog.load();
-    expect(catalog.error, isNotEmpty);
-    expect(catalog.entries.map((entry) => entry.drama.id), contains(secondSeason.id));
-    repository.failingPage = null;
-    await catalog.load();
-    expect(repository.catalogCalls.map((call) => call.$2), [1, 2, 2]);
-    expect(catalog.error, isEmpty);
-    expect(catalog.entries, hasLength(3));
-  });
-
-  test('lookup keeps a bounded page budget and exposes remaining results', () async {
-    final repository = SeasonRepository();
-    for (var page = 1; page <= 6; page++) {
-      repository.results[page] = CatalogPage([], hasMore: true);
-    }
-    repository.results[7] = CatalogPage([secondSeason]);
-    final catalog = SeriesCatalog(
-      anchor: firstSeason, repository: repository,
-      knownDramas: const [], allowed: () => true,
-    );
-    addTearDown(catalog.dispose);
-    await catalog.load();
-    expect(repository.catalogCalls, hasLength(5));
-    expect(catalog.hasMore, isTrue);
-    await catalog.load();
-    expect(repository.catalogCalls, hasLength(7));
-    expect(catalog.hasMore, isFalse);
-    expect(catalog.entries, hasLength(2));
-  });
-
-  test('a disposed lookup ignores its late response', () async {
-    final repository = SeasonRepository()..pendingCatalog = Completer<CatalogPage>();
-    final catalog = SeriesCatalog(
-      anchor: firstSeason, repository: repository,
-      knownDramas: const [], allowed: () => true,
     );
     final pending = catalog.load();
     catalog.dispose();
@@ -212,38 +240,44 @@ void main() {
     expect(catalog.entries, hasLength(1));
   });
 
-  test('series follows latest playback, persists, and exposes the next season', () async {
-    final store = await createStore();
-    await store.toggleSeriesFavorite(firstSeason);
-    await store.refreshDramas([firstSeason, secondSeason, thirdSeason]);
-    await store.saveWatch(watch(firstSeason, 1, 1));
-    await store.saveWatch(watch(secondSeason, 51, 2));
-    expect(store.trackedSeries, hasLength(1));
-    expect(store.seriesWatch(firstSeason)!.episode, 51);
-    expect(store.seriesWatch(firstSeason)!.drama.id, secondSeason.id);
-    expect(store.followedSeries(secondSeason)!.id, firstSeason.id);
-    expect(store.hasNextSeason(firstSeason), isTrue);
-    await store.saveWatch(watch(thirdSeason, 2, 3));
-    expect(store.hasNextSeason(firstSeason), isFalse);
-    await store.saveWatch(watch(firstSeason, 2, 4));
-    expect(store.seriesWatch(firstSeason)!.drama.id, firstSeason.id);
-    expect(store.hasNextSeason(firstSeason), isTrue);
-    final restarted = LocalStore(store.preferences);
-    addTearDown(restarted.dispose);
-    expect(restarted.seriesWatch(firstSeason)!.episode, 2);
-    expect(restarted.history, hasLength(3));
-  });
+  test(
+    'series follows latest playback, persists, and exposes the next season',
+    () async {
+      final store = await createStore();
+      await store.toggleSeriesFavorite(firstSeason);
+      await store.refreshDramas([firstSeason, secondSeason, thirdSeason]);
+      await store.saveWatch(watch(firstSeason, 1, 1));
+      await store.saveWatch(watch(secondSeason, 51, 2));
+      expect(store.trackedSeries, hasLength(1));
+      expect(store.seriesWatch(firstSeason)!.episode, 51);
+      expect(store.seriesWatch(firstSeason)!.drama.id, secondSeason.id);
+      expect(store.followedSeries(secondSeason)!.id, firstSeason.id);
+      expect(store.hasNextSeason(firstSeason), isTrue);
+      await store.saveWatch(watch(thirdSeason, 2, 3));
+      expect(store.hasNextSeason(firstSeason), isFalse);
+      await store.saveWatch(watch(firstSeason, 2, 4));
+      expect(store.seriesWatch(firstSeason)!.drama.id, firstSeason.id);
+      expect(store.hasNextSeason(firstSeason), isTrue);
+      final restarted = LocalStore(store.preferences);
+      addTearDown(restarted.dispose);
+      expect(restarted.seriesWatch(firstSeason)!.episode, 2);
+      expect(restarted.history, hasLength(3));
+    },
+  );
 
-  test('legacy duplicate follows display once and can be removed as a series', () async {
-    final store = await createStore();
-    await store.toggleFavorite(firstSeason);
-    await store.toggleFavorite(secondSeason);
-    await store.saveWatch(watch(secondSeason, 4, 1));
-    expect(store.trackedSeries, hasLength(1));
-    await store.toggleSeriesFavorite(secondSeason);
-    expect(store.favorites, isEmpty);
-    expect(store.history.single.episode, 4);
-  });
+  test(
+    'legacy duplicate follows display once and can be removed as a series',
+    () async {
+      final store = await createStore();
+      await store.toggleFavorite(firstSeason);
+      await store.toggleFavorite(secondSeason);
+      await store.saveWatch(watch(secondSeason, 4, 1));
+      expect(store.trackedSeries, hasLength(1));
+      await store.toggleSeriesFavorite(secondSeason);
+      expect(store.favorites, isEmpty);
+      expect(store.history.single.episode, 4);
+    },
+  );
 
   test('plain first-season titles continue to match later seasons', () async {
     final store = await createStore();
@@ -256,93 +290,120 @@ void main() {
     expect(store.trackedSeries, hasLength(1));
   });
 
-  test('follow checks are fresh per visit and serialize shared catalog reads', () async {
-    final store = await createStore();
-    await store.toggleSeriesFavorite(firstSeason);
-    await store.toggleSeriesFavorite(unrelatedSeason);
-    final repository = SeasonRepository();
-    final updates = FollowUpdates(repository, store);
-    addTearDown(updates.dispose);
-    await updates.refresh();
-    expect(repository.catalogCalls, hasLength(2));
-    expect(repository.catalogCalls.every((call) => call.$3), isTrue);
-    expect(repository.maximumCatalogs, 1);
-    expect(store.hasNextSeason(firstSeason), isTrue);
-    await updates.refresh();
-    expect(repository.catalogCalls, hasLength(4));
-    expect(updates.failed, 0);
-  });
+  test(
+    'follow checks are fresh per visit and serialize shared catalog reads',
+    () async {
+      final store = await createStore();
+      await store.toggleSeriesFavorite(firstSeason);
+      await store.toggleSeriesFavorite(unrelatedSeason);
+      final repository = SeasonRepository();
+      final updates = FollowUpdates(repository, store);
+      addTearDown(updates.dispose);
+      await updates.refresh();
+      expect(repository.catalogCalls, hasLength(2));
+      expect(repository.catalogCalls.every((call) => call.$3), isTrue);
+      expect(repository.maximumCatalogs, 1);
+      expect(store.hasNextSeason(firstSeason), isTrue);
+      await updates.refresh();
+      expect(repository.catalogCalls, hasLength(4));
+      expect(updates.failed, 0);
+    },
+  );
 
-  test('follow checks cannot save a late response into another user session', () async {
-    final store = await createStore();
-    await store.toggleSeriesFavorite(firstSeason);
-    final repository = SeasonRepository()..pendingCatalog = Completer<CatalogPage>();
-    final updates = FollowUpdates(repository, store);
-    addTearDown(updates.dispose);
-    final pending = updates.refresh();
-    await store.switchProfile('default');
-    repository.pendingCatalog!.complete(CatalogPage([secondSeason]));
-    await pending;
-    expect(store.seriesDramasFor(firstSeason).map((d) => d.id), isNot(contains(secondSeason.id)));
-  });
+  test(
+    'follow checks cannot save a late response into another user session',
+    () async {
+      final store = await createStore();
+      await store.toggleSeriesFavorite(firstSeason);
+      final repository = SeasonRepository()
+        ..pendingCatalog = Completer<CatalogPage>();
+      final updates = FollowUpdates(repository, store);
+      addTearDown(updates.dispose);
+      final pending = updates.refresh();
+      await store.switchProfile('default');
+      repository.pendingCatalog!.complete(CatalogPage([secondSeason]));
+      await pending;
+      expect(
+        store.seriesDramasFor(firstSeason).map((d) => d.id),
+        isNot(contains(secondSeason.id)),
+      );
+    },
+  );
 
   Future<void> openBrowser(
-    WidgetTester tester, SeasonRepository repository, LocalStore store, {
+    WidgetTester tester,
+    SeasonRepository repository,
+    LocalStore store, {
     bool television = false,
     void Function(SeriesEpisodeSelection?)? onResult,
   }) async {
-    await tester.pumpWidget(MaterialApp(
-      theme: television ? televisionTheme(ThemeData()) : ThemeData(),
-      home: AppLayout(
-        television: television,
-        child: Builder(builder: (context) => Scaffold(
-          body: FilledButton(
-            onPressed: () async {
-              final selection = await Navigator.push<SeriesEpisodeSelection>(
-                context,
-                MaterialPageRoute(builder: (_) => AppLayout(
-                  television: television,
-                  child: SeriesBrowserScreen(
-                    anchor: firstSeason,
-                    initialDetail: repository.makeDetail(firstSeason),
-                    repository: repository,
-                    store: store,
-                  ),
-                )),
-              );
-              onResult?.call(selection);
-            },
-            child: const Text('打开全季'),
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: television ? televisionTheme(ThemeData()) : ThemeData(),
+        home: AppLayout(
+          television: television,
+          child: Builder(
+            builder: (context) => Scaffold(
+              body: FilledButton(
+                onPressed: () async {
+                  final selection =
+                      await Navigator.push<SeriesEpisodeSelection>(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => AppLayout(
+                            television: television,
+                            child: SeriesBrowserScreen(
+                              anchor: firstSeason,
+                              initialDetail: repository.makeDetail(firstSeason),
+                              repository: repository,
+                              store: store,
+                            ),
+                          ),
+                        ),
+                      );
+                  onResult?.call(selection);
+                },
+                child: const Text('打开全季'),
+              ),
+            ),
           ),
-        )),
+        ),
       ),
-    ));
+    );
     await tester.tap(find.text('打开全季'));
     await tester.pumpAndSettle();
   }
 
-  testWidgets('uncached seasons can jump directly to an episode without following', (tester) async {
-    viewport(tester, const Size(390, 844));
-    final store = await createStore();
-    final repository = SeasonRepository();
-    SeriesEpisodeSelection? selected;
-    await openBrowser(tester, repository, store, onResult: (value) => selected = value);
-    await tester.tap(find.byKey(ValueKey('all-season-${secondSeason.id}')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('跳转集数'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), '51');
-    await tester.tap(find.text('定位'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('all-season-episode-51')));
-    await tester.pumpAndSettle();
-    expect(selected!.detail.drama.id, secondSeason.id);
-    expect(selected!.index, 50);
-    expect(selected!.position, 0);
-    expect(store.favorites, isEmpty);
-    expect(store.history, isEmpty);
-    expect(tester.takeException(), isNull);
-  });
+  testWidgets(
+    'uncached seasons can jump directly to an episode without following',
+    (tester) async {
+      viewport(tester, const Size(390, 844));
+      final store = await createStore();
+      final repository = SeasonRepository();
+      SeriesEpisodeSelection? selected;
+      await openBrowser(
+        tester,
+        repository,
+        store,
+        onResult: (value) => selected = value,
+      );
+      await tester.tap(find.byKey(ValueKey('all-season-${secondSeason.id}')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('跳转集数'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), '51');
+      await tester.tap(find.text('定位'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('all-season-episode-51')));
+      await tester.pumpAndSettle();
+      expect(selected!.detail.drama.id, secondSeason.id);
+      expect(selected!.index, 50);
+      expect(selected!.position, 0);
+      expect(store.favorites, isEmpty);
+      expect(store.history, isEmpty);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('changing seasons discards stale detail replies', (tester) async {
     viewport(tester, const Size(390, 844));
@@ -354,22 +415,40 @@ void main() {
     await tester.pump();
     await tester.tap(find.byKey(ValueKey('all-season-${firstSeason.id}')));
     await tester.pumpAndSettle();
-    repository.pendingDetails[secondSeason.id]!.complete(repository.makeDetail(secondSeason));
+    repository.pendingDetails[secondSeason.id]!.complete(
+      repository.makeDetail(secondSeason),
+    );
     await tester.pumpAndSettle();
-    expect(find.byKey(ValueKey('all-season-episodes-${firstSeason.id}')), findsOneWidget);
-    expect(find.byKey(ValueKey('all-season-episodes-${secondSeason.id}')), findsNothing);
+    expect(
+      find.byKey(ValueKey('all-season-episodes-${firstSeason.id}')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(ValueKey('all-season-episodes-${secondSeason.id}')),
+      findsNothing,
+    );
     await tester.pageBack();
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('VIP selection still requires explicit confirmation', (tester) async {
+  testWidgets('VIP selection still requires explicit confirmation', (
+    tester,
+  ) async {
     viewport(tester, const Size(390, 844));
     final store = await createStore();
     final repository = SeasonRepository();
-    repository.detailResults[secondSeason.id] = repository.makeDetail(secondSeason, vip: true);
+    repository.detailResults[secondSeason.id] = repository.makeDetail(
+      secondSeason,
+      vip: true,
+    );
     SeriesEpisodeSelection? selected;
-    await openBrowser(tester, repository, store, onResult: (value) => selected = value);
+    await openBrowser(
+      tester,
+      repository,
+      store,
+      onResult: (value) => selected = value,
+    );
     await tester.tap(find.byKey(ValueKey('all-season-${secondSeason.id}')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('all-season-episode-2')));
@@ -385,20 +464,30 @@ void main() {
     expect(selected!.index, 1);
   });
 
-  testWidgets('TV remote can change seasons and choose an episode', (tester) async {
+  testWidgets('TV remote can change seasons and choose an episode', (
+    tester,
+  ) async {
     viewport(tester, const Size(1280, 720));
     final store = await createStore();
     final repository = SeasonRepository();
     SeriesEpisodeSelection? selected;
-    await openBrowser(tester, repository, store, television: true,
-        onResult: (value) => selected = value);
+    await openBrowser(
+      tester,
+      repository,
+      store,
+      television: true,
+      onResult: (value) => selected = value,
+    );
     final label = find.text('第 1 季 · 2 集');
     Focus.of(tester.element(label)).requestFocus();
     await tester.pump();
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pumpAndSettle();
-    expect(find.byKey(ValueKey('all-season-episodes-${secondSeason.id}')), findsOneWidget);
+    expect(
+      find.byKey(ValueKey('all-season-episodes-${secondSeason.id}')),
+      findsOneWidget,
+    );
     final episode = find.byKey(const ValueKey('all-season-episode-1'));
     await tester.ensureVisible(episode);
     await tester.tap(episode);
@@ -407,20 +496,31 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('detail exposes the all-season entry without favorite records', (tester) async {
+  testWidgets('detail exposes the all-season entry without favorite records', (
+    tester,
+  ) async {
     viewport(tester, const Size(390, 844));
     final store = await createStore();
     final repository = SeasonRepository();
-    await tester.pumpWidget(MaterialApp(home: DetailScreen(
-      drama: firstSeason, repository: repository, store: store,
-    )));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DetailScreen(
+          drama: firstSeason,
+          repository: repository,
+          store: store,
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
     final entry = find.byKey(const ValueKey('detail-all-seasons'));
     await tester.ensureVisible(entry);
     await tester.tap(entry);
     await tester.pumpAndSettle();
     expect(find.byType(SeriesBrowserScreen), findsOneWidget);
-    expect(find.byKey(ValueKey('all-season-${thirdSeason.id}')), findsOneWidget);
+    expect(
+      find.byKey(ValueKey('all-season-${thirdSeason.id}')),
+      findsOneWidget,
+    );
     expect(store.favorites, isEmpty);
     await tester.pageBack();
     await tester.pumpAndSettle();
@@ -428,19 +528,28 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('player switches to the chosen season and exact episode', (tester) async {
+  testWidgets('player switches to the chosen season and exact episode', (
+    tester,
+  ) async {
     viewport(tester, const Size(960, 540));
     debugDefaultTargetPlatformOverride = TargetPlatform.windows;
     addTearDown(() => debugDefaultTargetPlatformOverride = null);
     final store = await createStore();
     final repository = SeasonRepository();
     final platform = ScriptedPlayer();
-    await tester.pumpWidget(MaterialApp(home: PlayerScreen(
-      detail: repository.makeDetail(firstSeason), initialIndex: 0,
-      repository: repository, store: store,
-      playerFactory: () => Player(platformPlayer: platform),
-      videoBuilder: (controls) => ColoredBox(color: Colors.black, child: controls),
-    )));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlayerScreen(
+          detail: repository.makeDetail(firstSeason),
+          initialIndex: 0,
+          repository: repository,
+          store: store,
+          playerFactory: () => Player(platformPlayer: platform),
+          videoBuilder: (controls) =>
+              ColoredBox(color: Colors.black, child: controls),
+        ),
+      ),
+    );
     for (var index = 0; index < 12; index++) {
       await tester.pump(const Duration(milliseconds: 20));
     }
@@ -459,32 +568,91 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('follow page resumes the latest season and checks again on reentry', (tester) async {
-    viewport(tester, const Size(390, 844));
-    final store = await createStore();
-    await store.toggleSeriesFavorite(firstSeason);
-    await store.saveWatch(watch(secondSeason, 51, 1));
-    final repository = SeasonRepository();
-    final opened = <String>[];
-    Widget page(int visit) => MaterialApp(home: Scaffold(body: SavedLibrary(
-      repository: repository, store: store, history: false,
-      refreshToken: visit, onOpen: (_) {},
-      onContinue: (drama) => opened.add(drama.id),
-    )));
-    await tester.pumpWidget(page(0));
-    await tester.pumpAndSettle();
-    expect(find.text('想看'), findsNothing);
-    expect(find.text('在看'), findsNothing);
-    expect(find.text('已看'), findsNothing);
-    expect(find.text('已有下季'), findsOneWidget);
-    expect(find.textContaining('第 2 季 · 第 51 集'), findsOneWidget);
-    final calls = repository.catalogCalls.length;
-    await tester.pumpWidget(page(1));
-    await tester.pumpAndSettle();
-    expect(repository.catalogCalls.length, greaterThan(calls));
-    await tester.tap(find.byKey(ValueKey('saved-${firstSeason.id}')));
-    expect(opened, [secondSeason.id]);
-    await tester.pumpWidget(const SizedBox.shrink());
-    expect(tester.takeException(), isNull);
-  });
+  testWidgets(
+    'follow page resumes the latest season and checks again on reentry',
+    (tester) async {
+      viewport(tester, const Size(390, 844));
+      final store = await createStore();
+      await store.toggleSeriesFavorite(firstSeason);
+      await store.saveWatch(watch(secondSeason, 51, 1));
+      final repository = SeasonRepository();
+      final opened = <String>[];
+      Widget page(int visit) => MaterialApp(
+        home: Scaffold(
+          body: SavedLibrary(
+            repository: repository,
+            store: store,
+            history: false,
+            refreshToken: visit,
+            onOpen: (_) {},
+            onContinue: (drama) => opened.add(drama.id),
+          ),
+        ),
+      );
+      await tester.pumpWidget(page(0));
+      await tester.pumpAndSettle();
+      expect(find.text('想看'), findsNothing);
+      expect(find.text('在看'), findsNothing);
+      expect(find.text('已看'), findsNothing);
+      expect(find.text('已有下季'), findsOneWidget);
+      expect(find.textContaining('第 2 季 · 第 51 集'), findsOneWidget);
+      final calls = repository.catalogCalls.length;
+      await tester.pumpWidget(page(1));
+      await tester.pumpAndSettle();
+      expect(repository.catalogCalls.length, greaterThan(calls));
+      await tester.tap(find.byKey(ValueKey('saved-${firstSeason.id}')));
+      expect(opened, [secondSeason.id]);
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  for (final television in [false, true]) {
+    testWidgets(
+      television
+          ? 'TV selection dialog opens all seasons and returns to playback'
+          : 'phone portrait selection sheet opens all seasons and returns to playback',
+      (tester) async {
+        viewport(tester, television ? const Size(1280, 720) : const Size(390, 844));
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        addTearDown(() => debugDefaultTargetPlatformOverride = null);
+        final store = await createStore();
+        final repository = SeasonRepository();
+        final platform = ScriptedPlayer();
+        await tester.pumpWidget(AppLayout(
+          television: television,
+          child: MaterialApp(home: PlayerScreen(
+            detail: repository.makeDetail(firstSeason), initialIndex: 0,
+            repository: repository, store: store,
+            playerFactory: () => Player(platformPlayer: platform),
+            videoBuilder: (controls) => ColoredBox(color: Colors.black, child: controls),
+          )),
+        ));
+        for (var index = 0; index < 16; index++) {
+          await tester.pump(const Duration(milliseconds: 20));
+        }
+        await tester.tap(find.byKey(ValueKey(
+          television ? 'tv-episodes' : 'player-portrait-episodes',
+        )));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(ValueKey(
+          television ? 'tv-all-seasons' : 'player-all-seasons',
+        )));
+        await tester.pumpAndSettle();
+        expect(find.byType(SeriesBrowserScreen), findsOneWidget);
+        expect(find.byTooltip('收起面板'), findsNothing);
+        await tester.tap(find.byKey(ValueKey('all-season-${thirdSeason.id}')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('all-season-episode-2')));
+        for (var index = 0; index < 20; index++) {
+          await tester.pump(const Duration(milliseconds: 20));
+        }
+        expect(repository.resolutions.last, (thirdSeason.id, 2));
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
 }

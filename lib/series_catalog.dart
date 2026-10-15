@@ -57,12 +57,14 @@ class SeriesCatalog extends ChangeNotifier {
     try {
       for (var count = 0; count < 5 && hasMore; count++) {
         final page = _page + 1;
-        final result = await repository.catalog(
-          anchor.source,
-          query: title.trim(),
-          page: page,
-          force: page == 1,
-        ).timeout(const Duration(seconds: 20));
+        final result = await repository
+            .catalog(
+              anchor.source,
+              query: title.trim(),
+              page: page,
+              force: page == 1,
+            )
+            .timeout(const Duration(seconds: 20));
         if (!_current(generation)) return;
         for (final drama in result.items) {
           _candidates[drama.id] = drama;

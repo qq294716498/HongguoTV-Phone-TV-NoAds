@@ -694,6 +694,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _openDrama(Drama drama, {bool resume = false, bool download = false}) {
+    if (resume) drama = widget.store.seriesWatch(drama)?.drama ?? drama;
     _pauseCatalog();
     if (download) {
       Navigator.of(context).push(
@@ -825,9 +826,7 @@ class _HomeScreenState extends State<HomeScreen> {
         onPressed: () => _dramaActions(drama),
       ),
       selected: _selectionMode ? _selectedDramas.containsKey(drama.id) : null,
-      badge: following == null
-          ? null
-          : '已追剧',
+      badge: following == null ? null : '已追剧',
     );
   }
 
