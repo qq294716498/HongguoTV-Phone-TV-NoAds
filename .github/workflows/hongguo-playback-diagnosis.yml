@@ -63,9 +63,9 @@ jobs:
         env:
           CHECK_LIVE_HONGGUO_PROTOCOL: "true"
         run: go test ./core -run '^TestLiveHongguoSignatureControl$' -v -count=1
-      - name: Live production playback resolver without media or images
+      - name: Live production resolver and 64-byte MP4 header without images
         if: ${{ (github.event_name == 'workflow_dispatch' && inputs.fixed_playback) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[verify-playback]')) }}
         working-directory: native
         env:
           CHECK_LIVE_HONGGUO_FIXED: "true"
-        run: go test ./core -run '^TestLiveHongguo(FixedPlayback|SignatureControl)$' -v -count=1
+        run: go test ./core -run '^TestLiveHongguoFixedPlayback$' -v -count=1

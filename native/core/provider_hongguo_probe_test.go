@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -182,5 +183,48 @@ func TestLiveHongguoFixedPlayback(t *testing.T) {
 		if !resolved {
 			t.Fatalf("production episode %d did not resolve", index+1)
 		}
+		if index == 0 {
+			status, size, valid, err := probeHongguoMP4Header(ctx, base, media)
+			t.Logf("production mediaHeaderStatus=%d bytes=%d validMP4=%t errorType=%T", status, size, valid, err)
+			if err != nil || !valid {
+				t.Fatal("resolved media did not return a valid MP4 header")
+			}
+		}
 	}
+}
+
+func probeHongguoMP4Header(ctx context.Context, transport http.RoundTripper, media providerMedia) (int, int, bool, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, media.URL, nil)
+	if err != nil {
+		return 0, 0, false, errors.New("could not prepare media header verification")
+	}
+	request.Header.Set("Range", "bytes=0-63")
+	request.Header.Set("Referer", media.Referer)
+	request.Header.Set("User-Agent", hongguoAppUserAgent)
+	client := &http.Client{
+		Transport: transport, Timeout: 20 * time.Second,
+		CheckRedirect: func(request *http.Request, via []*http.Request) error {
+			if len(via) >= 3 {
+				return errors.New("media header redirect limit reached")
+			}
+			return nil
+		},
+	}
+	response, err := client.Do(request)
+	if err != nil {
+		return 0, 0, false, errors.New("media header request failed")
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK && response.StatusCode != http.StatusPartialContent {
+		return response.StatusCode, 0, false, errors.New("media header server rejected the request")
+	}
+	if strings.HasPrefix(strings.ToLower(response.Header.Get("Content-Type")), "image/") {
+		return response.StatusCode, 0, false, errors.New("unexpected image response was not read")
+	}
+	header, err := io.ReadAll(io.LimitReader(response.Body, 64))
+	if err != nil {
+		return response.StatusCode, len(header), false, errors.New("could not read media header")
+	}
+	valid := len(header) >= 8 && (bytes.Equal(header[4:8], []byte("ftyp")) || bytes.Equal(header[4:8], []byte("styp")))
+	return response.StatusCode, len(header), valid, nil
 }
