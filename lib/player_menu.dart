@@ -34,6 +34,7 @@ class PlayerMenu extends StatefulWidget {
     this.preloadStatus = '',
     this.enhancement,
     this.onCompareEnhancement,
+    this.onAllSeasons,
   });
 
   final PlayerMenuSection section;
@@ -52,6 +53,7 @@ class PlayerMenu extends StatefulWidget {
   final String preloadStatus;
   final VideoEnhancementController? enhancement;
   final VoidCallback? onCompareEnhancement;
+  final VoidCallback? onAllSeasons;
   final ValueChanged<int> onEpisode;
   final Future<void> Function(PlaybackPreferences) onPreferences;
   final Future<void> Function() onFavorite;
@@ -128,6 +130,17 @@ class _PlayerMenuState extends State<PlayerMenu> {
                 child: Text(
                   _error!,
                   style: const TextStyle(color: Color(0xFFFFB4A8)),
+                ),
+              ),
+            if (widget.section == PlayerMenuSection.episodes &&
+                widget.onAllSeasons != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 18),
+                child: OutlinedButton.icon(
+                  key: const ValueKey('menu-all-seasons'),
+                  onPressed: widget.onAllSeasons,
+                  icon: const Icon(Icons.video_library_outlined),
+                  label: const Text('查看全季'),
                 ),
               ),
             Expanded(

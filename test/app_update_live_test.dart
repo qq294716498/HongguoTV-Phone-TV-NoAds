@@ -20,7 +20,11 @@ void main() {
       final staging = Platform.environment['CHECK_STAGED_UPDATE'] == 'true';
       expect(data['draft'], false);
       expect(data['prerelease'], staging);
-      expect(data['tag_name'], Platform.environment['EXPECTED_UPDATE_TAG']);
+      final expectedTag = Platform.environment['EXPECTED_UPDATE_TAG']!;
+      expect(data['tag_name'], expectedTag);
+      final expected = RegExp(
+        r'^app-v(\d+\.\d+\.\d+)-(\d+)$',
+      ).firstMatch(expectedTag)!;
       final stableData = Map<String, dynamic>.of(data)..['prerelease'] = false;
       final download = Platform.environment['CHECK_UPDATE_DOWNLOAD'] == 'true';
       final directory = Directory('dist/update-check');
@@ -28,14 +32,14 @@ void main() {
       final results = <Map<String, Object>>[];
       for (final entry in updateAbiOffsets.entries) {
         final installed = InstalledApp(
-          version: '0.1.9',
-          code: entry.value + 31,
+          version: '0.1.10',
+          code: entry.value + 34,
           abi: entry.key,
         );
         final release = AppRelease.parse(stableData, installed);
         expect(release, isNotNull);
-        expect(release!.version, '0.1.10');
-        expect(release.code, entry.value + 34);
+        expect(release!.version, expected[1]);
+        expect(release.code, entry.value + int.parse(expected[2]!));
         expect(
           AppRelease.parse(
             stableData,

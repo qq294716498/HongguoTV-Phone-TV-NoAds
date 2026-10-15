@@ -25,14 +25,14 @@ class EpisodeRangeBar extends StatelessWidget {
   final String title;
 
   Future<void> _jump(BuildContext context) async {
-    final controller = TextEditingController();
+    var value = '';
     String? error;
     final index = await showDialog<int>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) {
           void submit() {
-            final number = int.tryParse(controller.text.trim());
+            final number = int.tryParse(value.trim());
             final found = episodes.indexWhere(
               (episode) => episode.number == number,
             );
@@ -46,7 +46,7 @@ class EpisodeRangeBar extends StatelessWidget {
           return AlertDialog(
             title: const Text('跳转到指定集数'),
             content: TextField(
-              controller: controller,
+              onChanged: (text) => value = text,
               autofocus: true,
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -64,7 +64,6 @@ class EpisodeRangeBar extends StatelessWidget {
         },
       ),
     );
-    controller.dispose();
     if (index != null && context.mounted) onLocate(index);
   }
 

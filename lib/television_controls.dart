@@ -763,9 +763,11 @@ class TelevisionEpisodeDialog extends StatelessWidget {
     super.key,
     required this.episodes,
     required this.currentIndex,
+    this.onAllSeasons,
   });
   final List<Episode> episodes;
   final int currentIndex;
+  final VoidCallback? onAllSeasons;
 
   @override
   Widget build(BuildContext context) => AlertDialog(
@@ -794,6 +796,13 @@ class TelevisionEpisodeDialog extends StatelessWidget {
       ),
     ),
     actions: [
+      if (onAllSeasons != null)
+        OutlinedButton.icon(
+          key: const ValueKey('tv-all-seasons'),
+          onPressed: onAllSeasons,
+          icon: const Icon(Icons.video_library_outlined),
+          label: const Text('查看全季'),
+        ),
       TextButton(
         onPressed: () => Navigator.pop(context),
         child: const Text('返回播放'),

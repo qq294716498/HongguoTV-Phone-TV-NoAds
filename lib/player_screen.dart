@@ -20,10 +20,10 @@ import 'watch_reminder_models.dart';
 import 'watch_reminder_runtime.dart';
 import 'download_picker.dart';
 import 'downloads_screen.dart';
-import 'follow_state.dart';
 import 'local_store.dart';
 import 'models.dart';
 import 'next_season_resolver.dart';
+import 'series_browser_screen.dart';
 import 'playback_loader.dart';
 import 'playback_preloader.dart';
 import 'playback_recovery.dart';
@@ -1788,7 +1788,7 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Future<void> _toggleFavorite() async {
     try {
-      await widget.store.toggleFavorite(_detail.drama);
+      await widget.store.toggleSeriesFavorite(_detail.drama);
       if (mounted && !_closed) setState(() {});
     } catch (_) {
       _notice('追剧记录未能保存，请检查存储空间后重试');
@@ -1846,11 +1846,59 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
   }
 
+  bool get _canBrowseSeasons =>
+      _detail.drama.source == SourceSite.hongguo.id &&
+      !widget.localOnly &&
+      widget.allowOnlineFallback &&
+      widget.mediaId == null;
+
+  Future<void> _browseSeasons() async {
+    if (_panelOpen || _closed || !_canBrowseSeasons) return;
+    _cancelSeasonAdvance();
+    _interactions.cancel();
+    setState(() => _panelOpen = true);
+    try {
+      final selection = await Navigator.of(context)
+          .push<SeriesEpisodeSelection>(
+            MaterialPageRoute(
+              builder: (_) => SeriesBrowserScreen(
+                anchor: _detail.drama,
+                initialDetail: _detail,
+                currentEpisode: _detail.episodes[_index].number,
+                repository: widget.repository,
+                store: widget.store,
+              ),
+            ),
+          );
+      if (!mounted ||
+          _closed ||
+          selection == null ||
+          widget.store.profileEpoch != _profileEpoch ||
+          widget.store.locked ||
+          !widget.store.allowsSource(selection.detail.drama.source)) {
+        return;
+      }
+      await _saveProgress(flush: true);
+      if (!mounted || _closed) return;
+      await _play(
+        selection.index,
+        nextDetail: selection.detail,
+        position: selection.position,
+      );
+    } finally {
+      if (mounted && !_closed) {
+        setState(() => _panelOpen = false);
+        _playerFocus.requestFocus();
+      }
+    }
+  }
+
   Future<void> _openPanel(PlayerMenuSection section) async {
     if (_panelOpen || _closed) return;
     _interactions.cancel();
     setState(() => _panelOpen = true);
     final menuTheme = _showFullscreen ? AppTheme.dark : Theme.of(context);
+    var browseSeasons = false;
     try {
       final index = await showDialog<int>(
         context: context,
@@ -1871,10 +1919,13 @@ class _PlayerScreenState extends State<PlayerScreen>
               qualities: _plan?.qualities ?? [],
               actualQuality: _plan?.quality ?? 0,
               local: _plan?.local == true,
-              favorite: widget.store.isFavorite(_detail.drama.id),
+              favorite: widget.store.followedSeries(_detail.drama) != null,
               mobile: _mobile,
               mobileReminders: _mobileRemindersAllowed,
               onEpisode: (index) => Navigator.pop(menuContext, index),
+              onAllSeasons: _canBrowseSeasons
+                  ? () => Navigator.pop(menuContext, -1)
+                  : null,
               onPreferences: _setPreferences,
               showDanmaku: _detail.drama.source == 'hongguo',
               danmakuStatus: _danmaku.status,
@@ -1885,12 +1936,15 @@ class _PlayerScreenState extends State<PlayerScreen>
                 unawaited(_enhancement.toggleCompare());
                 Navigator.pop(menuContext);
               },
-              onFavorite: () => widget.store.toggleFavorite(_detail.drama),
+              onFavorite: () =>
+                  widget.store.toggleSeriesFavorite(_detail.drama),
             ),
           ),
         ),
       );
-      if (mounted && !_closed && index != null && index != _index) {
+      if (index == -1) {
+        browseSeasons = true;
+      } else if (mounted && !_closed && index != null && index != _index) {
         await _play(index);
       }
     } finally {
@@ -1899,6 +1953,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         _playerFocus.requestFocus();
       }
     }
+    if (browseSeasons && mounted && !_closed) await _browseSeasons();
   }
 
   Future<void> _seekTo(Duration target, {bool resumeAfterSeek = false}) async {
@@ -1982,18 +2037,23 @@ class _PlayerScreenState extends State<PlayerScreen>
     try {
       index = await showDialog<int>(
         context: context,
-        builder: (_) => Theme(
+        builder: (dialogContext) => Theme(
           data: televisionTheme(AppTheme.dark),
           child: TelevisionEpisodeDialog(
             episodes: _detail.episodes,
             currentIndex: _index,
+            onAllSeasons: _canBrowseSeasons
+                ? () => Navigator.pop(dialogContext, -1)
+                : null,
           ),
         ),
       );
     } finally {
       if (mounted && !_closed) setState(() => _panelOpen = false);
     }
-    if (index != null && mounted && !_closed && index != _index) {
+    if (index == -1 && mounted && !_closed) {
+      await _browseSeasons();
+    } else if (index != null && mounted && !_closed && index != _index) {
       await _play(index);
     }
   }
@@ -2016,7 +2076,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                   : null,
               quality: _requestedQuality,
               qualities: _plan?.qualities ?? [],
-              favorite: widget.store.isFavorite(_detail.drama.id),
+              favorite: widget.store.followedSeries(_detail.drama) != null,
               onFavorite: _toggleFavorite,
               autoAdvance: _autoAdvance,
               danmaku: _danmakuEnabled,
@@ -2730,6 +2790,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       _panelOpen = true;
       _mobileTab = tab;
     });
+    var browseSeasons = false;
     try {
       await showModalBottomSheet<void>(
         context: context,
@@ -2750,6 +2811,10 @@ class _PlayerScreenState extends State<PlayerScreen>
                   onTabChanged: (value) =>
                       refreshSheet(() => _mobileTab = value),
                   onClose: () => Navigator.pop(sheetContext),
+                  onAllSeasons: () {
+                    browseSeasons = true;
+                    Navigator.pop(sheetContext);
+                  },
                   onEpisodeSelected: (index) {
                     Navigator.pop(sheetContext);
                     if (index != _index) unawaited(_play(index));
@@ -2766,6 +2831,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         _playerFocus.requestFocus();
       }
     }
+    if (browseSeasons && mounted && !_closed) await _browseSeasons();
   }
 
   Widget _mobilePlaybackPanel({
@@ -2773,6 +2839,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     ValueChanged<int>? onTabChanged,
     VoidCallback? onClose,
     ValueChanged<int>? onEpisodeSelected,
+    VoidCallback? onAllSeasons,
   }) {
     final context = panelContext ?? this.context;
     final colors = Theme.of(context).colorScheme;
@@ -2804,6 +2871,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                       ? _episodePanel(
                           compact: true,
                           onSelected: onEpisodeSelected,
+                          onAllSeasons: onAllSeasons,
                           panelContext: context,
                         )
                       : _mobileTab == 1
@@ -2963,63 +3031,17 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Widget _mobileFollowControl(Drama drama, {BuildContext? panelContext}) {
     final context = panelContext ?? this.context;
-    final state = widget.store.following(drama.id);
-    return PopupMenuButton<String>(
+    final followed = widget.store.followedSeries(drama) != null;
+    return OutlinedButton.icon(
       key: const ValueKey('player-follow-status'),
-      tooltip: '追剧与观看状态',
-      onSelected: (value) async {
-        if (_profileEpoch != widget.store.profileEpoch) return;
-        if (value == 'remove') {
-          await saveUserChange(
-            context,
-            () => widget.store.toggleFavorite(drama),
-          );
-        } else {
-          final status = FollowStatus.values.firstWhere(
-            (status) => status.name == value,
-          );
-          await saveUserChange(
-            context,
-            () => widget.store.setFollowStatus(drama, status),
-          );
-        }
-        if (mounted && !_closed) setState(() {});
-      },
-      itemBuilder: (_) => [
-        for (final status in FollowStatus.values)
-          CheckedPopupMenuItem(
-            value: status.name,
-            checked: state?.status == status,
-            child: Text(status.label),
-          ),
-        if (state != null)
-          const PopupMenuItem(value: 'remove', child: Text('取消追剧')),
-      ],
-      child: Container(
-        constraints: const BoxConstraints(minHeight: 36),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-        decoration: BoxDecoration(
-          color: state == null
-              ? Theme.of(context).colorScheme.surfaceContainerHighest
-              : Theme.of(context).colorScheme.secondaryContainer,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              state == null
-                  ? Icons.bookmark_add_outlined
-                  : Icons.bookmark_rounded,
-              size: 18,
-            ),
-            const SizedBox(width: 6),
-            Text(state?.label ?? '加入追剧'),
-            const SizedBox(width: 2),
-            const Icon(Icons.expand_more_rounded, size: 16),
-          ],
-        ),
+      onPressed: () => saveUserChange(
+        context,
+        () => widget.store.toggleSeriesFavorite(drama),
       ),
+      icon: Icon(
+        followed ? Icons.bookmark_rounded : Icons.bookmark_add_outlined,
+      ),
+      label: Text(followed ? '取消追剧' : '加入追剧'),
     );
   }
 
@@ -3049,15 +3071,33 @@ class _PlayerScreenState extends State<PlayerScreen>
     bool compact = false,
     ValueChanged<int>? onSelected,
     BuildContext? panelContext,
+    VoidCallback? onAllSeasons,
   }) => ColoredBox(
     color: Theme.of(panelContext ?? context).colorScheme.surface,
-    child: PlayerEpisodeGrid(
-      key: ValueKey(_detail.drama.id),
-      episodes: _detail.episodes,
-      currentIndex: _index,
-      compact: compact,
-      title: compact ? '剧集' : '选集',
-      onSelected: onSelected ?? (index) => _play(index),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_canBrowseSeasons)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: OutlinedButton.icon(
+              key: const ValueKey('player-all-seasons'),
+              onPressed: onAllSeasons ?? _browseSeasons,
+              icon: const Icon(Icons.video_library_outlined),
+              label: const Text('查看全季'),
+            ),
+          ),
+        Expanded(
+          child: PlayerEpisodeGrid(
+            key: ValueKey(_detail.drama.id),
+            episodes: _detail.episodes,
+            currentIndex: _index,
+            compact: compact,
+            title: compact ? '剧集' : '选集',
+            onSelected: onSelected ?? (index) => _play(index),
+          ),
+        ),
+      ],
     ),
   );
 }

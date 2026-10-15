@@ -59,6 +59,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _error;
   int _generation = 0;
   int _tab = 0;
+  int _followVisit = 0;
   String _submittedQuery = '';
   final _categorySelections = <String, String>{};
   late final CatalogBrowser _browser;
@@ -693,6 +694,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _openDrama(Drama drama, {bool resume = false, bool download = false}) {
+    if (resume) drama = widget.store.seriesWatch(drama)?.drama ?? drama;
     _pauseCatalog();
     if (download) {
       Navigator.of(context).push(
@@ -713,15 +715,27 @@ class _HomeScreenState extends State<HomeScreen> {
         drama: drama,
         repository: widget.repository,
         store: widget.store,
-      ),
+      ).whenComplete(() {
+        if (mounted && _tab == 1) setState(() => _followVisit++);
+      }),
     );
   }
 
-  void _changeTab(int tab) => setState(() {
-    _tab = tab;
-    _selectionMode = false;
-    _selectedDramas.clear();
-  });
+  void _changeTab(int tab) {
+    if (_tab == 0 && tab != 0) _pauseCatalog();
+    setState(() {
+      _tab = tab;
+      if (tab == 1) _followVisit++;
+      _selectionMode = false;
+      _selectedDramas.clear();
+    });
+    if (tab == 0 &&
+        !_showRecommendations &&
+        _items.isEmpty &&
+        widget.store.sources.isNotEmpty) {
+      unawaited(_load(useCache: true));
+    }
+  }
 
   /// 连点「最近观看」6 次弹出站源密码锁（用于启用 / 关闭密码功能）。
   /// 仅多源包（真果鉴）生效；红果鉴单源包无密码功能。
@@ -801,7 +815,7 @@ class _HomeScreenState extends State<HomeScreen> {
     FocusNode? focusNode,
     VoidCallback? onFocus,
   }) {
-    final following = widget.store.following(drama.id);
+    final following = widget.store.followedSeries(drama);
     final canSelect =
         widget.store.canDownload && widget.repository.supportsDownloads;
     return DramaTile(
@@ -818,9 +832,7 @@ class _HomeScreenState extends State<HomeScreen> {
         onPressed: () => _dramaActions(drama),
       ),
       selected: _selectionMode ? _selectedDramas.containsKey(drama.id) : null,
-      badge: following == null
-          ? null
-          : '${following.status.label}${following.hasUpdates ? ' · ${following.updateLabel}' : ''}',
+      badge: following == null ? null : '已追剧',
     );
   }
 
@@ -1190,6 +1202,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           repository: widget.repository,
                           store: widget.store,
                           history: _tab == 2,
+                          refreshToken: _followVisit,
                           onOpen: _openDrama,
                           onContinue: (drama) =>
                               _openDrama(drama, resume: true),

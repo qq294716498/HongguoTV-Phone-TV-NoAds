@@ -75,9 +75,7 @@ void main() {
       }
       expect(repository.detailCalls, 1);
       expect(find.byKey(const ValueKey('episode-2')), findsOneWidget);
-      await tester.tap(find.byTooltip('追剧与观看状态'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(CheckedPopupMenuItem<String>, '想看'));
+      await tester.tap(find.byKey(const ValueKey('follow-status')));
       await tester.pumpAndSettle();
       expect(local.isFavorite(FixtureRepository.free.id), isTrue);
       for (final episode in [1, 2]) {
