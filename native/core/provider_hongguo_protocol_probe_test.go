@@ -1,10 +1,12 @@
 package core
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -30,6 +32,20 @@ func (transport hongguoProtocolProbeTransport) RoundTrip(request *http.Request) 
 	}
 	if !strings.HasPrefix(request.URL.Path, "/novel/player/") && !strings.HasPrefix(request.URL.Path, "/reading/bookapi/video_tab/") {
 		return nil, errors.New("protocol probe only permits text playback APIs")
+	}
+	if mode, _ := request.Context().Value(hongguoProtocolProbeKey{}).(string); mode == "legacy" {
+		request = request.Clone(request.Context())
+		var body []byte
+		if request.Body != nil {
+			var err error
+			body, err = io.ReadAll(request.Body)
+			request.Body.Close()
+			if err != nil {
+				return nil, err
+			}
+			request.Body = io.NopCloser(bytes.NewReader(body))
+		}
+		signHongguoRequest(request, body, time.Now())
 	}
 	if unsigned, _ := request.Context().Value(hongguoProtocolProbeKey{}).(bool); unsigned {
 		request = request.Clone(request.Context())
@@ -144,7 +160,11 @@ func TestLiveHongguoProtocolComparison(t *testing.T) {
 		for key, values := range variant.query {
 			query[key] = append([]string(nil), values...)
 		}
-		requestContext := context.WithValue(ctx, hongguoProtocolProbeKey{}, variant.noSign)
+		var signatureMode any = "legacy"
+		if variant.noSign {
+			signatureMode = true
+		}
+		requestContext := context.WithValue(ctx, hongguoProtocolProbeKey{}, signatureMode)
 		result, requestErr := d.hongguoAppRequest(requestContext, variant.method, variant.path, query, variant.payload)
 		media, mediaErr := probeHongguoProtocolMedia(result, videoID)
 		resolved := requestErr == nil && mediaErr == nil && media.URL != ""
@@ -163,7 +183,7 @@ func TestLiveHongguoProtocolComparison(t *testing.T) {
 	if limited {
 		t.Fatal("provider rate limit received; stopped the comparison")
 	}
-	result, requestErr := d.hongguoAppRequest(ctx, http.MethodPost, "/novel/player/video_model/v1/", profile, basic)
+	result, requestErr := d.hongguoAppRequest(context.WithValue(ctx, hongguoProtocolProbeKey{}, "legacy"), http.MethodPost, "/novel/player/video_model/v1/", profile, basic)
 	media, mediaErr := probeHongguoProtocolMedia(result, videoID)
 	resolved := requestErr == nil && mediaErr == nil && media.URL != ""
 	t.Logf("hypothesis=after-detail-initialization resolved=%t requestErrorType=%T mediaErrorType=%T", resolved, requestErr, mediaErr)
@@ -230,7 +250,11 @@ func TestLiveHongguoSignatureControl(t *testing.T) {
 		client.baseURL = host
 		client.mu.Unlock()
 		for _, unsigned := range []bool{false, true} {
-			requestContext := context.WithValue(ctx, hongguoProtocolProbeKey{}, unsigned)
+			var signatureMode any = "legacy"
+			if unsigned {
+				signatureMode = true
+			}
+			requestContext := context.WithValue(ctx, hongguoProtocolProbeKey{}, signatureMode)
 			media, resolveErr := d.resolveHongguoAppMedia(requestContext, "7695722622981508121", 1004)
 			resolved := resolveErr == nil && media.URL != ""
 			t.Logf("existing-profile host=%s generatedIds=true unsigned=%t resolved=%t variants=%d keyBytes=%d errorType=%T", host, unsigned, resolved, len(media.Variants), len(media.CENCKey), resolveErr)

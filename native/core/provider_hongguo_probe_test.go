@@ -148,3 +148,39 @@ func probeHongguoOfficialModel(ctx context.Context, d *Downloader, videoID strin
 	}
 	return selectHongguoAppMedia(model)
 }
+
+func TestLiveHongguoFixedPlayback(t *testing.T) {
+	if os.Getenv("CHECK_LIVE_HONGGUO_FIXED") != "true" {
+		t.Skip("set CHECK_LIVE_HONGGUO_FIXED=true to verify the normal production resolver")
+	}
+	engine, err := newNativeEngine(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(engine.downloads.close)
+	d := engine.downloader
+	d.cfg.Retries = 1
+	base := d.client.Transport
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	d.client.Transport = hongguoProbeTransport{base: base, test: t}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	_, chapters, err := d.fetchHongguoChapters(ctx, "7695704804978330649")
+	if err != nil || len(chapters) < 2 {
+		t.Fatalf("production detail precondition failed: %v", err)
+	}
+	for _, index := range []int{0, 1, len(chapters) - 1} {
+		chapter := chapters[index]
+		media, err := d.resolveHongguoMedia(ctx, Task{
+			DramaID: providerDramaID(sourceHongguo, "7695704804978330649"),
+			Chapter: chapter,
+		})
+		resolved := err == nil && media.URL != ""
+		t.Logf("production episode=%d contentType=%d resolved=%t variants=%d keyBytes=%d errorType=%T", index+1, chapter.ContentType, resolved, len(media.Variants), len(media.CENCKey), err)
+		if !resolved {
+			t.Fatalf("production episode %d did not resolve", index+1)
+		}
+	}
+}

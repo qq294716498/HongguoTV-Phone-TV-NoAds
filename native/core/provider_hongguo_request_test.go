@@ -52,6 +52,11 @@ func TestHongguoPlaybackUsesRequestedEpisodeContentType(t *testing.T) {
 				if request.URL.Path != "/novel/player/video_model/v1/" {
 					t.Fatalf("unexpected route: %s", request.URL.Path)
 				}
+				for _, header := range []string{"X-Gorgon", "X-Khronos", "X-SS-STUB", "X-SS-Req-Ticket"} {
+					if request.Header.Get(header) != "" {
+						t.Fatalf("playback model request retained incompatible header %s", header)
+					}
+				}
 				var payload struct {
 					VideoID     string `json:"video_id"`
 					ContentType int    `json:"content_type"`
@@ -92,5 +97,20 @@ func TestHongguoProtectedWebResponseIsNotReportedAsLoginRequired(t *testing.T) {
 	_, err := d.resolveHongguoWebMedia(context.Background(), "12345", "9001")
 	if err == nil || !strings.Contains(err.Error(), "受保护播放协议") || strings.Contains(err.Error(), "可能需要登录") {
 		t.Fatalf("protected playback was misclassified: %v", err)
+	}
+}
+
+func TestHongguoDetailRequestPreservesExistingSignature(t *testing.T) {
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		for _, header := range []string{"X-Gorgon", "X-Khronos", "X-SS-STUB", "X-SS-Req-Ticket"} {
+			if request.Header.Get(header) == "" {
+				t.Fatalf("non-playback request lost header %s", header)
+			}
+		}
+		return sourceFixtureResponse(request, http.StatusOK, `{"code":0,"data":{}}`), nil
+	})
+	_, err := d.hongguoAppRequest(context.Background(), http.MethodPost, "/novel/player/video_detail/v1/", nil, map[string]any{"series_id": "12345"})
+	if err != nil {
+		t.Fatal(err)
 	}
 }

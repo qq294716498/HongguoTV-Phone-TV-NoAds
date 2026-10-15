@@ -193,7 +193,7 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 			prepared.URL.RawQuery = query.Encode()
 			if comment {
 				signHongguoCommentRequest(prepared, commentNonce, now)
-			} else {
+			} else if path != "/novel/player/video_model/v1/" {
 				signHongguoRequest(prepared, body, now)
 			}
 		})
