@@ -12,12 +12,16 @@ import (
 	"time"
 )
 
-func (downloader *Downloader) resolveHongguoAppMedia(ctx context.Context, videoID string) (providerMedia, error) {
+func (downloader *Downloader) resolveHongguoAppMedia(ctx context.Context, videoID string, contentTypes ...int) (providerMedia, error) {
 	if !hongguoNumericID.MatchString(videoID) {
 		return providerMedia{}, errors.New("红果视频 ID 无效")
 	}
+	contentType := 1
+	if len(contentTypes) > 0 && (contentTypes[0] >= 1 && contentTypes[0] <= 7 || contentTypes[0] >= 1000 && contentTypes[0] <= 1011) {
+		contentType = contentTypes[0]
+	}
 	payload := map[string]any{
-		"video_id": videoID, "content_type": 1,
+		"video_id": videoID, "content_type": contentType,
 		"biz_param": map[string]any{"need_all_video_definition": true, "video_platform": 3},
 	}
 	result, err := downloader.hongguoAppRequest(ctx, http.MethodPost, "/novel/player/video_model/v1/", nil, payload)

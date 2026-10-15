@@ -1,0 +1,178 @@
+name: Build and verify HongguoTV 0.1.10
+
+on:
+  push:
+    branches: [fix/hongguo-playback-20261015]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hongguotv-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  GOPROXY: https://proxy.golang.org,direct
+  GOSUMDB: sum.golang.org
+
+jobs:
+  checks:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[build-release]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: python3 -m unittest discover -s scripts -p 'test_*.py'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: native/go.mod
+          cache-dependency-path: native/go.sum
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - name: Check committed Dart formatting
+        run: |
+          dart format lib test integration_test test_driver
+          git diff --exit-code -- lib test integration_test test_driver
+      - run: flutter analyze --no-pub --no-fatal-infos lib test integration_test test_driver
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: flutter test --no-pub --dart-define=DISABLE_REMOTE_IMAGES=true --concurrency=2
+      - run: flutter test --no-pub --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true --concurrency=2
+      - run: go test -race ./...
+        working-directory: native
+      - run: go test -race -ldflags="-X duanjuapp/native/core.buildAllSources=true" ./...
+        working-directory: native
+
+  android:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[build-release]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: native/go.mod
+          cache-dependency-path: native/go.sum
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platforms;android-36"
+          accept-android-sdk-licenses: true
+      - run: sdkmanager 'ndk;28.2.13676358'
+      - name: Configure Android signing
+        id: signing
+        run: |
+          python scripts/configure_signing.py
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      - run: python scripts/build_android.py --all-sources
+      - name: Verify release identity, certificate, ABI and APK integrity
+        run: python scripts/verify_release_apks.py
+      - name: Remove signing files
+        if: always()
+        run: python scripts/configure_signing.py --clean
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hongguotv-android
+          path: dist/android/*
+          if-no-files-found: error
+          retention-days: 14
+  release:
+    needs: [checks, android]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      EXPECTED_UPDATE_TAG: app-v0.1.10-34
+      CHECK_LIVE_UPDATE: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: hongguotv-android
+          path: dist/android
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - name: Synchronize and archive exact checked source
+        run: |
+          python3 scripts/finish_task.py --message "Build 0.1.10 playback fix and verify update downloads"
+          python3 scripts/sync_source.py --check
+          cp ../真果·鉴-*.zip dist/android/HongguoTV-0.1.10-source.zip
+          cd dist/android
+          sha256sum *.apk *-source.zip APK-validation.json > SHA256SUMS.txt
+      - name: Stage immutable release assets
+        run: |
+          set -euo pipefail
+          if gh release view "$EXPECTED_UPDATE_TAG" >/dev/null 2>&1; then
+            echo "Release already exists; never replace published APKs." >&2
+            exit 1
+          fi
+          cat > notes.md <<'NOTES'
+          修复红果播放接口因不兼容的旧签名头返回空正文，以及漫剧 content_type 传递错误。取址使用 App 接口，未切换网页播放。
+          
+          - Android 手机 / TV 通用，沿用 0.1.9 正式签名。
+          - arm64-v8a：大多数手机；armeabi-v7a：32 位设备；x86_64：对应模拟器。
+          - 三架构自动化回归、APK 签名/版本/完整性检查通过后，实际验证应用更新下载，再提升为最新正式版。
+          - 尚未完成真实手机 / TV 安装、解码和长时间播放验收。
+          - 校验清单：SHA256SUMS.txt；包校验：APK-validation.json。
+          NOTES
+          printf '\n源码提交：%s\n' "${{ github.sha }}" >> notes.md
+          gh release create "$EXPECTED_UPDATE_TAG" dist/android/* --target "${{ github.sha }}" --title "红果TV 0.1.10" --notes-file notes.md --prerelease --latest=false
+          gh api "repos/${{ github.repository }}/releases/tags/$EXPECTED_UPDATE_TAG" > staged-release.json
+      - name: Verify actual updater download and SHA-256 for all three ABIs
+        env:
+          UPDATE_METADATA_FILE: staged-release.json
+          CHECK_STAGED_UPDATE: 'true'
+          CHECK_UPDATE_DOWNLOAD: 'true'
+        run: flutter test --no-pub test/app_update_live_test.dart --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true --reporter=expanded
+      - name: Promote verified release to latest stable
+        run: gh release edit "$EXPECTED_UPDATE_TAG" --prerelease=false --latest
+      - name: Verify public latest API used by installed applications
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5 6; do
+            if flutter test --no-pub test/app_update_live_test.dart --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true --reporter=expanded; then
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
+      - name: Attach update validation reports
+        run: gh release upload "$EXPECTED_UPDATE_TAG" dist/update-check/*-update-check.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hongguotv-update-verification
+          path: |
+            dist/update-check/*-update-check.json
+            dist/android/*-source.zip
+          if-no-files-found: warn
