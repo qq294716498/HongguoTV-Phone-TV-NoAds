@@ -1,10 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'app_layout.dart';
 import 'catalog_sort.dart';
 import 'core_bridge.dart';
 import 'drama_actions.dart';
-import 'follow_state.dart';
+import 'follow_updates.dart';
+import 'hongguo_series.dart';
 import 'local_store.dart';
 import 'models.dart';
 import 'remote_widgets.dart';
@@ -19,6 +22,7 @@ class SavedLibrary extends StatefulWidget {
     required this.onOpen,
     required this.onContinue,
     this.onDownload,
+    this.refreshToken = 0,
   });
 
   final AppRepository repository;
@@ -27,6 +31,7 @@ class SavedLibrary extends StatefulWidget {
   final ValueChanged<Drama> onOpen;
   final ValueChanged<Drama> onContinue;
   final ValueChanged<Drama>? onDownload;
+  final int refreshToken;
 
   @override
   State<SavedLibrary> createState() => _SavedLibraryState();
@@ -34,10 +39,41 @@ class SavedLibrary extends StatefulWidget {
 
 class _SavedLibraryState extends State<SavedLibrary> {
   final _search = TextEditingController();
-  String _filter = '';
+  final _filter = '';
+  late FollowUpdates _updates;
+
+  @override
+  void initState() {
+    super.initState();
+    _updates = FollowUpdates(widget.repository, widget.store);
+    if (!widget.history) unawaited(_updates.refresh());
+  }
+
+  @override
+  void didUpdateWidget(SavedLibrary oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.repository != widget.repository || oldWidget.store != widget.store) {
+      _updates.dispose();
+      _updates = FollowUpdates(widget.repository, widget.store);
+    }
+    if (!widget.history && (oldWidget.history ||
+        oldWidget.refreshToken != widget.refreshToken)) {
+      unawaited(_updates.refresh());
+    }
+  }
+
+  void _open(Drama drama, {bool resume = false}) {
+    _updates.cancel();
+    if (resume) {
+      widget.onContinue(drama);
+    } else {
+      widget.onOpen(drama);
+    }
+  }
 
   @override
   void dispose() {
+    _updates.dispose();
     _search.dispose();
     super.dispose();
   }
@@ -48,7 +84,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('清空观看记录？'),
-        content: const Text('这会删除当前用户的观看进度，追剧状态和手动已看标记会保留。'),
+        content: const Text('这会删除当前用户的观看进度，已加入追剧的内容会保留。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -71,25 +107,29 @@ class _SavedLibraryState extends State<SavedLibrary> {
     drama: drama,
     store: widget.store,
     history: widget.history,
-    onContinue: () => widget.onContinue(drama),
+    onContinue: () => _open(widget.store.seriesWatch(drama)?.drama ?? drama, resume: true),
     onDownload: widget.onDownload == null
         ? null
         : () => widget.onDownload!(drama),
   );
 
   Widget _tile(Drama drama, {FocusNode? focusNode, VoidCallback? onFocus}) {
-    final watched = widget.store.watched(drama.id);
-    final state = widget.store.following(drama.id);
-    final badge = state == null
-        ? null
-        : '${state.label}${state.hasUpdates ? ' · ${state.updateLabel}' : ''}';
+    final watched = widget.history
+        ? widget.store.watched(drama.id)
+        : widget.store.seriesWatch(drama);
+    final target = watched?.drama ?? drama;
+    final followed = widget.store.followedSeries(drama) != null;
+    final badge = !widget.history && widget.store.hasNextSeason(drama)
+        ? '已有下季'
+        : followed ? '已追剧' : null;
+    final season = watched == null ? null : hongguoSeriesInfo(watched.drama);
     return DramaTile(
       key: ValueKey('saved-${drama.id}'),
-      drama: drama,
+      drama: target,
       repository: widget.repository,
       focusNode: focusNode,
       onFocus: onFocus,
-      onTap: () => widget.onOpen(drama),
+      onTap: () => _open(target, resume: !widget.history),
       onMore: () => _actions(drama),
       actions: DramaActionButton(
         drama: drama,
@@ -98,37 +138,30 @@ class _SavedLibraryState extends State<SavedLibrary> {
       badge: badge,
       subtitle: watched == null
           ? SourceSite.byId(drama.source).name
-          : '第 ${watched.episode} 集 · ${formatPosition(watched.position)}',
+          : '${season == null ? '' : '第 ${season.season} ${season.unit} · '}第 ${watched.episode} 集 · ${formatPosition(watched.position)}',
     );
   }
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
-    animation: widget.store,
+    animation: Listenable.merge([widget.store, _updates]),
     builder: (context, _) {
       final history = widget.store.history;
       final all = widget.history
           ? history.map((entry) => entry.drama).toList()
-          : widget.store.favorites;
+          : widget.store.trackedSeries;
       final items = all.where((drama) {
         if (!matchesDramaQuery(drama, _search.text)) return false;
-        final state = widget.store.following(drama.id);
-        return widget.history ||
-            _filter.isEmpty ||
-            (_filter == 'updates'
-                ? state?.hasUpdates == true
-                : state?.status.name == _filter);
+        return true;
       }).toList();
-      final ids = items.map((drama) => drama.id).toSet();
-      final resume = history
-          .where(
-            (entry) =>
-                ids.contains(entry.drama.id) &&
-                (!entry.finished ||
-                    entry.drama.episodes <= 0 ||
-                    entry.episode < entry.drama.episodes),
-          )
-          .firstOrNull;
+      final resume = widget.history
+          ? history.where((entry) => items.any((drama) => drama.id == entry.drama.id) &&
+              (!entry.finished || entry.drama.episodes <= 0 ||
+                  entry.episode < entry.drama.episodes)).firstOrNull
+          : items.map(widget.store.seriesWatch).whereType<WatchEntry>()
+              .where((entry) => !entry.finished ||
+                  entry.drama.episodes <= 0 || entry.episode < entry.drama.episodes)
+              .firstOrNull;
       final header = [
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 12, 12, 8),
@@ -171,27 +204,27 @@ class _SavedLibraryState extends State<SavedLibrary> {
             ),
           ),
         ),
-        if (!widget.history)
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
+        if (!widget.history && all.isNotEmpty)
+          Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: Row(
               children: [
-                for (final filter in [
-                  ('', '全部'),
-                  for (final status in FollowStatus.values)
-                    (status.name, status.label),
-                  ('updates', '有更新'),
-                ])
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ChoiceChip(
-                      key: ValueKey('follow-filter-${filter.$1}'),
-                      label: Text(filter.$2),
-                      selected: _filter == filter.$1,
-                      onSelected: (_) => setState(() => _filter = filter.$1),
-                    ),
+                Expanded(
+                  child: Text(
+                    _updates.checking
+                        ? '正在检查下季 · ${_updates.checked}/${_updates.total}'
+                        : _updates.failed > 0
+                        ? '部分追剧暂未完成检查，可重试'
+                        : '进入追剧时检查下季，点卡片继续最近观看',
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
+                ),
+                IconButton(
+                  key: const ValueKey('follow-check-updates'),
+                  tooltip: '检查下季',
+                  onPressed: _updates.checking ? null : _updates.refresh,
+                  icon: const Icon(Icons.refresh_rounded),
+                ),
               ],
             ),
           ),
@@ -211,7 +244,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
                 subtitle: Text(
                   '第 ${resume.episode} 集 · ${formatPosition(resume.position)}',
                 ),
-                onTap: () => widget.onContinue(resume.drama),
+                onTap: () => _open(resume.drama, resume: true),
               ),
             ),
           ),

@@ -572,6 +572,80 @@ class LocalStore extends ChangeNotifier {
     return _setting(_key('downloadPreferences'), jsonEncode(value.toJson()));
   }
 
+  Set<String> _seriesIds(Drama drama) => {
+    drama.id,
+    ...hongguoSeriesEntries(drama, seriesDramasFor(drama))
+        .map((entry) => entry.drama.id),
+  };
+
+  Drama? followedSeries(Drama drama) {
+    if (!allowsSource(drama.source)) return null;
+    final exact = _favorites[drama.id];
+    if (exact != null) return exact;
+    final ids = _seriesIds(drama);
+    return favorites.where((entry) => ids.contains(entry.id)).firstOrNull;
+  }
+
+  WatchEntry? seriesWatch(Drama drama) {
+    final ids = _seriesIds(drama);
+    return history.where((entry) => ids.contains(entry.drama.id)).firstOrNull;
+  }
+
+  bool hasNextSeason(Drama drama) {
+    final current = seriesWatch(drama)?.drama ?? drama;
+    final entries = hongguoSeriesEntries(current, seriesDramasFor(current));
+    final season = entries.where((entry) => entry.drama.id == current.id)
+        .firstOrNull?.season;
+    return season != null && entries.any((entry) => entry.season > season);
+  }
+
+  List<Drama> get trackedSeries {
+    final seen = <String>{};
+    final result = <Drama>[];
+    for (final drama in favorites) {
+      if (seen.contains(drama.id)) continue;
+      result.add(drama);
+      seen.addAll(_seriesIds(drama));
+    }
+    result.sort((a, b) {
+      final first = seriesWatch(a)?.updatedAt;
+      final second = seriesWatch(b)?.updatedAt;
+      if (first == null) return second == null ? 0 : 1;
+      if (second == null) return -1;
+      return second.compareTo(first);
+    });
+    return result;
+  }
+
+  Future<void> toggleSeriesFavorite(Drama drama) {
+    final epoch = _epoch;
+    return _queue(() async {
+      if (!allowsSource(drama.source) || epoch != _epoch) return;
+      final entries = Map.of(_favorites);
+      final states = Map.of(_followStates);
+      final ids = _seriesIds(drama);
+      final existing = entries.keys.where(ids.contains).toList();
+      if (existing.isEmpty) {
+        if (entries.length >= 20000) throw StateError('追剧数量已达上限，请先整理追剧');
+        entries[drama.id] = drama;
+        states[drama.id] = FollowState.initial(drama, _history[drama.id]);
+      } else {
+        for (final id in existing) {
+          entries.remove(id);
+          states.remove(id);
+        }
+      }
+      await _commit({
+        _key('favorites'): jsonEncode(
+          entries.values.map((entry) => entry.toJson()).toList(),
+        ),
+        _key('followStates'): _encodeFollowStates(states),
+      });
+      _loadLibrary();
+      _notify();
+    });
+  }
+
   Future<void> toggleFavorite(Drama drama) {
     final epoch = _epoch;
     return _queue(() async {

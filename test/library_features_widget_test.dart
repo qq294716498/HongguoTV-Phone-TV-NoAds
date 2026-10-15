@@ -99,54 +99,32 @@ void main() {
     },
   );
 
-  testWidgets(
-    'follow filters show unread updates until explicitly marked read',
-    (tester) async {
-      viewport(tester, const Size(390, 844));
-      final store = await create();
-      await store.setFollowStatus(first, FollowStatus.planned);
-      await store.setFollowStatus(second, FollowStatus.watching);
-      await store.refreshDrama(
-        const Drama(
-          id: 'hongguo:one',
-          source: 'hongguo',
-          title: '合成一号',
-          episodes: 5,
-        ),
-      );
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SavedLibrary(
-              repository: LibraryFeatureRepository(),
-              store: store,
-              history: false,
-              onOpen: (_) {},
-              onContinue: (_) {},
-            ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-      final filter = find.byKey(const ValueKey('follow-filter-updates'));
-      await tester.ensureVisible(filter);
-      await tester.tap(filter);
-      await tester.pumpAndSettle();
-      expect(find.byKey(ValueKey('saved-${first.id}')), findsOneWidget);
-      expect(find.byKey(ValueKey('saved-${second.id}')), findsNothing);
-      await tester.tap(find.byKey(ValueKey('drama-actions-${first.id}')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('标记 3 集更新已读'));
-      await tester.pumpAndSettle();
-      expect(store.following(first.id)!.newEpisodes, 0);
-      expect(find.text('没有匹配的记录'), findsOneWidget);
-      expect(store.history, isEmpty);
-      expect(tester.takeException(), isNull);
-      await tester.pumpWidget(const SizedBox.shrink());
-    },
-  );
+  testWidgets('follow page keeps legacy favorites without status controls', (tester) async {
+    viewport(tester, const Size(390, 844));
+    final store = await create();
+    await store.setFollowStatus(first, FollowStatus.planned);
+    await store.setFollowStatus(second, FollowStatus.watching);
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: SavedLibrary(
+      repository: LibraryFeatureRepository(), store: store, history: false,
+      onOpen: (_) {}, onContinue: (_) {},
+    ))));
+    await tester.pumpAndSettle();
+    expect(find.byKey(ValueKey('saved-${first.id}')), findsOneWidget);
+    expect(find.byKey(ValueKey('saved-${second.id}')), findsOneWidget);
+    expect(find.text('想看'), findsNothing);
+    expect(find.text('在看'), findsNothing);
+    await tester.tap(find.byKey(ValueKey('drama-actions-${first.id}')));
+    await tester.pumpAndSettle();
+    expect(find.text('标记已看'), findsNothing);
+    await tester.tap(find.text('取消追剧'));
+    await tester.pumpAndSettle();
+    expect(store.isFavorite(first.id), isFalse);
+    expect(store.isFavorite(second.id), isTrue);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
-  testWidgets('series season notices appear in follow filters and detail', (
+  testWidgets('series season availability appears on the follow card and detail', (
     tester,
   ) async {
     viewport(tester, const Size(390, 844));
@@ -189,10 +167,8 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('follow-filter-updates')));
-    await tester.pumpAndSettle();
     expect(find.byKey(ValueKey('saved-${seasonOne.id}')), findsOneWidget);
-    expect(find.textContaining('新季 1 部'), findsWidgets);
+    expect(find.text('已有下季'), findsOneWidget);
     await tester.pumpWidget(
       MaterialApp(
         home: DetailScreen(
@@ -203,7 +179,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('相关推荐'), findsOneWidget);
+    expect(find.text('同剧其他季'), findsOneWidget);
     expect(find.byKey(ValueKey('series-${seasonOne.id}')), findsOneWidget);
     expect(find.byKey(ValueKey('series-${seasonTwo.id}')), findsOneWidget);
     final seasonTwoChip = find.byKey(ValueKey('series-${seasonTwo.id}'));
@@ -254,7 +230,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('相关推荐'), findsOneWidget);
+    expect(find.text('同剧其他季'), findsOneWidget);
     expect(find.byKey(ValueKey('series-${seasonTwo.id}')), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
