@@ -50,13 +50,13 @@ extension LanSynchronization on LanController {
         !_foreground ||
         store.locked ||
         store.profileEpoch != _sessionEpoch) {
-      throw StateError('同步已取消，已经保存的记录会保留');
+      throw LanSyncCancelled(_syncCancellationReason);
     }
   }
 
   Future<void> beginManual() async {
     _manual = true;
-    await cancelSync();
+    await cancelSync(reason: '已切换到手动同步');
     _manual = true;
     _notify();
   }
@@ -67,9 +67,8 @@ extension LanSynchronization on LanController {
     flush();
   }
 
-  Future<void> cancelSync() async {
-    _syncTicket++;
-    if (_syncing) syncMessage = '正在取消，已经保存的记录会保留';
+  Future<void> cancelSync({String reason = '已主动取消本次同步'}) async {
+    _invalidateSync(reason);
     _notify();
     final requests = _syncRequests.toList();
     for (final request in requests) {
@@ -93,6 +92,7 @@ extension LanSynchronization on LanController {
     if (_syncing || _incomingSync != null) throw StateError('正在同步，请稍候');
     _syncing = true;
     final ticket = ++_syncTicket;
+    _syncPhase = 'planning';
     final run = _run;
     final epoch = store.profileEpoch;
     final completed = Completer<void>();
@@ -101,11 +101,13 @@ extension LanSynchronization on LanController {
     try {
       return await operation(ticket);
     } catch (failure) {
+      DiaryService.add('[LAN] sync-ended phase=$_syncPhase result=$failure');
       if (run == _run && epoch == store.profileEpoch)
         syncMessage = failure.toString();
       rethrow;
     } finally {
       _syncing = false;
+      _syncPhase = 'idle';
       _syncWork = null;
       completed.complete();
       _notify();
@@ -350,6 +352,7 @@ extension LanSynchronization on LanController {
         }
       }
       _checkSync(ticket, remote);
+      _syncPhase = 'local-save';
       syncMessage = remoteSaved ? '对方已保存，正在保存本机' : '正在保存本机记录';
       _notify();
       if (preview.localChanges.isNotEmpty) {

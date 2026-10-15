@@ -107,7 +107,11 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
     try {
       await action();
     } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+      if (mounted) {
+        setState(
+          () => _error = error is LanSyncCancelled ? null : error.toString(),
+        );
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -154,7 +158,11 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
     try {
       await link.cancelSync();
     } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+      if (mounted) {
+        setState(
+          () => _error = error is LanSyncCancelled ? null : error.toString(),
+        );
+      }
     } finally {
       if (mounted) setState(() => _cancelling = false);
     }
@@ -461,7 +469,11 @@ class _LanDevicesState extends State<_LanDevices> {
       if (widget.change) await link.rescan();
       _changed();
     } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+      if (mounted) {
+        setState(
+          () => _error = error is LanSyncCancelled ? null : error.toString(),
+        );
+      }
     }
   }
 
@@ -528,7 +540,11 @@ class _LanDevicesState extends State<_LanDevices> {
     try {
       await link.forget(peer);
     } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+      if (mounted) {
+        setState(
+          () => _error = error is LanSyncCancelled ? null : error.toString(),
+        );
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -708,7 +724,11 @@ class _LanManualState extends State<_LanManual> {
     try {
       await link.cancelSync();
     } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+      if (mounted) {
+        setState(
+          () => _error = error is LanSyncCancelled ? null : error.toString(),
+        );
+      }
     } finally {
       if (mounted) setState(() => _cancelling = false);
     }

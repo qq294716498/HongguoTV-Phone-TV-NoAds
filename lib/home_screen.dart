@@ -35,6 +35,7 @@ import 'batch_downloads.dart';
 import 'drama_actions.dart';
 import 'library_updater.dart';
 import 'saved_library.dart';
+import 'television_navigation.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, required this.repository, required this.store});
@@ -419,6 +420,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _televisionBack() {
+    if (TelevisionNavigation.dismissInput(context)) return;
     if (_selectionMode) {
       _cancelSelection();
     } else if (_tab != 0) {
@@ -426,8 +428,12 @@ class _HomeScreenState extends State<HomeScreen> {
     } else if (_search.text.isNotEmpty) {
       _search.clear();
       _searchChanged('');
+    } else if (AppLayout.isTelevision(context)) {
+      unawaited(_confirmExit());
     }
   }
+
+  Future<void> _confirmExit() => TelevisionNavigation.confirmExit(context);
 
   @override
   void initState() {
@@ -1037,6 +1043,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       );
                     } else if (value == 'display') {
                       _chooseDisplayMode();
+                    } else if (value == 'exit') {
+                      unawaited(_confirmExit());
                     } else if (value == 'about') {
                       showAboutDialog(
                         context: context,
@@ -1085,6 +1093,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Text('设置与备份'),
                     ),
                     const PopupMenuItem(value: 'display', child: Text('界面模式')),
+                    if (television)
+                      const PopupMenuItem(value: 'exit', child: Text('退出软件')),
                     const PopupMenuItem(
                       value: 'about',
                       child: Text('关于$appName'),
@@ -1226,21 +1236,27 @@ class _HomeScreenState extends State<HomeScreen> {
         );
         if (!television && !_selectionMode) return scaffold;
         return PopScope(
-          canPop:
-              !_selectionMode &&
-              (!television || _tab == 0 && _search.text.isEmpty),
+          canPop: !_selectionMode && !television,
           onPopInvokedWithResult: (didPop, result) {
             if (!didPop) _televisionBack();
           },
-          child: CallbackShortcuts(
-            bindings: {
-              const SingleActivator(LogicalKeyboardKey.escape): () =>
-                  Navigator.of(context).maybePop(),
-              const SingleActivator(LogicalKeyboardKey.goBack): () =>
-                  Navigator.of(context).maybePop(),
-            },
-            child: scaffold,
-          ),
+          child: television
+              ? scaffold
+              : CallbackShortcuts(
+                  bindings: {
+                    const SingleActivator(
+                      LogicalKeyboardKey.escape,
+                      includeRepeats: false,
+                    ): () =>
+                        Navigator.of(context).maybePop(),
+                    const SingleActivator(
+                      LogicalKeyboardKey.goBack,
+                      includeRepeats: false,
+                    ): () =>
+                        Navigator.of(context).maybePop(),
+                  },
+                  child: scaffold,
+                ),
         );
       },
     ),

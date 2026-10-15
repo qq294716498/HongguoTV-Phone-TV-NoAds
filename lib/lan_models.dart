@@ -3,6 +3,14 @@ import 'dart:async';
 import 'lan_sync_models.dart';
 import 'models.dart';
 
+class LanSyncCancelled implements Exception {
+  const LanSyncCancelled(this.reason);
+  final String reason;
+
+  @override
+  String toString() => '同步已取消：$reason；已保存的记录会保留';
+}
+
 class LanPeer {
   const LanPeer({
     required this.id,

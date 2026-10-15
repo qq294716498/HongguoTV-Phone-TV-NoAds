@@ -24,6 +24,7 @@ import 'danmaku_emoji_assets.dart';
 import 'diary_service.dart';
 import 'app_updates.dart';
 import 'watch_reminder_runtime.dart';
+import 'television_navigation.dart';
 
 Future<void> main(List<String> arguments) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -213,7 +214,7 @@ class _AppBootstrapState extends State<AppBootstrap>
   );
 }
 
-class DuanjuApp extends StatelessWidget {
+class DuanjuApp extends StatefulWidget {
   const DuanjuApp({
     super.key,
     required this.repository,
@@ -231,6 +232,21 @@ class DuanjuApp extends StatelessWidget {
   final bool television;
   final String version;
   final GlobalKey<NavigatorState>? navigatorKey;
+
+  @override
+  State<DuanjuApp> createState() => _DuanjuAppState();
+}
+
+class _DuanjuAppState extends State<DuanjuApp> {
+  final _navigatorKey = GlobalKey<NavigatorState>();
+  AppRepository get repository => widget.repository;
+  LocalStore? get store => widget.store;
+  String? get bootstrapError => widget.bootstrapError;
+  VoidCallback? get onRetry => widget.onRetry;
+  bool get television => widget.television;
+  String get version => widget.version;
+  GlobalKey<NavigatorState> get navigatorKey =>
+      widget.navigatorKey ?? _navigatorKey;
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
@@ -266,7 +282,7 @@ class DuanjuApp extends StatelessWidget {
               child: Theme(
                 data: tv ? televisionTheme(theme) : theme,
                 child: Shortcuts(
-                  shortcuts: const {
+                  shortcuts: {
                     SingleActivator(
                       LogicalKeyboardKey.select,
                       includeRepeats: false,
@@ -275,9 +291,15 @@ class DuanjuApp extends StatelessWidget {
                       LogicalKeyboardKey.gameButtonA,
                       includeRepeats: false,
                     ): ActivateIntent(),
-                    SingleActivator(LogicalKeyboardKey.goBack): DismissIntent(),
+                    if (!tv)
+                      const SingleActivator(LogicalKeyboardKey.goBack):
+                          const DismissIntent(),
                   },
-                  child: FocusTraversalGroup(child: child!),
+                  child: TelevisionNavigation(
+                    enabled: tv,
+                    navigatorKey: navigatorKey,
+                    child: FocusTraversalGroup(child: child!),
+                  ),
                 ),
               ),
             ),

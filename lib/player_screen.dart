@@ -2191,8 +2191,14 @@ class _PlayerScreenState extends State<PlayerScreen>
       },
       child: CallbackShortcuts(
         bindings: {
-          const SingleActivator(LogicalKeyboardKey.escape): _back,
-          const SingleActivator(LogicalKeyboardKey.goBack): _back,
+          const SingleActivator(
+            LogicalKeyboardKey.escape,
+            includeRepeats: false,
+          ): _back,
+          const SingleActivator(
+            LogicalKeyboardKey.goBack,
+            includeRepeats: false,
+          ): _back,
         },
         child: Focus(
           focusNode: _playerFocus,
