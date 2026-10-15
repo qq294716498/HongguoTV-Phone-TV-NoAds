@@ -2,6 +2,7 @@ package core
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -89,6 +90,15 @@ func probeHongguoGuestIDs(ctx context.Context, transport http.RoundTripper, jar 
 	if err != nil {
 		return "", "", errors.New("could not encode guest registration")
 	}
+	var compressed bytes.Buffer
+	writer := gzip.NewWriter(&compressed)
+	if _, err := writer.Write(body); err != nil {
+		return "", "", errors.New("could not compress guest registration")
+	}
+	if err := writer.Close(); err != nil {
+		return "", "", errors.New("could not finish guest registration compression")
+	}
+	body = compressed.Bytes()
 	client := &http.Client{
 		Transport: transport, Jar: jar, Timeout: 25 * time.Second,
 		CheckRedirect: func(request *http.Request, via []*http.Request) error {
@@ -115,6 +125,7 @@ func probeHongguoGuestIDs(ctx context.Context, transport http.RoundTripper, jar 
 			return "", "", errors.New("could not prepare guest registration")
 		}
 		request.Header.Set("Content-Type", "application/json; charset=utf-8")
+		request.Header.Set("Content-Encoding", "gzip")
 		request.Header.Set("Accept", "application/json")
 		request.Header.Set("User-Agent", strings.ReplaceAll(strings.ReplaceAll(hongguoAppUserAgent, "com.phoenix.read", "com.kylin.read"), "/73532 ", "/74032 "))
 		response, err := client.Do(request)
@@ -129,12 +140,12 @@ func probeHongguoGuestIDs(ctx context.Context, transport http.RoundTripper, jar 
 			continue
 		}
 		deviceID, installID, fields := parseHongguoRegistrationIDs(content)
-		t.Logf("registration host=%s encoding=json-fallback status=%d bytes=%d fields=%v validDeviceID=%t validInstallID=%t cookies=%d", address.Hostname(), response.StatusCode, len(content), fields, deviceID != "", installID != "", len(jar.Cookies(address)))
+		t.Logf("registration host=%s encoding=gzip-json-fallback status=%d bytes=%d fields=%v validDeviceID=%t validInstallID=%t cookies=%d", address.Hostname(), response.StatusCode, len(content), fields, deviceID != "", installID != "", len(jar.Cookies(address)))
 		if response.StatusCode == http.StatusOK && deviceID != "" && installID != "" {
 			return deviceID, installID, nil
 		}
 	}
-	return "", "", errors.New("APK-derived registration endpoints returned no valid ID pair via JSON fallback; encrypted registration and native risk reporting remain untested")
+	return "", "", errors.New("APK-derived registration endpoints returned no valid ID pair via gzip JSON fallback; encrypted registration and native risk reporting remain untested")
 }
 
 func parseHongguoRegistrationIDs(content []byte) (string, string, []string) {
