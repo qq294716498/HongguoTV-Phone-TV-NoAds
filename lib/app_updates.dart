@@ -480,7 +480,9 @@ class AppUpdates extends ChangeNotifier {
   }
 
   Future<bool> _candidateStillNewer(AppRelease candidate) async {
-    final current = await platform.installed().timeout(const Duration(seconds: 5));
+    final current = await platform.installed().timeout(
+      const Duration(seconds: 5),
+    );
     if (_disposed) return false;
     installedApp = current;
     if (candidate.abi != current.abi) {
@@ -527,7 +529,8 @@ class AppUpdates extends ChangeNotifier {
       await transport.download(candidate, _partial!, (bytes) {
         if (_cancelled || _disposed || stage != UpdateStage.downloading) return;
         downloaded = bytes;
-        if (bytes == candidate.bytes || progressClock.elapsedMilliseconds - notifiedAt >= 200) {
+        if (bytes == candidate.bytes ||
+            progressClock.elapsedMilliseconds - notifiedAt >= 200) {
           notifiedAt = progressClock.elapsedMilliseconds;
           _notify();
         }

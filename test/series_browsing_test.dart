@@ -330,51 +330,71 @@ void main() {
     },
   );
 
-  test('cached series results change after history and favorite edits', () async {
-    final store = await createStore();
-    await store.refreshDramas([firstSeason, secondSeason, thirdSeason]);
-    expect(store.followedSeries(secondSeason), isNull);
-    expect(store.seriesWatch(firstSeason), isNull);
-    await store.toggleSeriesFavorite(firstSeason);
-    expect(store.followedSeries(secondSeason)!.id, firstSeason.id);
-    await store.saveWatch(watch(secondSeason, 9, 1));
-    expect(store.seriesWatch(firstSeason)!.episode, 9);
-    await store.removeHistory(secondSeason.id);
-    expect(store.seriesWatch(firstSeason), isNull);
-    await store.toggleSeriesFavorite(secondSeason);
-    expect(store.trackedSeries, isEmpty);
-    expect(store.followedSeries(firstSeason), isNull);
-  });
+  test(
+    'cached series results change after history and favorite edits',
+    () async {
+      final store = await createStore();
+      await store.refreshDramas([firstSeason, secondSeason, thirdSeason]);
+      expect(store.followedSeries(secondSeason), isNull);
+      expect(store.seriesWatch(firstSeason), isNull);
+      await store.toggleSeriesFavorite(firstSeason);
+      expect(store.followedSeries(secondSeason)!.id, firstSeason.id);
+      await store.saveWatch(watch(secondSeason, 9, 1));
+      expect(store.seriesWatch(firstSeason)!.episode, 9);
+      await store.removeHistory(secondSeason.id);
+      expect(store.seriesWatch(firstSeason), isNull);
+      await store.toggleSeriesFavorite(secondSeason);
+      expect(store.trackedSeries, isEmpty);
+      expect(store.followedSeries(firstSeason), isNull);
+    },
+  );
 
-  test('series index keeps seasons and parts separate and ignores unrelated titles', () async {
-    final store = await createStore();
-    const part = Drama(id: 'hongguo:part', source: 'hongguo', title: '合成故事 第二部');
-    await store.refreshDramas([firstSeason, secondSeason, part, unrelatedSeason]);
-    await store.toggleSeriesFavorite(firstSeason);
-    expect(store.followedSeries(part), isNull);
-    expect(store.followedSeries(unrelatedSeason), isNull);
-    expect(store.followedSeries(secondSeason)!.id, firstSeason.id);
-  });
-
-  test('follow lookup batches library writes while checking every series', () async {
-    final store = await createStore();
-    for (var i = 0; i < 17; i++) {
-      await store.toggleSeriesFavorite(Drama(
-        id: 'hongguo:batch-$i',
+  test(
+    'series index keeps seasons and parts separate and ignores unrelated titles',
+    () async {
+      final store = await createStore();
+      const part = Drama(
+        id: 'hongguo:part',
         source: 'hongguo',
-        title: '批量合成故事$i 第一季',
-      ));
-    }
-    final repository = SeasonRepository();
-    final updates = FollowUpdates(repository, store);
-    addTearDown(updates.dispose);
-    var writes = 0;
-    store.addListener(() => writes++);
-    await updates.refresh();
-    expect(repository.catalogCalls, hasLength(17));
-    expect(updates.checked, 17);
-    expect(writes, lessThanOrEqualTo(3));
-  });
+        title: '合成故事 第二部',
+      );
+      await store.refreshDramas([
+        firstSeason,
+        secondSeason,
+        part,
+        unrelatedSeason,
+      ]);
+      await store.toggleSeriesFavorite(firstSeason);
+      expect(store.followedSeries(part), isNull);
+      expect(store.followedSeries(unrelatedSeason), isNull);
+      expect(store.followedSeries(secondSeason)!.id, firstSeason.id);
+    },
+  );
+
+  test(
+    'follow lookup batches library writes while checking every series',
+    () async {
+      final store = await createStore();
+      for (var i = 0; i < 17; i++) {
+        await store.toggleSeriesFavorite(
+          Drama(
+            id: 'hongguo:batch-$i',
+            source: 'hongguo',
+            title: '批量合成故事$i 第一季',
+          ),
+        );
+      }
+      final repository = SeasonRepository();
+      final updates = FollowUpdates(repository, store);
+      addTearDown(updates.dispose);
+      var writes = 0;
+      store.addListener(() => writes++);
+      await updates.refresh();
+      expect(repository.catalogCalls, hasLength(17));
+      expect(updates.checked, 17);
+      expect(writes, lessThanOrEqualTo(3));
+    },
+  );
 
   Future<void> openBrowser(
     WidgetTester tester,

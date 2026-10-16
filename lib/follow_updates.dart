@@ -40,6 +40,7 @@ class FollowUpdates extends ChangeNotifier {
       pending.clear();
       await store.refreshDramas(results);
     }
+
     Future<void> worker() async {
       while (current() && cursor < dramas.length) {
         final drama = dramas[cursor++];

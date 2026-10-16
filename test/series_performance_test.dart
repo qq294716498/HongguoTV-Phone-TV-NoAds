@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:duanju_app/local_store.dart';
 import 'package:duanju_app/models.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -50,6 +51,6 @@ void main() {
       }
     }
     timer.stop();
-    print('SERIES_BENCHMARK_MS=${timer.elapsedMicroseconds / 1000}');
+    debugPrint('SERIES_BENCHMARK_MS=${timer.elapsedMicroseconds / 1000}');
   });
 }

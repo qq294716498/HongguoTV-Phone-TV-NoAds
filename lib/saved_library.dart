@@ -244,27 +244,27 @@ class _SavedLibraryState extends State<SavedLibrary> {
           ListenableBuilder(
             listenable: _updates,
             builder: (context, _) => Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    _updates.checking
-                        ? '正在检查下季 · ${_updates.checked}/${_updates.total}'
-                        : _updates.failed > 0
-                        ? '部分追剧暂未完成检查，可重试'
-                        : '进入追剧时检查下季，点卡片继续最近观看',
-                    style: Theme.of(context).textTheme.bodySmall,
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _updates.checking
+                          ? '正在检查下季 · ${_updates.checked}/${_updates.total}'
+                          : _updates.failed > 0
+                          ? '部分追剧暂未完成检查，可重试'
+                          : '进入追剧时检查下季，点卡片继续最近观看',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                   ),
-                ),
-                IconButton(
-                  key: const ValueKey('follow-check-updates'),
-                  tooltip: '检查下季',
-                  onPressed: _updates.checking ? null : _updates.refresh,
-                  icon: const Icon(Icons.refresh_rounded),
-                ),
-              ],
-            ),
+                  IconButton(
+                    key: const ValueKey('follow-check-updates'),
+                    tooltip: '检查下季',
+                    onPressed: _updates.checking ? null : _updates.refresh,
+                    icon: const Icon(Icons.refresh_rounded),
+                  ),
+                ],
+              ),
             ),
           ),
         if (resume != null)

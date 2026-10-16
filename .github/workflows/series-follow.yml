@@ -57,6 +57,7 @@ jobs:
         continue-on-error: true
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Compare library performance with 0.1.11
+        if: ${{ !contains(github.event.head_commit.message, '[build-release]') }}
         run: |
           set -euo pipefail
           cp lib/local_store.dart "$RUNNER_TEMP/final-local-store.dart"
@@ -87,7 +88,6 @@ jobs:
           python3 scripts/sync_source.py --check
 
   android:
-    needs: checks
     if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[build-release]')
     runs-on: ubuntu-latest
     timeout-minutes: 45

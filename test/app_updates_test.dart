@@ -318,7 +318,11 @@ void main() {
     );
     test('download rechecks installed code and drops a stale update', () async {
       await updater.check();
-      platform.app = const InstalledApp(version: '0.1.6', code: 2028, abi: 'arm64-v8a');
+      platform.app = const InstalledApp(
+        version: '0.1.6',
+        code: 2028,
+        abi: 'arm64-v8a',
+      );
       await updater.download();
       expect(transport.downloads, 0);
       expect(updater.release, isNull);
@@ -329,7 +333,11 @@ void main() {
     test('install rechecks installed code after an external upgrade', () async {
       await updater.check();
       await updater.download();
-      platform.app = const InstalledApp(version: '0.1.6', code: 2028, abi: 'arm64-v8a');
+      platform.app = const InstalledApp(
+        version: '0.1.6',
+        code: 2028,
+        abi: 'arm64-v8a',
+      );
       await updater.install();
       expect(platform.installs, 0);
       expect(platform.validations, 1);
@@ -346,16 +354,19 @@ void main() {
       expect(transport.downloads, 0);
     });
 
-    test('download chunk bursts do not rebuild the page for every chunk', () async {
-      await updater.check();
-      transport.progressBurst = 4000;
-      var notifications = 0;
-      updater.addListener(() => notifications++);
-      await updater.download();
-      expect(updater.stage, UpdateStage.ready);
-      expect(updater.downloaded, 4);
-      expect(notifications, lessThan(20));
-    });
+    test(
+      'download chunk bursts do not rebuild the page for every chunk',
+      () async {
+        await updater.check();
+        transport.progressBurst = 4000;
+        var notifications = 0;
+        updater.addListener(() => notifications++);
+        await updater.download();
+        expect(updater.stage, UpdateStage.ready);
+        expect(updater.downloaded, 4);
+        expect(notifications, lessThan(20));
+      },
+    );
 
     test(
       'wrong hash/signature/ABI/version rejection deletes downloaded package',

@@ -38,7 +38,8 @@ class LocalStore extends ChangeNotifier {
   final Map<String, FollowState> _followStates = {};
   final Map<String, Drama> _seriesCandidates = {};
   final _seriesIndex = <String, List<Drama>>{};
-  final _seriesEntriesCache = <(String, String, String), List<HongguoSeriesEntry>>{};
+  final _seriesEntriesCache =
+      <(String, String, String), List<HongguoSeriesEntry>>{};
   final _seriesWatchCache = <(String, String, String), WatchEntry?>{};
   final _seriesFollowCache = <(String, String, String), Drama?>{};
   List<Drama>? _trackedSeriesCache;
@@ -377,19 +378,26 @@ class LocalStore extends ChangeNotifier {
   }
 
   List<Drama> seriesDramasFor(Drama anchor) {
-    if (anchor.source != SourceSite.hongguo.id || !allowsSource(anchor.source)) {
+    if (anchor.source != SourceSite.hongguo.id ||
+        !allowsSource(anchor.source)) {
       return const [];
     }
     _ensureSeriesIndex();
     final candidates = _seriesIndex[_seriesKey(anchor)] ?? const <Drama>[];
-    final current = candidates.where((drama) => drama.id == anchor.id).firstOrNull;
-    return [current ?? anchor, ...candidates.where((drama) => drama.id != anchor.id)];
+    final current = candidates
+        .where((drama) => drama.id == anchor.id)
+        .firstOrNull;
+    return [
+      current ?? anchor,
+      ...candidates.where((drama) => drama.id != anchor.id),
+    ];
   }
 
   List<HongguoSeriesEntry> _seriesEntries(Drama drama) {
     if (!allowsSource(drama.source)) return const [];
     final key = _anchorKey(drama);
-    if (_seriesEntriesCache.length >= 2048 && !_seriesEntriesCache.containsKey(key)) {
+    if (_seriesEntriesCache.length >= 2048 &&
+        !_seriesEntriesCache.containsKey(key)) {
       _seriesEntriesCache.clear();
     }
     return _seriesEntriesCache.putIfAbsent(
@@ -631,7 +639,9 @@ class LocalStore extends ChangeNotifier {
     for (final id in ids) {
       final favorite = _favorites[id];
       final candidateRank = _favoriteRanks[id] ?? -1;
-      if (favorite != null && candidateRank > rank && allowsSource(favorite.source)) {
+      if (favorite != null &&
+          candidateRank > rank &&
+          allowsSource(favorite.source)) {
         result = favorite;
         rank = candidateRank;
       }
@@ -648,7 +658,8 @@ class LocalStore extends ChangeNotifier {
     WatchEntry? latest;
     for (final id in _seriesIds(drama)) {
       final entry = _history[id];
-      if (entry != null && allowsSource(entry.drama.source) &&
+      if (entry != null &&
+          allowsSource(entry.drama.source) &&
           (latest == null || entry.updatedAt.isAfter(latest.updatedAt))) {
         latest = entry;
       }
@@ -676,7 +687,9 @@ class LocalStore extends ChangeNotifier {
       result.add(drama);
       seen.addAll(_seriesIds(drama));
     }
-    final watched = {for (final drama in result) drama.id: seriesWatch(drama)?.updatedAt};
+    final watched = {
+      for (final drama in result) drama.id: seriesWatch(drama)?.updatedAt,
+    };
     result.sort((a, b) {
       final first = watched[a.id];
       final second = watched[b.id];
