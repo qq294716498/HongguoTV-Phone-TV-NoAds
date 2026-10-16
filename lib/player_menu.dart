@@ -1,7 +1,9 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
+import 'app_layout.dart';
 import 'models.dart';
 import 'episode_browser.dart';
 import 'playback_preferences.dart';
@@ -430,5 +432,8 @@ class PlayerEpisodeGrid extends StatelessWidget {
     compact: compact,
     title: title,
     preserveScrollOnResize: preserveScrollOnResize,
+    denseDesktop:
+        defaultTargetPlatform == TargetPlatform.windows &&
+        !AppLayout.isTelevision(context),
   );
 }

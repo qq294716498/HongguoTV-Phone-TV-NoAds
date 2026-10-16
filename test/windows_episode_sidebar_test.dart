@@ -11,6 +11,7 @@ import 'package:duanju_app/player_menu.dart';
 import 'package:duanju_app/player_screen.dart';
 import 'package:duanju_app/remote_widgets.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -32,6 +33,10 @@ Future<ThemeData> sidebarTheme(WidgetTester tester) async {
     await tester.runAsync(() async {
       for (final entry in {
         'SidebarCJK': font,
+        if (theme.textTheme.labelSmall?.fontFamily case final String family)
+          family: font,
+        if (theme.textTheme.labelLarge?.fontFamily case final String family)
+          family: font,
         'MaterialIcons': Platform.environment['HG_UI_ICON_FONT'],
       }.entries) {
         if (entry.value == null) continue;
@@ -87,9 +92,55 @@ void main() {
   );
 
   testWidgets(
+    'desktop episode cards fit more columns while preserving targets and current marker',
+    (tester) async {
+      final desktop = defaultTargetPlatform == TargetPlatform.windows;
+      var selected = -1;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                width: 312,
+                height: 600,
+                child: PlayerEpisodeGrid(
+                  episodes: detail.episodes,
+                  currentIndex: 58,
+                  onSelected: (index) => selected = index,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await frames(tester);
+      final grid = tester.widget<RemoteGrid>(find.byType(RemoteGrid));
+      expect(grid.columns, desktop ? 5 : 3);
+      expect(grid.itemExtent, desktop ? 44 : 56);
+      expect(grid.spacing, desktop ? 4 : 8);
+      final current = find.byKey(const ValueKey('play-episode-59'));
+      expect(tester.widget<RemoteEpisodeButton>(current).current, isTrue);
+      final bounds = tester.getRect(current);
+      expect(bounds.height, greaterThanOrEqualTo(44));
+      expect(bounds.width, greaterThanOrEqualTo(48));
+      await tester.tap(find.byKey(const ValueKey('play-episode-60')));
+      await tester.pump();
+      expect(selected, 59);
+      expect(find.text('定位当前'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+    variant: TargetPlatformVariant({
+      TargetPlatform.windows,
+      TargetPlatform.android,
+    }),
+  );
+
+  testWidgets(
     'sidebar collapse resize fullscreen preserves player, episode page and scroll',
     (tester) async {
-      tester.view.physicalSize = const Size(1280, 760);
+      tester.view.physicalSize = const Size(1280, 600);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       SharedPreferences.setMockInitialValues({});
@@ -101,6 +152,7 @@ void main() {
         RepaintBoundary(
           key: const ValueKey('sidebar-capture'),
           child: MaterialApp(
+            debugShowCheckedModeBanner: false,
             theme: await sidebarTheme(tester),
             home: PlayerScreen(
               detail: detail,
@@ -130,7 +182,7 @@ void main() {
                 .first,
           )
           .position;
-      position.jumpTo(180);
+      position.jumpTo(10);
       await tester.pump();
       final width = tester.getSize(find.byType(PlayerControls)).width;
       expect(find.text('第 51–100 集'), findsOneWidget);
@@ -156,15 +208,15 @@ void main() {
       await frames(tester);
       expect(sidebar, findsOneWidget);
       expect(preferences.getBool('windows_episode_sidebar_expanded'), isTrue);
-      expect(position.pixels, 180);
+      expect(position.pixels, 10);
       tester.widget<PlayerControls>(find.byType(PlayerControls)).onFullscreen();
       await frames(tester);
       expect(sidebar, findsNothing);
       tester.widget<PlayerControls>(find.byType(PlayerControls)).onFullscreen();
       await frames(tester);
       expect(sidebar, findsOneWidget);
-      expect(position.pixels, 180);
-      tester.view.physicalSize = const Size(720, 760);
+      expect(position.pixels, 10);
+      tester.view.physicalSize = const Size(720, 600);
       await frames(tester);
       expect(sidebar, findsNothing);
       expect(preferences.getBool('windows_episode_sidebar_expanded'), isTrue);
@@ -173,12 +225,12 @@ void main() {
       expect(find.byType(PlayerMenu), findsOneWidget);
       Navigator.of(tester.element(find.byType(PlayerMenu))).pop();
       await frames(tester);
-      tester.view.physicalSize = const Size(1280, 760);
+      tester.view.physicalSize = const Size(1280, 600);
       await frames(tester);
       expect(sidebar, findsOneWidget);
       expect(tester.state(find.byType(PlayerControls)), same(playerState));
       expect(tester.state(find.byType(EpisodeBrowser)), same(browserState));
-      expect(position.pixels, 180);
+      expect(position.pixels, 10);
       expect(platform.state.position.inSeconds, 27);
       expect(platform.opened, hasLength(1));
       expect(creations, 1);
