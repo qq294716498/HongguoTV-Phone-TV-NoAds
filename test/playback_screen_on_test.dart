@@ -49,10 +49,6 @@ void main() {
     testWidgets(
       '$mode playback keeps screen on through buffering and handoff',
       (tester) async {
-        if (mode == 'windows') {
-          debugDefaultTargetPlatformOverride = TargetPlatform.windows;
-          addTearDown(() => debugDefaultTargetPlatformOverride = null);
-        }
         tester.view.physicalSize = mode == 'portrait'
             ? const Size(390, 800)
             : const Size(960, 540);
@@ -177,6 +173,9 @@ void main() {
         );
         store.dispose();
       },
+      variant: TargetPlatformVariant.only(
+        mode == 'windows' ? TargetPlatform.windows : TargetPlatform.android,
+      ),
     );
   }
 }
