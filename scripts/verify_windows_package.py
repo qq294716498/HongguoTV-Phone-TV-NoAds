@@ -9,12 +9,21 @@ import tempfile
 import zipfile
 from pathlib import Path
 
-import pefile
 
 root = Path(__file__).resolve().parents[1]
 
 
+def validate_aot_elf(header):
+    if len(header) < 64 or header[:4] != b'\x7fELF' or header[4:7] != bytes([2, 1, 1]):
+        raise ValueError('Expected a 64-bit little-endian ELF AOT snapshot')
+    machine = int.from_bytes(header[18:20], 'little')
+    if machine != 62:
+        raise ValueError(f'Expected x64 AOT snapshot, got ELF machine {machine}')
+    return {'format': 'ELF64 AOT snapshot', 'machine': 'AMD64'}
+
+
 def main():
+    import pefile
     if platform.system() != 'Windows':
         raise SystemExit('Windows runner required')
     version, build = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(encoding='utf-8'), re.MULTILINE).group(1).split('+')
@@ -46,6 +55,13 @@ def main():
                 continue
             record = {'path': file.relative_to(bundle).as_posix(), 'bytes': file.stat().st_size,
                       'sha256': hashlib.file_digest(file.open('rb'), 'sha256').hexdigest()}
+            if file.name == 'app.so':
+                with file.open('rb') as stream:
+                    header = stream.read(64)
+                if header[:4] == b'\x7fELF':
+                    record.update(validate_aot_elf(header))
+                    records.append(record)
+                    continue
             if file.suffix.lower() in {'.dll', '.exe'} or file.name == 'app.so':
                 with pefile.PE(str(file)) as binary:
                     if binary.FILE_HEADER.Machine != 0x8664:

@@ -83,7 +83,10 @@ def main():
         write_json('Source-and-checks.json', {
             'version': version, 'build': int(build), 'sourceCommit': commit,
             'baselineTag': 'app-v0.1.12-36', 'baselineCommit': '48d081cd916d01f41f6e9d0d543b0ae9d3e20026',
-            'workflowRun': ci, 'formatAndAnalysisPassed': True, 'pythonTestsPassed': True,
+            'workflowRun': ci,
+            'binaryBuildCommit': os.environ.get('WINDOWS_BINARY_COMMIT', commit),
+            'binaryBuildRun': os.environ.get('WINDOWS_BINARY_RUN', os.environ['GITHUB_RUN_ID']),
+            'formatAndAnalysisPassed': True, 'pythonTestsPassed': True,
             'flutterDefaultAndAllSourceTestsPassed': True, 'goRaceDefaultAndAllSourcesPassed': True,
             'windowsCompileAndPackageValidationPassed': True, 'unsigned': True,
             'sourceArchiveSha256': hashlib.file_digest(source_package.open('rb'), 'sha256').hexdigest(),

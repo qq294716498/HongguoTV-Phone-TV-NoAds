@@ -1,0 +1,136 @@
+name: Verify and publish Windows preview
+
+on:
+  push:
+    branches: [verify-windows/0.1.13-preview.1]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: windows-verify-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PYTHONUTF8: '1'
+  WINDOWS_BINARY_RUN: '38833380994'
+  WINDOWS_BINARY_COMMIT: b2fd2e28d491dc4356546eb40339623b3b547721
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Prove reused package has identical runtime and build source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess
+          repo = os.environ['GITHUB_REPOSITORY']
+          run = os.environ['WINDOWS_BINARY_RUN']
+          metadata = json.loads(subprocess.check_output(['gh', 'api', f'repos/{repo}/actions/runs/{run}']))
+          assert metadata['head_sha'] == os.environ['WINDOWS_BINARY_COMMIT']
+          assert metadata['repository']['full_name'] == repo
+          jobs = json.loads(subprocess.check_output(['gh', 'api', f'repos/{repo}/actions/runs/{run}/jobs']))['jobs']
+          assert next(job for job in jobs if job['name'] == 'checks')['conclusion'] == 'success'
+          windows = next(job for job in jobs if job['name'] == 'windows')
+          assert next(step for step in windows['steps'] if step['name'] == 'Run python scripts/build_windows.py --all-sources')['conclusion'] == 'success'
+          subprocess.run(['git', 'diff', '--exit-code', os.environ['WINDOWS_BINARY_COMMIT'], 'HEAD', '--',
+                          'lib', 'native', 'packages', 'assets', 'windows', 'pubspec.yaml', 'pubspec.lock',
+                          'scripts/build_windows.py', 'scripts/build_native.py', 'scripts/app_build.py',
+                          'scripts/package_release.py'], check=True)
+          print('Runtime and build inputs match the already compiled, regression-tested package.')
+          PY
+      - run: python3 -m unittest discover -s scripts -p 'test_*.py'
+
+  windows:
+    needs: checks
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: hongguotv-windows-x64
+          run-id: ${{ env.WINDOWS_BINARY_RUN }}
+          github-token: ${{ github.token }}
+          path: dist/windows
+      - run: python -m pip install pefile==2024.8.26
+      - name: Verify PE DLLs and ELF AOT architecture, resources and native loads
+        run: python scripts/verify_windows_package.py
+      - name: Verify media playback and real application startup without Java
+        run: python scripts/smoke_windows.py
+      - name: Record unsigned executable status
+        shell: pwsh
+        run: |
+          $directory = Join-Path $env:RUNNER_TEMP 'windows-signature'
+          Expand-Archive -Path dist\windows\HongguoTV-0.1.13-preview.1-windows-x64.zip -DestinationPath $directory
+          $signature = Get-AuthenticodeSignature (Join-Path $directory 'HongguoTV.exe')
+          @{ status = $signature.Status.ToString(); signed = ($signature.Status -eq 'Valid'); file = 'HongguoTV.exe' } | ConvertTo-Json | Set-Content -Encoding utf8 dist\windows\Windows-signature.json
+          if ($signature.Status -ne 'NotSigned') { throw 'Unexpected signature state' }
+          Remove-Item -Recurse -Force $directory
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hongguotv-windows-verified
+          path: dist/windows/*
+          retention-days: 14
+
+  release:
+    needs: [checks, windows]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: hongguotv-windows-verified
+          path: dist/windows
+      - run: python3 scripts/publish_windows_preview.py stage
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - name: Verify public updater downloads and Android isolation
+        env:
+          CHECK_WINDOWS_UPDATE: 'true'
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if flutter test --no-pub test/windows_update_live_test.dart --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true --reporter=expanded; then
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
+      - run: python3 scripts/publish_windows_preview.py finalize
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hongguotv-windows-release-evidence
+          path: dist/windows/*
+          retention-days: 14
