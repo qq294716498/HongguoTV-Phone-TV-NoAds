@@ -11,7 +11,7 @@
 - 沿用已发布 Android 版本的全部站源与业务逻辑，新增桌面品牌、最小窗口尺寸、播放保持亮屏和独立更新检测。
 - 未使用 Windows 签名证书，属于未签名试用包。不会自动安装、运行新版本或修改旧桌面伴侣程序。
 - 使用独立 `windows-v<版本>-<构建号>` 标签和 prerelease，发布时明确 `--latest=false`；不覆盖 Android 0.1.12 资产，也不改动 Android Latest。
-- 当前验证进度与下载资产以 [Windows CI](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/workflows/windows-preview.yml) 和对应测试发布页为准；未通过全部必要检查时不得标为完成。
+- 测试发布页：[Windows 0.1.13-preview.1](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/windows-v0.1.13-preview.1-37)。只有必要检查通过后才提供测试包；验证结果与下载资产以 [Windows CI](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/workflows/windows-preview.yml) 和对应测试发布页为准；未通过全部必要检查时不得标为完成。
 
 ### Windows 功能与交互
 
@@ -116,7 +116,7 @@ Windows runner 将检查 x64 PE、版本、直接/延迟导入 DLL、资源、�
 | 平台 | 状态 |
 | --- | --- |
 | Android 手机 / Android TV | 已发布 0.1.12 三架构正式安装包 |
-| Windows | 0.1.13-preview.1+37 适配与 Windows runner 测试中；实际结果以独立测试发布页为准 |
+| Windows | 独立 Windows x64 测试渠道；0.1.13-preview.1+37 的构建、运行验证结果及下载以测试发布页为准 |
 | iOS | 保留工程与构建支持，尚无本次已签名安装包 |
 
 正式发布前执行自动化检查、安装包校验和更新下载验证；真实手机 / TV 的覆盖安装、实际播放与长时间连播仍待验收。
