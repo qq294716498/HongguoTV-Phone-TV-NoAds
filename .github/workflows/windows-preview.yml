@@ -13,6 +13,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  PYTHONUTF8: '1'
   GOPROXY: https://proxy.golang.org,direct
   GOSUMDB: sum.golang.org
 

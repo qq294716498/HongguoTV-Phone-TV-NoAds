@@ -17,7 +17,7 @@ root = Path(__file__).resolve().parents[1]
 def main():
     if platform.system() != 'Windows':
         raise SystemExit('Windows runner required')
-    version, build = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(), re.MULTILINE).group(1).split('+')
+    version, build = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(encoding='utf-8'), re.MULTILINE).group(1).split('+')
     package = root / 'dist/windows' / f'HongguoTV-{version}-windows-x64.zip'
     expected_version = tuple(map(int, version.split('-')[0].split('.'))) + (int(build),)
     records = []
