@@ -23,6 +23,9 @@ def main():
             archive.extractall(directory)
         report = directory / 'result.json'
         environment = os.environ.copy()
+        for name in list(environment):
+            if name.startswith(('JAVA_HOME', 'JDK_HOME')):
+                environment.pop(name)
         for name in ['APPDATA', 'LOCALAPPDATA']:
             environment[name] = str(Path(temporary) / name)
             Path(environment[name]).mkdir()
@@ -40,6 +43,7 @@ def main():
             evidence = json.loads(report.read_text(encoding='utf-8'))
             evidence['processExitCode'] = process.returncode
             evidence['cleanPath'] = True
+            evidence['javaEnvironmentRemoved'] = True
             evidence['nonAsciiPath'] = True
             evidence['differentWorkingDirectory'] = True
             output.write_text(json.dumps(evidence, indent=2) + '\n', encoding='utf-8')

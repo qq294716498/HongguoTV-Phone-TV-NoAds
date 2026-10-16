@@ -48,6 +48,8 @@ else:
     missing = [name for name in required if not (bundle / name).is_file()]
     if missing:
         raise SystemExit('Windows 安装包缺少文件：' + ', '.join(missing))
+    if (bundle / 'dartjni.dll').exists():
+        raise SystemExit('Windows 不使用 JNI；请运行 flutter clean 后重新构建，避免残留 Java 依赖。')
     target = output / f'HongguoTV-{version.split("+")[0]}-windows-x64.zip'
     with zipfile.ZipFile(target, 'w', zipfile.ZIP_DEFLATED) as archive:
         for source in sorted(bundle.rglob('*')):

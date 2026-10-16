@@ -47,25 +47,24 @@ def main():
             record = {'path': file.relative_to(bundle).as_posix(), 'bytes': file.stat().st_size,
                       'sha256': hashlib.file_digest(file.open('rb'), 'sha256').hexdigest()}
             if file.suffix.lower() in {'.dll', '.exe'} or file.name == 'app.so':
-                binary = pefile.PE(str(file))
-                if binary.FILE_HEADER.Machine != 0x8664:
-                    raise ValueError('Expected x64 PE: ' + file.name)
-                imports = set()
-                for attribute in ['DIRECTORY_ENTRY_IMPORT', 'DIRECTORY_ENTRY_DELAY_IMPORT']:
-                    imports.update(entry.dll.decode('ascii').lower() for entry in getattr(binary, attribute, []))
-                missing_imports = [name for name in imports if name not in bundled
-                                   and not name.startswith(('api-ms-win-', 'ext-ms-win-'))
-                                   and not (system / name).is_file()]
-                if missing_imports:
-                    raise ValueError(file.name + ' missing imported DLLs: ' + ', '.join(missing_imports))
-                record.update(machine='AMD64', imports=sorted(imports))
-                if file.name == 'HongguoTV.exe':
-                    info = binary.VS_FIXEDFILEINFO[0]
-                    actual = (info.FileVersionMS >> 16, info.FileVersionMS & 65535,
-                              info.FileVersionLS >> 16, info.FileVersionLS & 65535)
-                    if actual != expected_version:
-                        raise ValueError(f'Wrong executable version: {actual}')
-                binary.close()
+                with pefile.PE(str(file)) as binary:
+                    if binary.FILE_HEADER.Machine != 0x8664:
+                        raise ValueError('Expected x64 PE: ' + file.name)
+                    imports = set()
+                    for attribute in ['DIRECTORY_ENTRY_IMPORT', 'DIRECTORY_ENTRY_DELAY_IMPORT']:
+                        imports.update(entry.dll.decode('ascii').lower() for entry in getattr(binary, attribute, []))
+                    missing_imports = [name for name in imports if name not in bundled
+                                       and not name.startswith(('api-ms-win-', 'ext-ms-win-'))
+                                       and not (system / name).is_file()]
+                    if missing_imports:
+                        raise ValueError(file.name + ' missing imported DLLs: ' + ', '.join(missing_imports))
+                    record.update(machine='AMD64', imports=sorted(imports))
+                    if file.name == 'HongguoTV.exe':
+                        info = binary.VS_FIXEDFILEINFO[0]
+                        actual = (info.FileVersionMS >> 16, info.FileVersionMS & 65535,
+                                  info.FileVersionLS >> 16, info.FileVersionLS & 65535)
+                        if actual != expected_version:
+                            raise ValueError(f'Wrong executable version: {actual}')
             records.append(record)
         subprocess.run([sys.executable, '-c',
                         'import ctypes, os, sys; from pathlib import Path; '

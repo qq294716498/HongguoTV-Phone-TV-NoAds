@@ -21,7 +21,7 @@ class WindowsPublishTests(unittest.TestCase):
         self.smoke = {name: True for name in [
             'ok', 'nativeCore', 'preferences', 'bundledAssets', 'ffprobe', 'remux',
             'flutterWindow', 'videoFrameRendered', 'seekRateVolume', 'playbackPower',
-            'fullscreen', 'mediaKitPlayback', 'cleanPath', 'nonAsciiPath', 'differentWorkingDirectory']}
+            'fullscreen', 'mediaKitPlayback', 'cleanPath', 'nonAsciiPath', 'differentWorkingDirectory', 'javaEnvironmentRemoved']}
         self.smoke.update(processExitCode=0, version='0.1.13-preview.1', build=37)
         self.write('Windows-smoke.json', self.smoke)
         self.write('Windows-validation.json', {
