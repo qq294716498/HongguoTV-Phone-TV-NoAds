@@ -1,6 +1,6 @@
 # 红果TV · 手机 / Android TV / Windows
 
-基于 [guoapp](https://github.com/zhoufuweigg/guoapp) 的非官方独立客户端。手机与 Android TV 共用一款应用，支持短剧浏览、搜索、在线播放、追剧和下载。
+基于 [guoapp](https://github.com/zhoufuweigg/guoapp) 的非官方独立客户端。手机与 Android TV 共用一款应用，另提供 Windows x64 独立客户端，支持短剧浏览、搜索、在线播放、追剧和下载。
 
 ## 本次更新：0.1.12
 
@@ -43,19 +43,40 @@
 
 源码及安装包校验文件见 [0.1.12 发布页](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/app-v0.1.12-36)。最新版本源码可从该版本标签查看；其他分支的源码版本以各自的 `pubspec.yaml` 为准。
 
-## Windows PC 测试版
+## Windows 正式版：0.1.14+39
 
-已发布 **0.1.13-preview.1+37 · Windows 10 / 11 x64 未签名测试版**，基于 Android 0.1.12 已发布修复源码。
+[Windows x64 完整包](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.14-39/HongguoTV-0.1.14-windows-x64.zip) · [源码包](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.14-39/HongguoTV-0.1.14-source.zip) · [SHA-256](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.14-39/SHA256SUMS.txt)
 
-[下载完整 Windows ZIP](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.13-preview.1-37/HongguoTV-0.1.13-preview.1-windows-x64.zip) · [发布说明、源码与校验文件](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/windows-v0.1.13-preview.1-37)
+[CI 38860795522](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/38860795522) 全部通过，公开下载及 Android Latest/资产隔离已核验。
 
-完整解压到新目录后运行 `HongguoTV.exe`，不要只复制 EXE；所需 DLL 和资源已包含，无需安装开发工具链或 Java。
+基于已发布 Android `app-v0.1.12-36`（`48d081cd916d01f41f6e9d0d543b0ae9d3e20026`）及 Windows `0.1.14-preview.1+38` 候选源码增量适配。远端 `main` 的应用源码可能较旧，请使用对应发布标签。
 
-沿用播放源、弹幕表情与设置、预加载/连播、全季、追剧进度、搜索发现和下载等共用功能，提供鼠标、键盘、快进和全屏操作。Windows 更新走独立测试渠道：下载并校验 ZIP 后，由用户退出应用并完整解压使用。手机亮度手势、Android 画中画和手机观看提醒不在 Windows 提供。
+- [Windows 正式版发布页](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/windows-v0.1.14-39)。必要检查全部通过并已发布；结果以 [Windows CI](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/workflows/windows-preview.yml) 和对应资产为准。
+- Windows 10 / 11 x64 完整 ZIP 包含 `HongguoTV.exe`、更新助手、Go 核心、Flutter、mpv、FFmpeg、ANGLE、VC 运行库及资源；不提供 ARM64 / 32 位包。完整解压到可写目录后运行，不要只复制 EXE；不需要安装 Flutter、Go 或 FFmpeg。
+- 未签名，无 Windows 签名证书。独立正式标签 `windows-v0.1.14-39`，`prerelease=false`、`make_latest=false`；Android Latest 和原 Android 资产保持不变。
+- 首次从 0.1.13 / 0.1.14 预览版迁移需手动下载完整正式包；旧预览客户端只查预览渠道。0.1.14 正式版随后只检查 Windows 正式渠道，下载与安装需明确操作。
 
-Windows runner 的完整包、真实应用启动、合成视频首帧、未签名状态和更新 ZIP 实际下载验证已通过。真实站源播放、长时间连播、声卡输出、实际跨版本更新及不同电脑兼容性仍待实机验收；不承诺与手机全部功能完全一致。
+### Windows 功能与交互
 
-Windows 测试发布不会替换 Android Latest。Windows 源码和工作流请按对应发布标签获取；`main` 的应用源码版本可能不同。
+| 功能 | Windows 行为 |
+| --- | --- |
+| 播放源、搜索、发现、全季、追剧、观看进度 | 复用 Android 0.1.12 全站源构建与本地数据逻辑；源站可用性取决于网络 |
+| 弹幕与表情 | 保留内置表情、重复合并、透明度和开关；Windows 字号按播放器内实际视频逻辑区域自适应（12–28 逻辑像素），使用相同文字/表情比例，不按源视频分辨率或整块屏幕缩放。窗口、侧栏、全屏、迷你窗和 DPI 变化保留弹幕身份与当前位置；速度独立于视频倍速，0.5/0.75/1/1.15/1.25/1.5/2 倍，保存到播放偏好 |
+| 预加载、下一集、下一季 | 保留共用状态机、预缓冲、跨季选择与续播提示 |
+| 播放控件 | 更薄的透明底栏，正常布局约 58px、背景 40% 不透明；控制栏不压暗整幅视频；普通操作提示在底部。鼠标离开后一秒隐藏，移回/点击可唤出；拖进度/音量、菜单和键盘焦点操作期间保持。音量悬停/获焦向上展开，点击静音/恢复；快进、倍速、前后集、弹幕与完整播放设置保留 |
+| 选集栏、剧名 | 展开/收起入口位于视频右缘垂直中间；底部选集按钮打开选集/全季。记住展开偏好、分页和滚动位置；窄窗、全屏与迷你窗让出视频空间。标题按实际剧集号显示“第 N 集”，随切集切季更新 |
+| 键盘 | 空格播放/暂停；← 后退 5 秒；→ 短按前进 5 秒、长按临时 3 倍速；↑↓ 应用音量；M 静音；F/F11 全屏；Esc 返回原窗口/退出全屏；Tab 移动焦点 |
+| 托盘 | 默认关闭窗口进入系统托盘，保持关闭前的播放/暂停状态和预加载；右键恢复、播放/暂停或“退出红果TV”。设置可关闭此行为，改为直接退出；设置中另有明确退出入口。无托盘时关闭直接退出 |
+| 迷你窗 | 播放页进入，默认置顶，可拖动与调整大小；复用同一 Player / VideoController，不重开视频。返回时恢复位置、大小、最大化、置顶与全屏状态；可转全屏 |
+| 手机专属功能 | 无手机亮度/系统音量手势、Android 画中画、电量状态或每日时长/睡觉提醒；使用桌面控件、托盘和迷你窗。普通窗口最小化仍暂停；关闭进托盘继续保持原状态 |
+| 下载、合并、备份、网络与资源设置 | 保留设备端逻辑；真正退出后无独立下载服务。局域网首次使用可能受系统防火墙限制 |
+| 更新与日志 | 设置中自动/手动检查 Windows 正式版、显示日志；校验完整 ZIP 大小/SHA-256 后“安装并重启”，失败回滚。播放/连播准备中拒绝重启，暂停后保存进度和配置；更新退出绕过托盘 |
+
+更新先验证路径、CRC、文件清单、逐文件 SHA-256、PE x64 与版本；同卷准备完整目录，保留旧目录并原子替换。新客户端完成初始化、首帧及 nonce 确认后提交；崩溃/超时回滚旧目录和配置并重启旧版。旧目录和配置备份保留；只读、占用、重解析点或含清单外文件时停止，不提权。恢复同一用户的剧集和位置并保持暂停；锁定用户或受限来源不会自动进入播放页。
+
+验证包括默认/全站源回归、Windows x64 编译、版本/DLL/资源/校验和、干净 PATH 与中文空格目录启动、合成 H.264/AAC 首帧/快进/倍速/音量/全屏、原生托盘关闭/恢复/暂停/退出、迷你窗反复切换及调整大小、12 个更新事务场景（含真实客户端重启确认）。发布后继续验证公开下载与 Android Latest/资产隔离；各项实际结论见发布 JSON 报告。
+
+尚未实测真实源站解码、音频设备输出、消费级 Windows 10/11 GPU/旧 CPU 兼容、长时间跨集跨季连播，以及旧预览客户端通过公网完成整个升级事务。自动化结果不等同用户电脑验收，不会在用户电脑自动安装或运行。
 
 ## 应用内更新
 
@@ -103,7 +124,7 @@ Windows 测试发布不会替换 Android Latest。Windows 源码和工作流请�
 | 平台 | 状态 |
 | --- | --- |
 | Android 手机 / Android TV | 已发布 0.1.12 三架构正式安装包 |
-| Windows | 已发布 0.1.13-preview.1+37 x64 未签名测试包；验证范围与限制见测试发布页 |
+| Windows | Windows x64 正式版 0.1.14+39 已发布；构建、完整包与运行报告见 Windows 正式发布页 |
 | iOS | 保留工程与构建支持，尚无本次已签名安装包 |
 
 正式发布前执行自动化检查、安装包校验和更新下载验证；真实手机 / TV 的覆盖安装、实际播放与长时间连播仍待验收。
@@ -111,6 +132,8 @@ Windows 测试发布不会替换 Android Latest。Windows 源码和工作流请�
 后续优先完成 Android 手机和 Windows 的实际使用验证，其次是 Android TV 遥控与连播验证，最后安排 iOS 构建与设备验证。
 
 ## 项目与许可
+
+本软件免费提供，仅供学习交流，请勿付费购买，谨防盗卖。保留上游来源与许可证。关于页、GitHub 离线头像与首次一次性提示已纳入 Windows 0.1.14 发布源码，同时包含 Android 手机 / TV 的共享实现；现有 Android 0.1.12 发布包尚不含本轮新增，需另走既有证书签名发布流程。
 
 本项目基于原项目继续维护，原作者与依赖作者的贡献及许可随源码保留。“无广爽看”是项目的体验定位，具体资源和广告情况取决于内容来源。
 
