@@ -16,7 +16,11 @@ class AppUpdateProvider : ContentProvider() {
     private fun file(uri: Uri): File {
         val context = context ?: throw FileNotFoundException()
         if (uri.scheme != "content" || uri.authority != "${context.packageName}.updates" ||
-            uri.path != "/pending.apk" || uri.query != null || uri.fragment != null) throw FileNotFoundException()
+            uri.path != "/pending.apk" || uri.fragment != null) throw FileNotFoundException()
+        if (uri.query != null && (uri.queryParameterNames != setOf("version", "sha256") ||
+                uri.getQueryParameters("version").size != 1 || uri.getQueryParameters("sha256").size != 1 ||
+                uri.getQueryParameter("version")?.matches(Regex("[0-9]{1,6}")) != true ||
+                uri.getQueryParameter("sha256")?.matches(Regex("[a-f0-9]{64}")) != true)) throw FileNotFoundException()
         val directory = File(context.cacheDir, "app-updates").canonicalFile
         val file = File(directory, "pending.apk")
         if (file.canonicalFile != file || !file.isFile) throw FileNotFoundException()

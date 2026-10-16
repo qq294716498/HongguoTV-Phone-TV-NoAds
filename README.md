@@ -2,11 +2,12 @@
 
 基于 [guoapp](https://github.com/zhoufuweigg/guoapp) 的非官方独立客户端。手机与 Android TV 共用一款应用，支持短剧浏览、搜索、在线播放、追剧和下载。
 
-## 本次更新：0.1.11
+## 本次更新：0.1.12
 
-- 新增“查看全季”，从详情页和播放选集入口直接选择其他季及集数。
-- 追剧简化为加入 / 取消，一个系列集中显示，继续最近观看的季和集。
-- 进入追剧页时检查红果是否有后续季，发现后在卡片上显示“已有下季”。
+- 修复页面操作卡顿，优化追剧与列表流畅度。
+- 保留“查看全季”和进入追剧检查下季功能。
+- 优化应用内更新，下载和安装前重新确认当前版本。
+- 改善下载进度显示，并加强安装包版本验证。
 - 已有收藏、观看记录及备份数据继续保留。
 
 安装包和验证结果请以对应版本发布页为准。
@@ -34,13 +35,13 @@
 
 | 设备架构 | 下载 |
 | --- | --- |
-| arm64-v8a · 大多数手机及较新的电视 / 盒子 | [HongguoTV 0.1.11 ARM64](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.11-35/HongguoTV-0.1.11-arm64-v8a.apk) |
-| armeabi-v7a · 32 位手机 / 电视 / 盒子 | [HongguoTV 0.1.11 32 位](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.11-35/HongguoTV-0.1.11-armeabi-v7a.apk) |
-| x86_64 · 对应架构模拟器 | [HongguoTV 0.1.11 x86_64](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.11-35/HongguoTV-0.1.11-x86_64.apk) |
+| arm64-v8a · 大多数手机及较新的电视 / 盒子 | [HongguoTV 0.1.12 ARM64](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.12-36/HongguoTV-0.1.12-arm64-v8a.apk) |
+| armeabi-v7a · 32 位手机 / 电视 / 盒子 | [HongguoTV 0.1.12 32 位](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.12-36/HongguoTV-0.1.12-armeabi-v7a.apk) |
+| x86_64 · 对应架构模拟器 | [HongguoTV 0.1.12 x86_64](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.12-36/HongguoTV-0.1.12-x86_64.apk) |
 
 支持 Android 8.0 及以上系统。请选择与设备和已安装应用匹配的架构；更新时直接覆盖安装，无需先卸载。
 
-源码及安装包校验文件见 [0.1.11 发布页](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/app-v0.1.11-35)。最新版本源码可从该版本标签查看；其他分支的源码版本以各自的 `pubspec.yaml` 为准。
+源码及安装包校验文件见 [0.1.12 发布页](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/app-v0.1.12-36)。最新版本源码可从该版本标签查看；其他分支的源码版本以各自的 `pubspec.yaml` 为准。
 
 ## 应用内更新
 
@@ -87,7 +88,7 @@
 
 | 平台 | 状态 |
 | --- | --- |
-| Android 手机 / Android TV | 已发布 0.1.11 三架构正式安装包 |
+| Android 手机 / Android TV | 已发布 0.1.12 三架构正式安装包 |
 | Windows | 保留源码与构建支持，本次未发布新的 Windows 安装包 |
 | iOS | 保留工程与构建支持，尚无本次已签名安装包 |
 

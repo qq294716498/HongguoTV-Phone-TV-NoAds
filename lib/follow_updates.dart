@@ -33,6 +33,14 @@ class FollowUpdates extends ChangeNotifier {
     total = dramas.length;
     notifyListeners();
     var cursor = 0;
+    final pending = <String, Drama>{};
+    Future<void> flush() async {
+      if (pending.isEmpty || !current()) return;
+      final results = pending.values.toList();
+      pending.clear();
+      await store.refreshDramas(results);
+    }
+
     Future<void> worker() async {
       while (current() && cursor < dramas.length) {
         final drama = dramas[cursor++];
@@ -47,9 +55,9 @@ class FollowUpdates extends ChangeNotifier {
           await catalog.load();
           if (!current()) return;
           if (store.followedSeries(drama) != null) {
-            await store.refreshDramas(
-              catalog.entries.map((entry) => entry.drama),
-            );
+            for (final entry in catalog.entries) {
+              pending[entry.drama.id] = entry.drama;
+            }
             if (catalog.error.isNotEmpty || catalog.hasMore) failed++;
           }
         } catch (_) {
@@ -59,12 +67,16 @@ class FollowUpdates extends ChangeNotifier {
         }
         if (!current()) return;
         checked++;
+        if (checked % 8 == 0) await flush();
+        if (!current()) return;
         notifyListeners();
+        await Future<void>.delayed(const Duration(milliseconds: 16));
       }
     }
 
     try {
       await worker();
+      await flush();
     } finally {
       if (current()) {
         checking = false;

@@ -21,6 +21,7 @@ class AppUpdateBridge(private val activity: Activity, messenger: BinaryMessenger
     private val worker = Executors.newSingleThreadExecutor()
     private var closed = false
     private var installerResult: MethodChannel.Result? = null
+    private var installerUri: Uri? = null
     private val installSession = UpdateInstallSession()
     private val directory get() = File(activity.cacheDir, "app-updates")
     private val apk get() = File(directory, "pending.apk")
@@ -103,6 +104,7 @@ class AppUpdateBridge(private val activity: Activity, messenger: BinaryMessenger
         val expectedBytes = call.argument<Number>("bytes")?.toLong() ?: 0
         val expectedHash = call.argument<String>("sha256") ?: ""
         val expectedCode = call.argument<Number>("code")?.toLong() ?: 0
+        val expectedVersion = call.argument<String>("version") ?: ""
         val expectedAbi = call.argument<String>("abi") ?: ""
         UpdateValidation.require(apk.canonicalFile == File(directory.canonicalFile, "pending.apk") && apk.isFile,
             "安装包不在应用专用更新目录")
@@ -122,6 +124,7 @@ class AppUpdateBridge(private val activity: Activity, messenger: BinaryMessenger
         val current = installed()
         val candidate = activity.packageManager.getPackageArchiveInfo(apk.path, packageFlags())
             ?: throw IllegalArgumentException("无法解析安装包或验证签名")
+        UpdateValidation.verifyVersionName(expectedVersion, candidate.versionName)
         UpdateValidation.verifyIdentity(current.packageName, candidate.packageName,
             signers(current), signers(candidate), code(current), code(candidate), expectedCode,
             installedAbi(), abis(apk), expectedAbi)
@@ -147,7 +150,11 @@ class AppUpdateBridge(private val activity: Activity, messenger: BinaryMessenger
                     if (closed) return@runOnUiThread
                     try {
                         UpdateValidation.require(activity.packageManager.canRequestPackageInstalls(), "未允许安装更新")
-                        val uri = Uri.parse("content://${activity.packageName}.updates/pending.apk")
+                        val uri = Uri.parse("content://${activity.packageName}.updates/pending.apk").buildUpon()
+                            .appendQueryParameter("version", call.argument<Number>("code").toString())
+                            .appendQueryParameter("sha256", call.argument<String>("sha256"))
+                            .build()
+                        installerUri = uri
                         val intent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
                             data = uri
                             clipData = ClipData.newRawUri("HongguoTV update", uri)
@@ -193,8 +200,8 @@ class AppUpdateBridge(private val activity: Activity, messenger: BinaryMessenger
         if (!installSession.complete(requestCode)) return
         installerResult?.success(value)
         installerResult = null
-        activity.revokeUriPermission(Uri.parse("content://${activity.packageName}.updates/pending.apk"),
-            Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        installerUri?.let { activity.revokeUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+        installerUri = null
     }
 
     fun close() {

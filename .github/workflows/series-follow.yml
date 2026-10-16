@@ -1,8 +1,8 @@
-name: Validate series browsing and follows
+name: Fix library UI performance and updater
 
 on:
   push:
-    branches: [feature/series-follow-0.1.11]
+    branches: [fix/ui-lag-updater-0.1.12]
   workflow_dispatch:
 
 permissions:
@@ -56,6 +56,19 @@ jobs:
         id: analysis
         continue-on-error: true
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Compare library performance with 0.1.11
+        if: ${{ !contains(github.event.head_commit.message, '[build-release]') }}
+        run: |
+          set -euo pipefail
+          cp lib/local_store.dart "$RUNNER_TEMP/final-local-store.dart"
+          trap 'cp "$RUNNER_TEMP/final-local-store.dart" lib/local_store.dart' EXIT
+          git fetch --depth=1 origin tag app-v0.1.11-35
+          git show app-v0.1.11-35:lib/local_store.dart > lib/local_store.dart
+          echo "BASELINE 0.1.11"
+          flutter test --no-pub test/series_performance_test.dart --dart-define=DISABLE_REMOTE_IMAGES=true --reporter=expanded
+          cp "$RUNNER_TEMP/final-local-store.dart" lib/local_store.dart
+          echo "FIXED 0.1.12"
+          flutter test --no-pub test/series_performance_test.dart --dart-define=DISABLE_REMOTE_IMAGES=true --reporter=expanded
       - run: flutter test --no-pub --dart-define=DISABLE_REMOTE_IMAGES=true --concurrency=2
         id: default_tests
         continue-on-error: true
@@ -71,11 +84,10 @@ jobs:
         run: exit 1
       - name: Preserve clean source snapshot
         run: |
-          python3 scripts/finish_task.py --message "新增全季选集并简化系列追剧，检查下季与最近观看进度"
+          python3 scripts/finish_task.py --message "修复系列列表重复计算、追剧检查刷新与更新安装状态"
           python3 scripts/sync_source.py --check
 
   android:
-    needs: checks
     if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[build-release]')
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -132,7 +144,7 @@ jobs:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
-      EXPECTED_UPDATE_TAG: app-v0.1.11-35
+      EXPECTED_UPDATE_TAG: app-v0.1.12-36
       CHECK_LIVE_UPDATE: 'true'
     steps:
       - uses: actions/checkout@v4
@@ -148,9 +160,9 @@ jobs:
       - run: flutter pub get --enforce-lockfile
       - name: Synchronize and archive exact checked source
         run: |
-          python3 scripts/finish_task.py --message "Build 0.1.11 all-season browsing and series follows"
+          python3 scripts/finish_task.py --message "Build 0.1.12 library performance and updater fixes"
           python3 scripts/sync_source.py --check
-          cp ../真果·鉴-*.zip dist/android/HongguoTV-0.1.11-source.zip
+          cp ../真果·鉴-*.zip dist/android/HongguoTV-0.1.12-source.zip
           cd dist/android
           sha256sum *.apk *-source.zip APK-validation.json > SHA256SUMS.txt
       - name: Stage immutable release assets
@@ -161,19 +173,20 @@ jobs:
             exit 1
           fi
           cat > notes.md <<'NOTES'
-          新增“查看全季”和更直接的追剧体验。
+          修复页面操作卡顿与应用内更新体验。
           
-          - 从详情页、手机播放选集及 TV 选集进入全季列表，选季后直接选集。
-          - 追剧简化为加入 / 取消，一个系列集中显示，继续最近观看的季和集。
-          - 每次进入追剧页检查红果后续季，卡片标注“已有下季”。
-          - 已有收藏、历史记录与备份保持兼容。
+          - 优化追剧与列表操作流畅度。
+          - 保留每次进入追剧检查下季及“查看全季”功能。
+          - 下载、安装前重新确认当前版本，避免重复更新提示。
+          - 加强安装包版本验证，改善下载进度显示。
+          - 保留收藏、历史记录和备份数据。
           - Android 8.0+，手机 / TV 通用，沿用正式签名。
           - arm64-v8a：大多数手机；armeabi-v7a：32 位设备；x86_64：对应模拟器。
           - 自动化与更新下载验收通过后发布；真实手机 / TV 仍待实际使用验证。
           - 校验文件：SHA256SUMS.txt、APK-validation.json。
           NOTES
           printf '\n源码提交：%s\n' "${{ github.sha }}" >> notes.md
-          gh release create "$EXPECTED_UPDATE_TAG" dist/android/* --target "${{ github.sha }}" --title "红果TV 0.1.11" --notes-file notes.md --prerelease --latest=false
+          gh release create "$EXPECTED_UPDATE_TAG" dist/android/* --target "${{ github.sha }}" --title "红果TV 0.1.12" --notes-file notes.md --prerelease --latest=false
           gh api "repos/${{ github.repository }}/releases/tags/$EXPECTED_UPDATE_TAG" > staged-release.json
       - name: Verify actual updater download and SHA-256 for all three ABIs
         env:

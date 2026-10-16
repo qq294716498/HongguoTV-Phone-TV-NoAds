@@ -30,6 +30,7 @@ class FakeUpdateTransport implements UpdateTransport {
   int checks = 0;
   int downloads = 0;
   int cancellations = 0;
+  int progressBurst = 0;
   Object? failure;
   Completer<void>? gate;
   Completer<Map<String, dynamic>>? lookup;
@@ -47,6 +48,9 @@ class FakeUpdateTransport implements UpdateTransport {
     void Function(int) progress,
   ) async {
     downloads++;
+    for (var i = 0; i < progressBurst; i++) {
+      progress(1);
+    }
     progress(2);
     await gate?.future;
     if (failure != null) throw failure!;
@@ -312,6 +316,58 @@ void main() {
         );
       },
     );
+    test('download rechecks installed code and drops a stale update', () async {
+      await updater.check();
+      platform.app = const InstalledApp(
+        version: '0.1.6',
+        code: 2028,
+        abi: 'arm64-v8a',
+      );
+      await updater.download();
+      expect(transport.downloads, 0);
+      expect(updater.release, isNull);
+      expect(updater.stage, UpdateStage.idle);
+      expect(updater.installedApp!.code, 2028);
+    });
+
+    test('install rechecks installed code after an external upgrade', () async {
+      await updater.check();
+      await updater.download();
+      platform.app = const InstalledApp(
+        version: '0.1.6',
+        code: 2028,
+        abi: 'arm64-v8a',
+      );
+      await updater.install();
+      expect(platform.installs, 0);
+      expect(platform.validations, 1);
+      expect(updater.release, isNull);
+      expect(await File('${directory.path}/pending.apk').exists(), isFalse);
+    });
+
+    test('failed recheck cannot keep an old download offer', () async {
+      await updater.check();
+      transport.failure = const SocketException('offline');
+      await updater.check(manual: true);
+      expect(updater.release, isNull);
+      await updater.download();
+      expect(transport.downloads, 0);
+    });
+
+    test(
+      'download chunk bursts do not rebuild the page for every chunk',
+      () async {
+        await updater.check();
+        transport.progressBurst = 4000;
+        var notifications = 0;
+        updater.addListener(() => notifications++);
+        await updater.download();
+        expect(updater.stage, UpdateStage.ready);
+        expect(updater.downloaded, 4);
+        expect(notifications, lessThan(20));
+      },
+    );
+
     test(
       'wrong hash/signature/ABI/version rejection deletes downloaded package',
       () async {

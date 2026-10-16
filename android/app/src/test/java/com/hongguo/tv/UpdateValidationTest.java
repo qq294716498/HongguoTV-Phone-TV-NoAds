@@ -17,6 +17,10 @@ public final class UpdateValidationTest {
     }
 
     public static void main(String[] args) {
+        UpdateValidation.verifyVersionName("0.1.12", "0.1.12");
+        reject(() -> UpdateValidation.verifyVersionName("0.1.12", "0.1.11"));
+        reject(() -> UpdateValidation.verifyVersionName("0.1.12", null));
+        reject(() -> UpdateValidation.verifyVersionName("bad", "bad"));
         String hash = "a".repeat(64);
         UpdateValidation.verifyBytes(4, 4, hash, hash);
         reject(() -> UpdateValidation.verifyBytes(4, 3, hash, hash));
