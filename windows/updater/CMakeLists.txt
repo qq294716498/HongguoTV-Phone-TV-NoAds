@@ -1,0 +1,6 @@
+add_executable(HongguoTV-updater updater.cpp)
+target_compile_features(HongguoTV-updater PRIVATE cxx_std_17)
+target_compile_options(HongguoTV-updater PRIVATE /W4 /WX /EHsc /utf-8)
+target_compile_definitions(HongguoTV-updater PRIVATE NOMINMAX UNICODE _UNICODE)
+set_property(TARGET HongguoTV-updater PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+target_link_libraries(HongguoTV-updater PRIVATE bcrypt version)

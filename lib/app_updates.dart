@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_build.dart';
+import 'windows_update_runtime.dart';
 import 'app_layout.dart' show appVersion, windowsBuildNumber;
 
 const updateRepository = 'qq294716498/HongguoTV-Phone-TV-NoAds';
@@ -484,8 +485,11 @@ class WindowsUpdatePlatform implements UpdatePlatform {
   @override
   Future<String> install(AppRelease release) async {
     await validate(release);
-    await Process.start('explorer.exe', [await directory()]);
-    return 'manual';
+    return WindowsUpdateRuntime.install(
+      zipPath: '${await directory()}/pending.zip',
+      version: release.version,
+      build: release.code,
+    );
   }
 }
 
@@ -688,7 +692,7 @@ class AppUpdates extends ChangeNotifier {
       if (_cancelled || _disposed) throw const UpdateCancelled();
       stage = UpdateStage.ready;
       message = windows
-          ? '压缩包校验通过。打开下载位置后，请退出应用并完整解压到新目录。'
+          ? '下载校验通过。暂停播放后点击安装并重启，将自动验证、替换并保留旧版。'
           : '安装包验证通过。点击安装后由 Android 确认';
     } catch (error) {
       await _removeFile();
@@ -725,11 +729,12 @@ class AppUpdates extends ChangeNotifier {
       await platform.validate(candidate);
       if (_disposed) return;
       if (windows) {
-        await platform.install(candidate);
+        final result = await platform.install(candidate);
         if (_disposed) return;
         stage = UpdateStage.ready;
-        message =
-            '已打开下载位置。请退出应用，将 pending.zip 完整解压到新目录，再运行 HongguoTV.exe；观看数据保留。';
+        message = result == 'playing'
+            ? '正在播放或准备下一集。请先暂停，再点击安装并重启。'
+            : '更新事务已准备，正在保存并重启。';
         _notify();
         return;
       }

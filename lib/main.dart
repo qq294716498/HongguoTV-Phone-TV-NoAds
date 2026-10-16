@@ -23,12 +23,18 @@ import 'video_enhancement_assets.dart';
 import 'danmaku_emoji_assets.dart';
 import 'diary_service.dart';
 import 'app_updates.dart';
+import 'windows_update_runtime.dart';
+import 'models.dart';
 import 'watch_reminder_runtime.dart';
 import 'television_navigation.dart';
 import 'widgets.dart' show DramaCover;
 
 Future<void> main(List<String> arguments) async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (Platform.isWindows &&
+      Platform.environment['HONGGUOTV_DISABLE_IMAGES'] == '1') {
+    DramaCover.imagesDisabled = true;
+  }
   if (Platform.isAndroid) {
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setSystemUIOverlayStyle(AppTheme.systemBars(Brightness.dark));
@@ -36,6 +42,7 @@ Future<void> main(List<String> arguments) async {
   if (Platform.isWindows) {
     await windowManager.ensureInitialized();
     await windowManager.setMinimumSize(const Size(800, 600));
+    await WindowsUpdateRuntime.initialize(arguments);
   }
   MediaKit.ensureInitialized();
   VideoEnhancementAssets.registerLicenses();
@@ -232,6 +239,7 @@ class _AppBootstrapState extends State<AppBootstrap>
           };
         });
         widget.onReady?.call();
+        if (Platform.isWindows) unawaited(_finishWindowsUpdate());
       }
     } catch (failure) {
       if (mounted) {
@@ -240,6 +248,44 @@ class _AppBootstrapState extends State<AppBootstrap>
         });
       }
     }
+  }
+
+  Future<void> _finishWindowsUpdate() async {
+    WindowsUpdateRuntime.flushStore = () async => store?.flushPendingWrites();
+    await WidgetsBinding.instance.waitUntilFirstFrameRasterized;
+    await WidgetsBinding.instance.endOfFrame;
+    if (store?.configurationError != null)
+      throw StateError(store!.configurationError!);
+    final resume = await WindowsUpdateRuntime.ready();
+    if (!mounted ||
+        store == null ||
+        resume == null ||
+        store!.locked ||
+        resume['profile'] != store!.profile.id)
+      return;
+    final detail = DramaDetail.fromJson(
+      Map<String, dynamic>.from(resume['detail'] as Map),
+    );
+    final index = resume['index'] as int;
+    if (!store!.allowsSource(detail.drama.source) ||
+        index < 0 ||
+        index >= detail.episodes.length)
+      return;
+    navigator.currentState?.push(
+      MaterialPageRoute<void>(
+        builder: (_) => PlayerScreen(
+          detail: detail,
+          initialIndex: index,
+          repository: repository,
+          store: store!,
+          initialPosition: (resume['position'] as num).toDouble(),
+          initiallyPlaying: false,
+          localOnly: resume['localOnly'] == true,
+          allowOnlineFallback: resume['allowOnlineFallback'] != false,
+          mediaId: resume['mediaId'] as String?,
+        ),
+      ),
+    );
   }
 
   @override

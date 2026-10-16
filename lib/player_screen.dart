@@ -39,6 +39,7 @@ import 'lan_controller.dart';
 import 'lan_screen.dart';
 import 'video_enhancement.dart';
 import 'video_output_size.dart';
+import 'windows_update_runtime.dart';
 
 class PlayerScreen extends StatefulWidget {
   const PlayerScreen({
@@ -48,6 +49,7 @@ class PlayerScreen extends StatefulWidget {
     required this.repository,
     required this.store,
     this.initialPosition = 0,
+    this.initiallyPlaying = true,
     this.localOnly = false,
     this.allowOnlineFallback = true,
     this.mediaId,
@@ -58,6 +60,7 @@ class PlayerScreen extends StatefulWidget {
   final DramaDetail detail;
   final int initialIndex;
   final double initialPosition;
+  final bool initiallyPlaying;
   final bool localOnly;
   final bool allowOnlineFallback;
   final String? mediaId;
@@ -105,6 +108,9 @@ class _PlayerScreenState extends State<PlayerScreen>
   String? _savedProgressKey;
   final _health = PlaybackHealth();
   Timer? _saveTimer;
+  Timer? _windowsVolumeTimer;
+  double? _windowsVolume;
+  double? _windowsUnmuted;
   Timer? _healthTimer;
   WatchReminderRuntime? _watchReminders;
   Timer? _errorTimer;
@@ -283,7 +289,22 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
     _interactions = PlayerInteractions(
       player: _player,
+      initialUnmutedVolume: defaultTargetPlatform == TargetPlatform.windows
+          ? widget.store.preferences.getDouble('windows_last_volume') ?? 100
+          : 100,
+      onVolumeChanged: defaultTargetPlatform == TargetPlatform.windows
+          ? (volume, unmuted) {
+              _windowsVolume = volume;
+              _windowsUnmuted = unmuted;
+              _windowsVolumeTimer?.cancel();
+              _windowsVolumeTimer = Timer(
+                const Duration(milliseconds: 250),
+                _saveWindowsVolume,
+              );
+            }
+          : null,
       available: () =>
+          !(Platform.isWindows && WindowsUpdateRuntime.restarting) &&
           !_closed &&
           widget.store.profileEpoch == _profileEpoch &&
           !_loading &&
@@ -315,6 +336,16 @@ class _PlayerScreenState extends State<PlayerScreen>
         return '第 ${_detail.episodes[next].number} 集';
       },
     );
+    if (defaultTargetPlatform == TargetPlatform.windows) {
+      unawaited(
+        _player.setVolume(
+          (widget.store.preferences.getDouble('windows_volume') ?? 100).clamp(
+            0,
+            100,
+          ),
+        ),
+      );
+    }
     _playerFocus.addListener(() {
       if (!_playerFocus.hasPrimaryFocus && !_closed) _interactions.cancel();
     });
@@ -428,6 +459,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       _play(
         _index,
         position: widget.initialPosition,
+        playWhenReady: widget.initiallyPlaying,
         handoffPlan: handoff?.plan,
       );
     }
@@ -439,6 +471,43 @@ class _PlayerScreenState extends State<PlayerScreen>
         );
       }
     });
+    if (Platform.isWindows) {
+      WindowsUpdateRuntime.owner = this;
+      WindowsUpdateRuntime.playing = () =>
+          _playIntent ||
+          _player.state.playing ||
+          _loading ||
+          _findingNextSeason;
+      WindowsUpdateRuntime.savePlayback = () async {
+        if (_playIntent || _player.state.playing || _loading)
+          throw StateError('请先暂停播放后安装更新');
+        await _saveWindowsVolume();
+        await _saveProgress(flush: true);
+        await widget.store.flushPendingWrites();
+        return {
+          'profile': widget.store.profile.id,
+          'detail': {
+            'drama': _detail.drama.toJson(),
+            'chapters': _detail.episodes.map((episode) => episode.raw).toList(),
+          },
+          'index': _index,
+          'position': _player.state.position.inMilliseconds / 1000,
+          'localOnly': widget.localOnly,
+          'allowOnlineFallback': widget.allowOnlineFallback,
+          'mediaId': widget.mediaId,
+        };
+      };
+    }
+  }
+
+  Future<void> _saveWindowsVolume() async {
+    _windowsVolumeTimer?.cancel();
+    if (_windowsVolume == null) return;
+    await widget.store.preferences.setDouble('windows_volume', _windowsVolume!);
+    await widget.store.preferences.setDouble(
+      'windows_last_volume',
+      _windowsUnmuted!,
+    );
   }
 
   void _accessChanged() {
@@ -1224,6 +1293,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   void _togglePlayback() {
+    if (Platform.isWindows && WindowsUpdateRuntime.restarting) return;
     if (_closed || _loading || _error != null) return;
     _cancelSeasonAdvance();
     _handoffOwned = false;
@@ -1332,7 +1402,8 @@ class _PlayerScreenState extends State<PlayerScreen>
   }) async {
     final detail = nextDetail ?? _detail;
     final changingSeason = !identical(detail, _detail);
-    if (_closed ||
+    if ((Platform.isWindows && WindowsUpdateRuntime.restarting) ||
+        _closed ||
         widget.store.profileEpoch != _profileEpoch ||
         (changingSeason &&
             (widget.store.locked ||
@@ -2147,6 +2218,11 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   @override
   void dispose() {
+    if (identical(WindowsUpdateRuntime.owner, this)) {
+      WindowsUpdateRuntime.owner = null;
+      WindowsUpdateRuntime.playing = null;
+      WindowsUpdateRuntime.savePlayback = null;
+    }
     _transitionWaitTimer?.cancel();
     _watchReminders?.removeListener(_reminderChanged);
     _watchReminders?.detachPlayback(this);
@@ -2167,6 +2243,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     _generation++;
     WidgetsBinding.instance.removeObserver(this);
     _saveTimer?.cancel();
+    _windowsVolumeTimer?.cancel();
+    unawaited(_saveWindowsVolume());
     _healthTimer?.cancel();
     _errorTimer?.cancel();
     _pictureInPictureExitTimer?.cancel();
@@ -2444,6 +2522,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                 : _openPanel(PlayerMenuSection.episodes),
             onSpeed: () => _openPanel(PlayerMenuSection.speed),
             onQuality: () => _openPanel(PlayerMenuSection.quality),
+            onSettings: () => _openPanel(PlayerMenuSection.settings),
             onDanmaku: _detail.drama.source == 'hongguo'
                 ? _toggleDanmaku
                 : null,

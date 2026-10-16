@@ -103,7 +103,7 @@ class AppUpdateScreen extends StatelessWidget {
                         Padding(
                           padding: EdgeInsets.all(16),
                           child: Text(
-                            'Windows 0.1.13-preview.1：基于 Android 0.1.12 已发布修复源码。保留全部站源、弹幕表情与设置、预加载与连播、全季浏览、追剧进度、搜索发现和下载。新增独立 Windows 更新渠道，支持鼠标、键盘、全屏和播放时保持亮屏。手机亮度手势、画中画与观看提醒暂不提供。测试版未签名。',
+                            'Windows 0.1.14-preview.1：桌面播放工具栏、悬浮音量与两秒自动隐藏；下载校验后可自动替换并重启，失败回滚旧版，暂停状态与进度保留。此版本尚未发布。手机亮度手势、画中画与观看提醒暂不提供。测试版未签名。',
                           ),
                         ),
                       ],
@@ -156,10 +156,10 @@ class AppUpdateScreen extends StatelessWidget {
                           onPressed: () => unawaited(controller.install()),
                           icon: Icon(
                             controller.windows
-                                ? Icons.folder_open
+                                ? Icons.restart_alt
                                 : Icons.install_mobile,
                           ),
-                          label: Text(controller.windows ? '打开下载位置' : '安装更新'),
+                          label: Text(controller.windows ? '安装并重启' : '安装更新'),
                         ),
                       if (stage == UpdateStage.permission) ...[
                         FilledButton(
@@ -219,7 +219,7 @@ class AppUpdateScreen extends StatelessWidget {
                   ),
                   Text(
                     controller.windows
-                        ? 'Windows 测试版未签名。下载并校验 ZIP 后，请退出应用并完整解压到新目录；不要单独复制 EXE。应用不会自动替换文件或运行新版本。'
+                        ? 'Windows 测试版未签名。点击安装并重启后自动校验、解压和替换完整程序目录，启动失败回滚旧版。播放中请先暂停；观看进度与配置会保存。旧版与配置备份保留在更新事务中。目录只读、占用或包含额外文件时将停止更新，不申请管理员权限。'
                         : '下载来自本项目的 GitHub Release。验证完成后，需要你确认安装；安装时请先保存或结束当前播放。返回此页可重试，观看记录不会因取消而删除。',
                   ),
                   const SizedBox(height: 8),

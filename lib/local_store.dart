@@ -46,6 +46,7 @@ class LocalStore extends ChangeNotifier {
   bool _seriesIndexReady = false;
   final _favoriteRanks = <String, int>{};
   Future<void> _writes = Future<void>.value();
+  Future<void> flushPendingWrites() => _writes;
   List<LocalProfile> _profiles = [];
   String _current = 'default';
   bool _locked = false;

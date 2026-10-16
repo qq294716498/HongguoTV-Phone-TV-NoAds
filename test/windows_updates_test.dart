@@ -129,7 +129,7 @@ void main() {
     },
   );
   test(
-    'Windows uses separate cache, ZIP downloads and manual folder action',
+    'Windows uses separate cache, ZIP download and integrated install action',
     () async {
       final temporary = await Directory.systemTemp.createTemp(
         'windows-update-',
@@ -207,7 +207,7 @@ void main() {
     expect(find.text('Windows 更新日志'), findsOneWidget);
     await tester.runAsync(updates.download);
     await tester.pumpAndSettle();
-    expect(find.text('打开下载位置'), findsOneWidget);
+    expect(find.text('安装并重启'), findsOneWidget);
     expect(find.text('安装更新'), findsNothing);
     expect(platform.installs, 0);
     expect(tester.takeException(), isNull);

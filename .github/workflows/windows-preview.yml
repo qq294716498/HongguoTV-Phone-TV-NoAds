@@ -82,6 +82,8 @@ jobs:
         run: python scripts/verify_windows_package.py
       - name: Start unpacked client with synthetic H264 and AAC media
         run: python scripts/smoke_windows.py
+      - name: Verify update commit, restart, rollback and locked-directory handling
+        run: python scripts/test_windows_transaction.py
       - name: Record Authenticode status
         shell: pwsh
         run: |
@@ -98,7 +100,7 @@ jobs:
           retention-days: 14
 
   release:
-    if: github.ref == 'refs/heads/windows/0.1.13-preview.1-final'
+    if: false
     needs: [checks, windows]
     runs-on: ubuntu-latest
     timeout-minutes: 20

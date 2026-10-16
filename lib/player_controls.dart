@@ -1,10 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/gestures.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
 import 'lan_controller.dart';
+import 'windows_player_controls.dart';
 import 'player_device_status.dart';
 import 'player_interactions.dart';
 import 'widgets.dart';
@@ -39,6 +41,7 @@ class PlayerControls extends StatefulWidget {
     this.panelOpen = false,
     this.onSeek,
     this.onDanmaku,
+    this.onSettings,
     this.onRetryDanmaku,
     this.onPush,
     this.onPictureInPicture,
@@ -74,6 +77,7 @@ class PlayerControls extends StatefulWidget {
   final bool panelOpen;
   final Future<void> Function(Duration)? onSeek;
   final Future<void> Function()? onDanmaku;
+  final Future<void> Function()? onSettings;
   final Future<void> Function()? onRetryDanmaku;
   final Future<void> Function()? onPush;
   final Future<void> Function()? onPictureInPicture;
@@ -179,6 +183,8 @@ class _PlayerControlsState extends State<PlayerControls> {
 
   void _scheduleHide() {
     _hideTimer?.cancel();
+    if (defaultTargetPlatform == TargetPlatform.windows && !widget.swipeEnabled)
+      return;
     if (!widget.enabled ||
         widget.panelOpen ||
         !widget.player.state.playing ||
@@ -256,6 +262,10 @@ class _PlayerControlsState extends State<PlayerControls> {
 
   @override
   Widget build(BuildContext context) {
+    if (defaultTargetPlatform == TargetPlatform.windows &&
+        !widget.swipeEnabled) {
+      return WindowsPlayerControls(controls: widget);
+    }
     final state = widget.player.state;
     final duration = state.duration.inMilliseconds / 1000;
     final position = state.position.inMilliseconds / 1000;
