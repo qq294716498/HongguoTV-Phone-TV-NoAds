@@ -37,7 +37,7 @@ def main():
                 if Path(name).is_absolute() or '..' in Path(name).parts:
                     raise ValueError('Unsafe package path')
             archive.extractall(bundle)
-        required = ['HongguoTV.exe', 'duanju_core.dll', 'flutter_windows.dll',
+        required = ['HongguoTV.exe', 'HongguoTV-updater.exe', 'windows-package.json', 'duanju_core.dll', 'flutter_windows.dll',
                     'libffmpegkit.dll', 'libmpv-2.dll', 'msvcp140.dll',
                     'vcruntime140.dll', 'vcruntime140_1.dll', 'libEGL.dll',
                     'libGLESv2.dll', 'd3dcompiler_47.dll', 'data/icudtl.dat',
@@ -81,6 +81,9 @@ def main():
                     if missing_imports:
                         raise ValueError(file.name + ' missing imported DLLs: ' + ', '.join(missing_imports))
                     record.update(machine='AMD64', imports=sorted(imports))
+                    if file.name == 'HongguoTV-updater.exe' and any(
+                            name.startswith(('vcruntime', 'msvcp', 'flutter', 'libstdc++', 'libgcc')) for name in imports):
+                        raise ValueError('Update helper must run independently of application DLLs')
                     if file.name == 'HongguoTV.exe':
                         info = binary.VS_FIXEDFILEINFO[0]
                         actual = (info.FileVersionMS >> 16, info.FileVersionMS & 65535,
@@ -88,6 +91,13 @@ def main():
                         if actual != expected_version:
                             raise ValueError(f'Wrong executable version: {actual}')
             records.append(record)
+        ownership = json.loads((bundle / 'windows-package.json').read_text(encoding='utf-8'))
+        if ownership['version'] != version or ownership['build'] != int(build) or ownership['architecture'] != 'x64':
+            raise ValueError('Wrong update ownership manifest')
+        actual_files = {record['path']: {'bytes': record['bytes'], 'sha256': record['sha256']}
+                        for record in records if record['path'] != 'windows-package.json'}
+        if ownership['files'] != actual_files:
+            raise ValueError('Update ownership manifest does not match bundle contents')
         subprocess.run([sys.executable, '-c',
                         'import ctypes, os, sys; from pathlib import Path; '
                         'p=Path(sys.argv[1]); handle=os.add_dll_directory(str(p)); '
