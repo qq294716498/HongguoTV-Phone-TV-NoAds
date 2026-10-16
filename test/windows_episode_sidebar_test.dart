@@ -77,7 +77,7 @@ void main() {
   setUp(mockPlayerDevice);
   final windows = TargetPlatformVariant.only(TargetPlatform.windows);
   final sidebar = find.byKey(const ValueKey('windows-episode-sidebar'));
-  final picker = find.byKey(const ValueKey('player-episodes'));
+  final picker = find.byKey(const ValueKey('windows-episode-toggle'));
   final toggle = find.byKey(const ValueKey('windows-episode-toggle'));
   final detail = DramaDetail(
     const Drama(
@@ -366,6 +366,16 @@ void main() {
         await frames(tester);
         expect(tester.state(find.byType(PlayerControls)), same(playerState));
         expect(find.byTooltip('返回原窗口'), findsOneWidget);
+        expect(find.byTooltip('退出红果TV'), findsOneWidget);
+        expect(find.byKey(const ValueKey('player-episodes')), findsNothing);
+        await tester.drag(
+          find.byKey(const ValueKey('windows-mini-drag')),
+          const Offset(35, 10),
+        );
+        expect(
+          harness.calls.any((call) => call.method == 'startDragging'),
+          true,
+        );
         expect(find.text('合成选集 · 第 1 集'), findsOneWidget);
         expect(sidebar, findsNothing);
         await harness.desktop.setFullscreen(true);

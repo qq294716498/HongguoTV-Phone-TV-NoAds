@@ -9,6 +9,7 @@ class DesktopHarness {
   final calls = <MethodCall>[];
   bool visible = true, topmost = false, fullscreen = false, maximized = false;
   bool trayAvailable = true;
+  String titleBar = 'normal';
   void Function(int)? exitProcess;
   Map<String, double> bounds = {
     'x': 100,
@@ -44,6 +45,8 @@ class DesktopHarness {
               topmost = call.arguments['isAlwaysOnTop'];
             case 'setFullScreen':
               fullscreen = call.arguments['isFullScreen'];
+            case 'setTitleBarStyle':
+              titleBar = call.arguments['titleBarStyle'];
             case 'maximize':
               maximized = true;
             case 'unmaximize':
@@ -179,9 +182,17 @@ void main() {
             expect(harness.desktop.playbackOwner, same(owner));
             expect(harness.topmost, true);
             expect(harness.fullscreen, false);
+            expect(harness.titleBar, 'hidden');
+            expect(
+              harness.calls
+                  .lastWhere((call) => call.method == 'setTitleBarStyle')
+                  .arguments['windowButtonVisibility'],
+              false,
+            );
             expect(harness.bounds['width'], 480);
             await harness.desktop.leaveMini();
             expect(harness.bounds, harness.original);
+            expect(harness.titleBar, 'normal');
             expect(harness.topmost, false);
             expect(harness.maximized, maximized);
             expect(harness.fullscreen, fullscreen);

@@ -4,6 +4,23 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:duanju_app/app_updates.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'app_update_transport_test.dart'
+    show TestClient, TestRequest, TestResponse;
+
+class RateLimitedWindowsClient extends TestClient {
+  RateLimitedWindowsClient(this.delegate) : super([]);
+  final HttpClient delegate;
+  @override
+  Future<HttpClientRequest> getUrl(Uri url) async {
+    if (url.toString() == windowsUpdateApi) {
+      return TestRequest(TestResponse([], statusCode: 403));
+    }
+    return delegate.getUrl(url);
+  }
+
+  @override
+  void close({bool force = false}) => delegate.close(force: force);
+}
 
 void main() {
   test(
@@ -23,6 +40,16 @@ void main() {
         metadata,
         const InstalledApp(version: '0.1.12', code: 36, abi: 'windows-x64'),
       )!;
+      final fallback = await GithubUpdateTransport(
+        windows: true,
+        clientFactory: () => RateLimitedWindowsClient(client()),
+      ).latest();
+      expect(fallback['tag_name'], expectedTag);
+      final fallbackRelease = AppRelease.parseWindows(
+        fallback,
+        const InstalledApp(version: '0.1.14', code: 39, abi: 'windows-x64'),
+      )!;
+      expect(fallbackRelease.validation, release.validation);
       expect(release.code, int.parse(expectedTag.split('-').last));
       expect(metadata['prerelease'], false);
       expect(
@@ -86,6 +113,7 @@ void main() {
           'sameBuildIgnored': true,
           'androidRejectsWindowsTag': true,
           'windowsPrerelease': false,
+          'rateLimitFallbackVerified': true,
           'realCrossVersionInstallationTested': false,
         }),
       );

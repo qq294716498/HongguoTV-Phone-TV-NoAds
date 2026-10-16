@@ -101,6 +101,24 @@ bool FlutterWindow::OnCreate() {
       values[flutter::EncodableValue("windowBrandIcon")] = flutter::EncodableValue(brand != nullptr && window_icon == brand);
       values[flutter::EncodableValue("trayBrandIcon")] = flutter::EncodableValue(tray_active_ && tray_icon_ == brand && brand != nullptr);
       result->Success(flutter::EncodableValue(values));
+    } else if (call.method_name() == "windowGeometry") {
+      RECT bounds;
+      POINT origin = {0, 0};
+      GetWindowRect(GetHandle(), &bounds);
+      ClientToScreen(GetHandle(), &origin);
+      const auto edge = SendMessageW(GetHandle(), WM_NCHITTEST, 0,
+        MAKELPARAM(bounds.right - 2, bounds.bottom - 2));
+      bool caption_buttons = false;
+      for (const int offset : {20, 65, 110}) {
+        const auto hit = SendMessageW(GetHandle(), WM_NCHITTEST, 0,
+          MAKELPARAM(bounds.right - offset, bounds.top + 15));
+        caption_buttons = caption_buttons || hit == HTCLOSE || hit == HTMINBUTTON || hit == HTMAXBUTTON;
+      }
+      flutter::EncodableMap values;
+      values[flutter::EncodableValue("captionInset")] = flutter::EncodableValue(static_cast<int>(origin.y - bounds.top));
+      values[flutter::EncodableValue("resizeBorder")] = flutter::EncodableValue(edge == HTBOTTOMRIGHT);
+      values[flutter::EncodableValue("captionButtons")] = flutter::EncodableValue(caption_buttons);
+      result->Success(flutter::EncodableValue(values));
     } else if (call.method_name() == "dispose") {
       RemoveTray();
       result->Success();

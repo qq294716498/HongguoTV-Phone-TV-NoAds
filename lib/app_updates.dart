@@ -19,6 +19,8 @@ const updatePage = 'https://github.com/$updateRepository/releases/latest';
 const windowsUpdateApi =
     'https://api.github.com/repos/$updateRepository/releases?per_page=100';
 const windowsUpdatePage = 'https://github.com/$updateRepository/releases';
+const windowsUpdateMirror =
+    'https://raw.githubusercontent.com/$updateRepository/windows-stable-channel/windows-stable.json';
 final windowsUpdateTag = RegExp(r'^windows-v(\d+\.\d+\.\d+)-(\d+)$');
 const updateMaximumBytes = 256 * 1024 * 1024;
 const updateAbiOffsets = {
@@ -201,7 +203,9 @@ bool trustedUpdateUrl(
     return false;
   }
   if (metadata) {
-    return uri.toString() == updateApi || uri.toString() == windowsUpdateApi;
+    return uri.toString() == updateApi ||
+        uri.toString() == windowsUpdateApi ||
+        uri.toString() == windowsUpdateMirror;
   }
   if (uri.host == 'github.com') {
     return uri.query.isEmpty &&
@@ -256,8 +260,10 @@ class GithubUpdateTransport implements UpdateTransport {
         HttpHeaders.acceptHeader,
         metadata ? 'application/vnd.github+json' : 'application/octet-stream',
       );
-      if (metadata) {
+      if (metadata && uri.host == 'api.github.com') {
         request.headers.set('X-GitHub-Api-Version', '2022-11-28');
+      }
+      if (metadata) {
         request.headers.set(HttpHeaders.cacheControlHeader, 'no-cache');
       }
       final response = await request.close().timeout(
@@ -271,6 +277,7 @@ class GithubUpdateTransport implements UpdateTransport {
         continue;
       }
       if (response.statusCode != 200) {
+        await response.drain<void>().timeout(const Duration(seconds: 5));
         throw HttpException(
           response.statusCode == 403 || response.statusCode == 429
               ? 'GitHub 暂时限流，请稍后手动重试'
@@ -301,30 +308,40 @@ class GithubUpdateTransport implements UpdateTransport {
   Future<Map<String, dynamic>> latest() async {
     final client = _begin();
     try {
-      return await (() async {
-        final response = await _open(
+      try {
+        final data = await _metadata(
           client,
-          Uri.parse(windows ? windowsUpdateApi : updateApi),
-          metadata: true,
+          windows ? windowsUpdateApi : updateApi,
         );
-        final bytes = <int>[];
-        await for (final chunk in response.timeout(
-          const Duration(seconds: 15),
-        )) {
-          bytes.addAll(chunk);
-          if (bytes.length > 1024 * 1024) throw const FormatException('更新信息过大');
-        }
-        final data = jsonDecode(utf8.decode(bytes));
         if (windows) return selectWindowsRelease(data);
         if (data is! Map<String, dynamic>) {
           throw const FormatException('更新信息格式错误');
         }
         return data;
-      })().timeout(const Duration(seconds: 45));
+      } on HttpException {
+        if (!windows) rethrow;
+      } on SocketException {
+        if (!windows) rethrow;
+      } on TimeoutException {
+        if (!windows) rethrow;
+      }
+      return parseWindowsMirror(await _metadata(client, windowsUpdateMirror));
     } finally {
       client.close(force: true);
       if (identical(_active, client)) _active = null;
     }
+  }
+
+  Future<Object?> _metadata(HttpClient client, String url) async {
+    return (() async {
+      final response = await _open(client, Uri.parse(url), metadata: true);
+      final bytes = <int>[];
+      await for (final chunk in response.timeout(const Duration(seconds: 15))) {
+        bytes.addAll(chunk);
+        if (bytes.length > 1024 * 1024) throw const FormatException('更新信息过大');
+      }
+      return jsonDecode(utf8.decode(bytes));
+    })().timeout(const Duration(seconds: 45));
   }
 
   @override
@@ -381,6 +398,20 @@ class GithubUpdateTransport implements UpdateTransport {
     _cancelled = true;
     _active?.close(force: true);
   }
+}
+
+Map<String, dynamic> parseWindowsMirror(Object? data) {
+  if (data is! Map<String, dynamic> ||
+      data['schema'] != 1 ||
+      data['release'] is! Map<String, dynamic>) {
+    throw const FormatException('Windows 更新清单格式错误');
+  }
+  final release = data['release'] as Map<String, dynamic>;
+  AppRelease.parseWindows(
+    release,
+    const InstalledApp(version: '0.0.0', code: 0, abi: 'windows-x64'),
+  );
+  return release;
 }
 
 Map<String, dynamic> selectWindowsRelease(Object? data) {

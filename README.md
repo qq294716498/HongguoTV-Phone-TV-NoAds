@@ -2,14 +2,17 @@
 
 基于 [guoapp](https://github.com/zhoufuweigg/guoapp) 的非官方独立客户端。手机与 Android TV 共用 Android 应用，另提供 Windows x64 独立客户端。支持短剧浏览、搜索、在线播放、追剧和下载。
 
-## Windows 正式版：0.1.14+39
+## Windows 正式版：0.1.15+40
 
-基于已发布 Android `app-v0.1.12-36`（`48d081cd916d01f41f6e9d0d543b0ae9d3e20026`）及 Windows `0.1.14-preview.1+38` 候选源码增量适配。远端 `main` 的应用源码可能较旧，请使用对应发布标签。
+本次补丁修复迷你窗仍显示系统标题行、底部选集入口重复，以及 GitHub Release API 限流时无法检查更新的问题；不更改已发布 0.1.14+39 资产。
 
-- [Windows 正式版发布页](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/windows-v0.1.14-39)。仅在必要检查全部通过后发布；结果以 [Windows CI](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/workflows/windows-preview.yml) 和对应资产为准。
+基于已发布 Android `app-v0.1.12-36`（`48d081cd916d01f41f6e9d0d543b0ae9d3e20026`）及已发布 Windows `windows-v0.1.14-39`（`64cc42f441453915bb0a4dab93f3b075ced5bfa2`）源码增量适配。远端 `main` 的应用源码可能较旧，请使用对应发布标签。
+
+- [Windows 正式版发布页](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/windows-v0.1.15-40)。仅在必要检查全部通过后发布；结果以 [Windows CI](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/workflows/windows-preview.yml) 和对应资产为准。
+- [完整 Windows x64 ZIP 下载](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.15-40/HongguoTV-0.1.15-windows-x64.zip) · [SHA-256 校验清单](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.15-40/SHA256SUMS.txt) · [对应纯源码 ZIP](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.15-40/HongguoTV-0.1.15-source.zip)。
 - Windows 10 / 11 x64 完整 ZIP 包含 `HongguoTV.exe`、更新助手、Go 核心、Flutter、mpv、FFmpeg、ANGLE、VC 运行库及资源；不提供 ARM64 / 32 位包。完整解压到可写目录后运行，不要只复制 EXE；不需要安装 Flutter、Go 或 FFmpeg。
-- 未签名，无 Windows 签名证书。独立正式标签 `windows-v0.1.14-39`，`prerelease=false`、`make_latest=false`；Android Latest 和原 Android 资产保持不变。
-- 首次从 0.1.13 / 0.1.14 预览版迁移需手动下载完整正式包；旧预览客户端只查预览渠道。0.1.14 正式版随后只检查 Windows 正式渠道，下载与安装需明确操作。
+- 未签名，无 Windows 签名证书。独立正式标签 `windows-v0.1.15-40`，`prerelease=false`、`make_latest=false`；Android Latest 和原 Android 资产保持不变。
+- 首次从 0.1.13 / 0.1.14 预览版迁移需手动下载完整正式包；旧预览客户端只查预览渠道。0.1.15 正式版只检查 Windows 正式渠道；Release API 限流或网络失败时备用读取本仓库的静态正式更新清单，仍验证完整 ZIP 大小和 SHA-256；0.1.14 客户端在限流时首次升级需手动下载完整包。下载与安装需明确操作。
 
 ### Windows 功能与交互
 
@@ -19,10 +22,10 @@
 | 弹幕与表情 | 保留内置表情、重复合并、透明度和开关；Windows 字号按播放器内实际视频逻辑区域自适应（12–28 逻辑像素），使用相同文字/表情比例，不按源视频分辨率或整块屏幕缩放。窗口、侧栏、全屏、迷你窗和 DPI 变化保留弹幕身份与当前位置；速度独立于视频倍速，0.5/0.75/1/1.15/1.25/1.5/2 倍，保存到播放偏好 |
 | 预加载、下一集、下一季 | 保留共用状态机、预缓冲、跨季选择与续播提示 |
 | 播放控件 | 更薄的透明底栏，正常布局约 58px、背景 40% 不透明；控制栏不压暗整幅视频；普通操作提示在底部。鼠标离开后一秒隐藏，移回/点击可唤出；拖进度/音量、菜单和键盘焦点操作期间保持。音量悬停/获焦向上展开，点击静音/恢复；快进、倍速、前后集、弹幕与完整播放设置保留 |
-| 选集栏、剧名 | 展开/收起入口位于视频右缘垂直中间；底部选集按钮打开选集/全季。记住展开偏好、分页和滚动位置；窄窗、全屏与迷你窗让出视频空间。标题按实际剧集号显示“第 N 集”，随切集切季更新 |
+| 选集栏、剧名 | 展开/收起入口位于视频右缘垂直中间；按用户反馈移除底部重复四宫格按钮，窄窗/全屏/迷你窗仍可用右缘入口打开选集/全季。记住展开偏好、分页和滚动位置；窄窗、全屏与迷你窗让出视频空间。标题按实际剧集号显示“第 N 集”，随切集切季更新 |
 | 键盘 | 空格播放/暂停；← 后退 5 秒；→ 短按前进 5 秒、长按临时 3 倍速；↑↓ 应用音量；M 静音；F/F11 全屏；Esc 返回原窗口/退出全屏；Tab 移动焦点 |
 | 托盘 | 默认关闭窗口进入系统托盘，保持关闭前的播放/暂停状态和预加载；右键恢复、播放/暂停或“退出红果TV”。设置可关闭此行为，改为直接退出；设置中另有明确退出入口。无托盘时关闭直接退出 |
-| 迷你窗 | 播放页进入，默认置顶，可拖动与调整大小；复用同一 Player / VideoController，不重开视频。返回时恢复位置、大小、最大化、置顶与全屏状态；可转全屏 |
+| 迷你窗 | 播放页进入，默认置顶，隐藏系统标题/最小化/最大化/关闭行；唤出控件后可拖动顶部剧名区域，保留边框缩放、返回原窗口和退出按钮；复用同一 Player / VideoController，不重开视频。返回时恢复位置、大小、最大化、置顶与全屏状态；可转全屏 |
 | 手机专属功能 | 无手机亮度/系统音量手势、Android 画中画、电量状态或每日时长/睡觉提醒；使用桌面控件、托盘和迷你窗。普通窗口最小化仍暂停；关闭进托盘继续保持原状态 |
 | 下载、合并、备份、网络与资源设置 | 保留设备端逻辑；真正退出后无独立下载服务。局域网首次使用可能受系统防火墙限制 |
 | 更新与日志 | 设置中自动/手动检查 Windows 正式版、显示日志；校验完整 ZIP 大小/SHA-256 后“安装并重启”，失败回滚。播放/连播准备中拒绝重启，暂停后保存进度和配置；更新退出绕过托盘 |
@@ -120,7 +123,7 @@
 | 平台 | 状态 |
 | --- | --- |
 | Android 手机 / Android TV | 已发布 0.1.12 三架构正式安装包 |
-| Windows | 独立 Windows x64 正式渠道；0.1.14+39 的构建、运行验证结果及下载以正式发布页为准 |
+| Windows | 独立 Windows x64 正式渠道；0.1.15+40 的构建、运行验证结果及下载以正式发布页为准 |
 | iOS | 保留工程与构建支持，尚无本次已签名安装包 |
 
 正式发布前执行自动化检查、安装包校验和更新下载验证；真实手机 / TV 的覆盖安装、实际播放与长时间连播仍待验收。
@@ -131,7 +134,7 @@
 
 应用“关于”注明 [qq294716498 的维护仓库](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds)，展示 GitHub API 确认的公开头像（已打包，离线可用，加载失败显示默认头像），并保留上游与依赖许可。
 
-本软件免费提供，仅供学习交流，请勿付费购买，谨防盗卖。学习用途不免除内容版权与许可义务。Android 手机 / TV 与 Windows 首次启动显示来源提示，点击“我知道了”后以全局、跨版本标记保存；覆盖更新或切换用户不重弹，卸载清数据可再次显示。
+本软件免费提供，仅供学习交流，请勿付费购买，谨防盗卖。学习用途不免除内容版权与许可义务。该共享实现已纳入 Windows 正式包及对应 Android 源码，现有 Android 0.1.12 安装包尚未包含，待原证书签名发布。首次启动显示来源提示，点击“我知道了”后以全局、跨版本标记保存；覆盖更新或切换用户不重弹，卸载清数据可再次显示。
 
 Windows 主程序、更新助手、窗口、任务栏与托盘统一使用当前 Android Manifest 实际引用的 `drawable/app_icon → drawable-nodpi/hongguo_logo.png`，不使用未被引用的默认 mipmap。ICO 含 16–256 多尺寸，构建验证逐个检查 EXE 内嵌帧与来源校验和。
 

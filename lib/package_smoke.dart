@@ -150,6 +150,15 @@ Future<void> runPackageSmoke(List<String> arguments) async {
       await desktop.enterMini();
       if (!await windowManager.isAlwaysOnTop() || !desktop.mini)
         throw StateError('Mini not topmost');
+      final miniGeometry = await desktop.channel
+          .invokeMapMethod<String, dynamic>('windowGeometry');
+      if ((miniGeometry?['captionInset'] as int? ?? 100) > 4 ||
+          miniGeometry?['resizeBorder'] != true ||
+          miniGeometry?['captionButtons'] != false) {
+        throw StateError(
+          'Mini native caption or resize border incorrect: $miniGeometry',
+        );
+      }
       await windowManager.setSize(const Size(520, 340));
       final resized = await windowManager.getSize();
       if ((resized.width - 520).abs() > 2 || (resized.height - 340).abs() > 2)
@@ -158,6 +167,13 @@ Future<void> runPackageSmoke(List<String> arguments) async {
       if (desktop.mini || !await windowManager.isFullScreen())
         throw StateError('Mini to fullscreen failed');
       await desktop.setFullscreen(false);
+      final normalGeometry = await desktop.channel
+          .invokeMapMethod<String, dynamic>('windowGeometry');
+      if ((normalGeometry?['captionInset'] as int? ?? 0) < 20) {
+        throw StateError(
+          'Normal native caption was not restored: $normalGeometry',
+        );
+      }
       final restored = await windowManager.getBounds();
       if ((restored.width - originalBounds.width).abs() > 2 ||
           (restored.height - originalBounds.height).abs() > 2 ||
@@ -165,6 +181,9 @@ Future<void> runPackageSmoke(List<String> arguments) async {
         throw StateError('Window state restoration failed');
     }
     evidence['miniReuseResizeRestore'] = true;
+    evidence['miniNativeCaptionHidden'] = true;
+    evidence['miniNativeResizeBorder'] = true;
+    evidence['normalNativeCaptionRestored'] = true;
     await player.play();
     var toggles = 0;
     desktop.togglePlayback = () {

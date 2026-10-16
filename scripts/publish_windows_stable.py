@@ -1,10 +1,12 @@
 import hashlib
+import base64
 import json
 import os
 import re
 import shutil
 import subprocess
 import sys
+import urllib.request
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
@@ -31,6 +33,73 @@ def read_json(name):
     return json.loads((output / name).read_text(encoding='utf-8-sig'))
 
 
+def release_identity(value):
+    return {**{name: value[name] for name in ['id', 'tag_name', 'target_commitish', 'draft', 'prerelease']},
+            'assets': sorted([{name: asset[name] for name in ['id', 'name', 'size', 'digest']}
+                              for asset in value['assets']], key=lambda asset: asset['id'])}
+
+
+def publish_channel(tag, version, build):
+    published = json.loads(github('api', f'repos/{repository}/releases/tags/{tag}'))
+    if published['draft'] or published['prerelease'] or published['tag_name'] != tag:
+        raise ValueError('Only a published Windows stable release can enter the fallback channel')
+    expected = f'HongguoTV-{version}-windows-x64.zip'
+    assets = [item for item in published['assets'] if item['name'] == expected]
+    validation = read_json('Windows-validation.json')
+    if len(assets) != 1 or assets[0]['size'] != validation['bytes'] or assets[0]['digest'] != 'sha256:' + validation['sha256']:
+        raise ValueError('Public Windows package does not match the validated package')
+    asset = assets[0]
+    url = f'https://github.com/{repository}/releases/download/{tag}/{expected}'
+    if asset['browser_download_url'] != url:
+        raise ValueError('Unexpected public Windows package URL')
+    digest = hashlib.sha256()
+    received = 0
+    with urllib.request.urlopen(url, timeout=60) as response:
+        while chunk := response.read(1024 * 1024):
+            received += len(chunk)
+            if received > asset['size']:
+                raise ValueError('Public Windows download exceeds declared size')
+            digest.update(chunk)
+    if received != asset['size'] or digest.hexdigest() != validation['sha256']:
+        raise ValueError('Public Windows download failed checksum verification')
+    release = {name: published[name] for name in ['tag_name', 'draft', 'prerelease', 'body']}
+    release['assets'] = [{name: item[name] for name in
+                          ['name', 'size', 'digest', 'state', 'browser_download_url']} for item in assets]
+    manifest = {'schema': 1, 'release': release}
+    encoded = json.dumps(manifest, ensure_ascii=False, indent=2).encode('utf-8') + b'\n'
+    branch = 'windows-stable-channel'
+    path = f'repos/{repository}/contents/windows-stable.json'
+    previous = subprocess.run(['gh', 'api', path + '?ref=' + branch], capture_output=True, text=True)
+    payload = {'message': f'Publish verified Windows stable update channel {tag}',
+               'branch': branch, 'content': base64.b64encode(encoded).decode('ascii')}
+    if previous.returncode == 0:
+        current = json.loads(previous.stdout)
+        old = json.loads(base64.b64decode(current['content']))
+        match = re.fullmatch(r'windows-v\d+\.\d+\.\d+-(\d+)', old['release']['tag_name'])
+        if not match or int(match[1]) > int(build):
+            raise ValueError('Refusing to replace a newer Windows update channel')
+        if int(match[1]) == int(build) and old != manifest:
+            raise ValueError('Refusing to replace existing update metadata for the same build')
+        payload['sha'] = current['sha']
+    elif '404' in previous.stderr:
+        ref = subprocess.run(['gh', 'api', f'repos/{repository}/git/ref/heads/{branch}'], capture_output=True, text=True)
+        if ref.returncode != 0:
+            if '404' not in ref.stderr:
+                raise ValueError('Unable to read the Windows channel branch: ' + ref.stderr)
+            github('api', '--method', 'POST', f'repos/{repository}/git/refs',
+                   '-f', 'ref=refs/heads/' + branch, '-f', 'sha=' + os.environ['GITHUB_SHA'])
+    else:
+        raise ValueError('Unable to read the Windows update channel: ' + previous.stderr)
+    request_file = Path(os.environ['RUNNER_TEMP']) / 'windows-channel-request.json'
+    request_file.write_text(json.dumps(payload), encoding='utf-8')
+    result = json.loads(github('api', '--method', 'PUT', path, '--input', str(request_file)))
+    write_json('Windows-update-channel.json', {
+        'ok': True, 'tag': tag, 'branch': branch, 'commit': result['commit']['sha'],
+        'manifestSha256': hashlib.sha256(encoded).hexdigest(),
+        'publicPackageBytes': received, 'publicPackageSha256': digest.hexdigest(),
+        'url': f'https://raw.githubusercontent.com/{repository}/{branch}/windows-stable.json'})
+
+
 def main():
     os.chdir(root)
     version, build = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(encoding='utf-8'), re.MULTILINE).group(1).split('+')
@@ -39,7 +108,7 @@ def main():
     tag = f'windows-v{version}-{build}'
     package = output / f'HongguoTV-{version}-windows-x64.zip'
     if sys.argv[1] == 'stage':
-        current_head = json.loads(github('api', f'repos/{repository}/git/ref/heads/windows/0.1.14-stable-final'))['object']['sha']
+        current_head = json.loads(github('api', f'repos/{repository}/git/ref/heads/windows/0.1.15-stable-40'))['object']['sha']
         if current_head != os.environ['GITHUB_SHA']:
             raise ValueError('A newer source commit superseded this release candidate')
         validation = read_json('Windows-validation.json')
@@ -63,7 +132,7 @@ def main():
             raise ValueError('Validated package bytes changed')
         for field in ['ok', 'nativeCore', 'preferences', 'bundledAssets', 'ffprobe', 'remux',
                       'flutterWindow', 'videoFrameRendered', 'seekRateVolume', 'playbackPower',
-                      'fullscreen', 'miniReuseResizeRestore', 'nativeTrayHidden', 'trayKeepsPlaying', 'nativeTrayRestored', 'nativeTrayQuit', 'playerUiDetached', 'playerDisposedBeforeExit', 'windowBrandIcon', 'trayBrandIcon', 'firstLaunchNoticeVisible', 'mediaKitPlayback', 'cleanPath', 'nonAsciiPath', 'differentWorkingDirectory', 'javaEnvironmentRemoved', 'normalAppStartup', 'remoteImagesDisabled']:
+                      'fullscreen', 'miniReuseResizeRestore', 'miniNativeCaptionHidden', 'miniNativeResizeBorder', 'normalNativeCaptionRestored', 'nativeTrayHidden', 'trayKeepsPlaying', 'nativeTrayRestored', 'nativeTrayQuit', 'playerUiDetached', 'playerDisposedBeforeExit', 'windowBrandIcon', 'trayBrandIcon', 'firstLaunchNoticeVisible', 'mediaKitPlayback', 'cleanPath', 'nonAsciiPath', 'differentWorkingDirectory', 'javaEnvironmentRemoved', 'normalAppStartup', 'remoteImagesDisabled']:
             if smoke.get(field) is not True:
                 raise ValueError('Missing Windows smoke check: ' + field)
         if smoke.get('nativeTrayToggles') != 2:
@@ -75,6 +144,7 @@ def main():
         exists = subprocess.run(['gh', 'release', 'view', tag], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if exists.returncode == 0:
             raise ValueError('Release exists; never replace published assets')
+        write_json('Windows-previous-release.json', release_identity(json.loads(github('api', f'repos/{repository}/releases/tags/windows-v0.1.14-39'))))
         android = metadata()
         if not android['tag'].startswith('app-v'):
             raise ValueError('Android latest is not an Android release')
@@ -126,24 +196,35 @@ def main():
             raise ValueError('Stable channel publication or Android isolation failed')
         with Path(os.environ['GITHUB_ENV']).open('a', encoding='utf-8') as stream:
             stream.write(f'EXPECTED_WINDOWS_TAG={tag}\nEXPECTED_ANDROID_TAG={android["tag"]}\n')
+    elif sys.argv[1] == 'channel':
+        publish_channel(tag, version, build)
     elif sys.argv[1] == 'finalize':
         isolation = read_json('Android-isolation.json')
         after = metadata()
         if isolation['before'] != after:
             raise ValueError('Android Latest or original assets changed during Windows release')
+        previous_windows = json.loads(github('api', f'repos/{repository}/releases/tags/windows-v0.1.14-39'))
+        if release_identity(previous_windows) != read_json('Windows-previous-release.json'):
+            raise ValueError('Previously published Windows release changed during patch publication')
         update = read_json('Windows-update-check.json')
         if update['ok'] is not True or update['windowsTag'] != tag or update['androidLatest'] != after['tag']:
             raise ValueError('Actual update download or channel isolation failed')
         published = json.loads(github('api', f'repos/{repository}/releases/tags/{tag}'))
         if published['draft'] or published['prerelease'] or update.get('windowsPrerelease') is not False:
             raise ValueError('Public Windows release is not stable')
-        isolation.update(after=after, ok=True, windowsPrerelease=False, windowsMarkedLatest=False)
+        channel = read_json('Windows-update-channel.json')
+        if channel.get('ok') is not True or channel.get('tag') != tag or update.get('rateLimitFallbackVerified') is not True:
+            raise ValueError('Windows fallback update channel has not been verified')
+        isolation.update(after=after, ok=True, windowsPrerelease=False, windowsMarkedLatest=False,
+                         previousWindowsTag='windows-v0.1.14-39', previousWindowsUnchanged=True)
         write_json('Android-isolation.json', isolation)
         files = sorted(file for file in output.iterdir() if file.is_file() and file.name != 'SHA256SUMS.txt')
         (output / 'SHA256SUMS.txt').write_text(''.join(
             f'{hashlib.file_digest(file.open("rb"), "sha256").hexdigest()}  {file.name}\n' for file in files), encoding='ascii')
         subprocess.run(['gh', 'release', 'upload', tag,
                         str(output / 'Android-isolation.json'), str(output / 'Windows-update-check.json'),
+                        str(output / 'Windows-update-channel.json'),
+                        str(output / 'Windows-previous-release.json'),
                         str(output / 'SHA256SUMS.txt')], check=True)
     else:
         raise ValueError('Expected stage or finalize')

@@ -48,6 +48,90 @@ void main() {
     code: 37,
     abi: 'windows-x64',
   );
+  test(
+    'Windows rate limits fall back to validated same-repository metadata',
+    () async {
+      for (final status in [403, 429, 503]) {
+        final data = windowsRelease(build: 40);
+        final client = TestClient([
+          TestResponse([], statusCode: status),
+          TestResponse([
+            utf8.encode(jsonEncode({'schema': 1, 'release': data})),
+          ]),
+        ]);
+        final result = await GithubUpdateTransport(
+          windows: true,
+          clientFactory: () => client,
+        ).latest();
+        expect(AppRelease.parseWindows(result, windowsInstalled)!.code, 40);
+        expect(client.urls.map((uri) => uri.toString()), [
+          windowsUpdateApi,
+          windowsUpdateMirror,
+        ]);
+      }
+    },
+  );
+  test(
+    'Windows fallback rejects altered schema, channel, hash and URL',
+    () async {
+      final data = windowsRelease(build: 40);
+      final asset = (data['assets'] as List).single as Map;
+      for (final manifest in [
+        {'schema': 2, 'release': data},
+        {'schema': 1, 'release': releaseJson()},
+        {
+          'schema': 1,
+          'release': {...data, 'prerelease': true},
+        },
+        {
+          'schema': 1,
+          'release': {
+            ...data,
+            'assets': [
+              {...asset, 'digest': 'missing'},
+            ],
+          },
+        },
+        {
+          'schema': 1,
+          'release': {
+            ...data,
+            'assets': [
+              {...asset, 'browser_download_url': 'https://example.com/app.zip'},
+            ],
+          },
+        },
+      ]) {
+        final client = TestClient([
+          TestResponse([], statusCode: 403),
+          TestResponse([utf8.encode(jsonEncode(manifest))]),
+        ]);
+        await expectLater(
+          GithubUpdateTransport(
+            windows: true,
+            clientFactory: () => client,
+          ).latest(),
+          throwsFormatException,
+        );
+      }
+      final client = TestClient([
+        TestResponse([], statusCode: 403),
+        TestResponse(
+          [],
+          statusCode: 302,
+          headers: {'location': 'https://example.com/metadata'},
+        ),
+      ]);
+      await expectLater(
+        GithubUpdateTransport(
+          windows: true,
+          clientFactory: () => client,
+        ).latest(),
+        throwsFormatException,
+      );
+      expect(client.urls, hasLength(2));
+    },
+  );
   test('Windows and Android refuse each other tags and release channels', () {
     final data = windowsRelease();
     expect(() => AppRelease.parse(data, installed), throwsFormatException);

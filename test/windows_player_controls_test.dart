@@ -52,7 +52,6 @@ void main() {
           'player-desktop-forward',
           'windows-volume',
           'player-speed',
-          'player-episodes',
           'windows-settings',
           'player-fullscreen',
           'windows-player-feedback',
@@ -63,6 +62,7 @@ void main() {
             reason: id,
           );
         }
+        expect(find.byKey(const ValueKey('player-episodes')), findsNothing);
         final center = const Rect.fromLTWH(300, 150, 400, 300);
         for (final button in tester.widgetList<IconButton>(
           find.byType(IconButton),

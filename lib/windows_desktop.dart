@@ -140,6 +140,10 @@ class WindowsDesktop extends ChangeNotifier
     fullscreen = false;
     notifyListeners();
     try {
+      await manager.setTitleBarStyle(
+        TitleBarStyle.hidden,
+        windowButtonVisibility: false,
+      );
       await manager.setMinimumSize(const Size(360, 240));
       await manager.setAlwaysOnTop(true);
       await manager.setBounds(
@@ -147,7 +151,7 @@ class WindowsDesktop extends ChangeNotifier
           _bounds!.left,
           _bounds!.top,
           480,
-          (480 / aspectRatio + 32).clamp(270, 600),
+          (480 / aspectRatio).clamp(240, 600),
         ),
       );
       await manager.show();
@@ -161,6 +165,7 @@ class WindowsDesktop extends ChangeNotifier
   Future<void> _leaveMini({bool restoreFullscreen = true}) async {
     if (!mini) return;
     await manager.setFullScreen(false);
+    await manager.setTitleBarStyle(TitleBarStyle.normal);
     await manager.setAlwaysOnTop(_topmost);
     await manager.setMinimumSize(const Size(800, 600));
     if (_bounds != null) await manager.setBounds(_bounds!);

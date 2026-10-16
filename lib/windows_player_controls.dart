@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import 'player_controls.dart';
 import 'widgets.dart';
+import 'windows_desktop.dart';
 
 class WindowsPlayerControls extends StatefulWidget {
   const WindowsPlayerControls({super.key, required this.controls});
@@ -545,12 +546,6 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
                             child: Text('${c.speed}x'),
                           ),
                         ),
-                        _button(
-                          'player-episodes',
-                          '选集 / 查看全季',
-                          Icons.grid_view_rounded,
-                          () => _panel(c.onEpisodes),
-                        ),
                         _volume(),
                         if (c.onPush != null)
                           _button(
@@ -565,7 +560,7 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
                           Icons.tune_rounded,
                           () => _panel(c.onSettings ?? c.onQuality),
                         ),
-                        if (c.onMini != null)
+                        if (c.onMini != null && !c.desktopMini)
                           _button(
                             'windows-mini-control',
                             c.desktopMini ? '返回原窗口' : '迷你窗（置顶）',
@@ -662,19 +657,50 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
                                     c.onBack,
                                   ),
                                   Expanded(
-                                    child: Text(
-                                      '${c.title} · ${c.episodeLabel}',
-                                      key: const ValueKey(
-                                        'windows-player-title',
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 15,
+                                    child: GestureDetector(
+                                      key: const ValueKey('windows-mini-drag'),
+                                      behavior: HitTestBehavior.opaque,
+                                      onPanStart: c.desktopMini
+                                          ? (_) => WindowsDesktop
+                                                .current
+                                                ?.manager
+                                                .startDragging()
+                                          : null,
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 10,
+                                        ),
+                                        child: Text(
+                                          '${c.title} · ${c.episodeLabel}',
+                                          key: const ValueKey(
+                                            'windows-player-title',
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 15,
+                                          ),
+                                        ),
                                       ),
                                     ),
                                   ),
+                                  if (c.desktopMini) ...[
+                                    _button(
+                                      'windows-mini-restore',
+                                      '返回原窗口',
+                                      Icons.open_in_full_rounded,
+                                      c.onMini == null
+                                          ? null
+                                          : () => _panel(c.onMini!),
+                                    ),
+                                    _button(
+                                      'windows-mini-quit',
+                                      '退出红果TV',
+                                      Icons.close_rounded,
+                                      WindowsDesktop.current?.quit,
+                                    ),
+                                  ],
                                 ],
                               ),
                             ),

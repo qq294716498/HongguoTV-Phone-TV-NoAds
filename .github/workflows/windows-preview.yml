@@ -102,7 +102,7 @@ jobs:
           retention-days: 14
 
   release:
-    if: github.ref == 'refs/heads/windows/0.1.14-stable-final'
+    if: github.ref == 'refs/heads/windows/0.1.15-stable-40'
     needs: [checks, windows]
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -126,6 +126,8 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get --enforce-lockfile
+      - name: Publish verified public Windows fallback manifest
+        run: python3 scripts/publish_windows_stable.py channel
       - name: Verify public Windows updater download and Android channel
         env:
           CHECK_WINDOWS_UPDATE: 'true'
