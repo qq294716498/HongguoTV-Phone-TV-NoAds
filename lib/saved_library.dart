@@ -164,7 +164,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: widget.store,
     builder: (context, _) {
-      final history = widget.store.history;
+      final history = widget.history ? widget.store.history : const <WatchEntry>[];
       final all = widget.history
           ? history.map((entry) => entry.drama).toList()
           : widget.store.trackedSeries;
@@ -178,11 +178,12 @@ class _SavedLibraryState extends State<SavedLibrary> {
         }
         return true;
       }).toList();
+      final itemIds = widget.history ? items.map((drama) => drama.id).toSet() : const <String>{};
       final resume = widget.history
           ? history
                 .where(
                   (entry) =>
-                      items.any((drama) => drama.id == entry.drama.id) &&
+                      itemIds.contains(entry.drama.id) &&
                       (!entry.finished ||
                           entry.drama.episodes <= 0 ||
                           entry.episode < entry.drama.episodes),

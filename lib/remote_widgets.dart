@@ -437,15 +437,16 @@ class _RemoteGridState extends State<RemoteGrid> {
   @override
   void didUpdateWidget(covariant RemoteGrid oldWidget) {
     super.didUpdateWidget(oldWidget);
+    final retained = widget.itemKeys.toSet();
     final removed = _nodes.keys
-        .where((key) => !widget.itemKeys.contains(key))
+        .where((key) => !retained.contains(key))
         .toList();
     final restore = removed.any((key) => _nodes[key]!.hasFocus);
     final index = oldWidget.itemKeys.indexOf(_focused ?? '');
     for (final key in removed) {
       _nodes.remove(key)?.dispose();
     }
-    if (_focused != null && !widget.itemKeys.contains(_focused)) {
+    if (_focused != null && !retained.contains(_focused)) {
       _focused = null;
       _target = null;
       _generation++;

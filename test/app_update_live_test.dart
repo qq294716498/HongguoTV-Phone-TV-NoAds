@@ -12,7 +12,7 @@ void main() {
     () async {
       HttpOverrides.global = null;
       final metadataPath = Platform.environment['UPDATE_METADATA_FILE'];
-      final transport = GithubUpdateTransport();
+      final transport = GithubUpdateTransport(clientFactory: () => HttpClient()..findProxy = HttpClient.findProxyFromEnvironment);
       final data = metadataPath == null
           ? await transport.latest()
           : jsonDecode(await File(metadataPath).readAsString())
@@ -32,8 +32,8 @@ void main() {
       final results = <Map<String, Object>>[];
       for (final entry in updateAbiOffsets.entries) {
         final installed = InstalledApp(
-          version: '0.1.11',
-          code: entry.value + 35,
+          version: '0.1.12',
+          code: entry.value + 36,
           abi: entry.key,
         );
         final release = AppRelease.parse(stableData, installed);
@@ -69,6 +69,11 @@ void main() {
           'downloadVerified': download,
         });
       }
+      final windows = await GithubUpdateTransport(windows: true, clientFactory: () => HttpClient()..findProxy = HttpClient.findProxyFromEnvironment).latest();
+      expect(windows['tag_name'], 'windows-v0.1.14-39');
+      expect(windows['prerelease'], false);
+      expect(AppRelease.parseWindows(windows, const InstalledApp(version: '0.1.14', code: 39, abi: 'windows-x64')), isNull);
+      expect(() => AppRelease.parseWindows(stableData, const InstalledApp(version: '0.1.14', code: 39, abi: 'windows-x64')), throwsFormatException);
       final report = File(
         '${directory.path}/${staging ? 'staged' : 'latest'}-update-check.json',
       );

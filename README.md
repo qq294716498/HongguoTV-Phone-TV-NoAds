@@ -2,6 +2,16 @@
 
 基于 [guoapp](https://github.com/zhoufuweigg/guoapp) 的非官方独立客户端。手机与 Android TV 共用 Android 应用，另提供 Windows x64 独立客户端。支持短剧浏览、搜索、在线播放、追剧和下载。
 
+## Android 最近更新：0.1.15+40
+
+- 保留 0.1.12 已发布的列表/追剧缓存修复；继续减少追剧页无用的历史排序、历史继续观看筛选中的重复扫描，以及网格焦点清理时的重复线性查找。
+- 发现、搜索和保存列表继续使用虚拟化网格，海报保留现有异步加载与 440 像素解码上限；不重写架构，不改站源接口、播放或预加载状态机。
+- “关于红果TV”加入 [qq294716498 的维护仓库](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds)、GitHub API 确认并离线打包的头像及免费学习声明，保留上游和依赖许可。
+- 首次启动提示“本软件免费提供，仅供学习交流，请勿付费购买，谨防盗卖”；点击“我知道了”成功保存后，跨版本升级与切换用户不重弹。手机和 TV 遥控均可操作，清空应用数据后可再次显示。
+- 手机 / Android TV 共用正式包名 `com.hongguo.tv`，沿用原签名。arm64-v8a / armeabi-v7a / x86_64 的版本码为 `2040 / 1040 / 4040`，均高于 0.1.12；Windows 已发布 0.1.14+39 不重打、不改资产。
+- [Android 0.1.15 发布页](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/app-v0.1.15-40)。必须先通过回归、三ABI正式签名、实际公网下载和签名/版本复验，再提升为 Android Latest；未通过时保持验证候选状态。
+- 这些优化减少已确认的重复计算；尚未测量真实手机/TV帧率，不宣传提升百分比。真实设备的源站解码与长时间播放仍需实际使用验证。
+
 ## Windows 正式版：0.1.14+39
 
 基于已发布 Android `app-v0.1.12-36`（`48d081cd916d01f41f6e9d0d543b0ae9d3e20026`）及 Windows `0.1.14-preview.1+38` 候选源码增量适配。远端 `main` 的应用源码可能较旧，请使用对应发布标签。
@@ -33,18 +43,6 @@
 
 尚未实测真实源站解码、音频设备输出、消费级 Windows 10/11 GPU/旧 CPU 兼容、长时间跨集跨季连播，以及旧预览客户端通过公网完成整个升级事务。自动化结果不等同用户电脑验收，不会在用户电脑自动安装或运行。
 
-## Android 最近更新：0.1.12
-
-- 修复页面操作卡顿，优化追剧与列表流畅度。
-- 保留“查看全季”和进入追剧检查下季功能。
-- 优化应用内更新，下载和安装前重新确认当前版本。
-- 改善下载进度显示，并加强安装包版本验证。
-- 已有收藏、观看记录及备份数据继续保留。
-
-安装包和验证结果请以对应版本发布页为准。
-
-[查看历史更新记录 →](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases)
-
 ## 与 guoapp 的主要区别
 
 保留 [guoapp](https://github.com/zhoufuweigg/guoapp) 的浏览、搜索、站源、追剧和下载等基础功能，在原项目基础上重点增加或调整以下体验：
@@ -66,9 +64,9 @@
 
 | 设备架构 | 下载 |
 | --- | --- |
-| arm64-v8a · 大多数手机及较新的电视 / 盒子 | [HongguoTV 0.1.12 ARM64](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.12-36/HongguoTV-0.1.12-arm64-v8a.apk) |
-| armeabi-v7a · 32 位手机 / 电视 / 盒子 | [HongguoTV 0.1.12 32 位](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.12-36/HongguoTV-0.1.12-armeabi-v7a.apk) |
-| x86_64 · 对应架构模拟器 | [HongguoTV 0.1.12 x86_64](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.12-36/HongguoTV-0.1.12-x86_64.apk) |
+| arm64-v8a · 大多数手机及较新的电视 / 盒子 | [HongguoTV 0.1.12 ARM64](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.15-40/HongguoTV-0.1.15-arm64-v8a.apk) |
+| armeabi-v7a · 32 位手机 / 电视 / 盒子 | [HongguoTV 0.1.12 32 位](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.15-40/HongguoTV-0.1.15-armeabi-v7a.apk) |
+| x86_64 · 对应架构模拟器 | [HongguoTV 0.1.12 x86_64](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.15-40/HongguoTV-0.1.15-x86_64.apk) |
 
 支持 Android 8.0 及以上系统。请选择与设备和已安装应用匹配的架构；更新时直接覆盖安装，无需先卸载。
 
@@ -131,7 +129,7 @@
 
 应用“关于”注明 [qq294716498 的维护仓库](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds)，展示 GitHub API 确认的公开头像（已打包，离线可用，加载失败显示默认头像），并保留上游与依赖许可。
 
-本软件免费提供，仅供学习交流，请勿付费购买，谨防盗卖。学习用途不免除内容版权与许可义务。Android 手机 / TV 与 Windows 首次启动显示来源提示，点击“我知道了”后以全局、跨版本标记保存；覆盖更新或切换用户不重弹，卸载清数据可再次显示。
+本软件免费提供，仅供学习交流，请勿付费购买，谨防盗卖。学习用途不免除内容版权与许可义务。Android 0.1.15 手机 / TV 与 Windows 0.1.14 首次启动显示来源提示，点击“我知道了”后以全局、跨版本标记保存；覆盖更新或切换用户不重弹，卸载清数据可再次显示。
 
 Windows 主程序、更新助手、窗口、任务栏与托盘统一使用当前 Android Manifest 实际引用的 `drawable/app_icon → drawable-nodpi/hongguo_logo.png`，不使用未被引用的默认 mipmap。ICO 含 16–256 多尺寸，构建验证逐个检查 EXE 内嵌帧与来源校验和。
 
