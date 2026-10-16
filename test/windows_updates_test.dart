@@ -179,28 +179,33 @@ void main() {
     tester.view.physicalSize = const Size(800, 600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    final temporary = await Directory.systemTemp.createTemp(
-      'windows-update-page-',
-    );
-    addTearDown(() => temporary.delete(recursive: true));
-    SharedPreferences.setMockInitialValues({});
-    final platform = FakeUpdatePlatform(temporary.path)..app = windowsInstalled;
-    final updates = AppUpdates(
-      preferences: await SharedPreferences.getInstance(),
-      windows: true,
-      supportedEdition: true,
-      platform: platform,
-      transport: _WindowsTransport(FakeUpdateTransport(), windowsRelease()),
-    );
-    addTearDown(updates.dispose);
-    await updates.check(manual: true);
+    late Directory temporary;
+    late FakeUpdatePlatform platform;
+    late AppUpdates updates;
+    await tester.runAsync(() async {
+      temporary = await Directory.systemTemp.createTemp('windows-update-page-');
+      SharedPreferences.setMockInitialValues({});
+      platform = FakeUpdatePlatform(temporary.path)..app = windowsInstalled;
+      updates = AppUpdates(
+        preferences: await SharedPreferences.getInstance(),
+        windows: true,
+        supportedEdition: true,
+        platform: platform,
+        transport: _WindowsTransport(FakeUpdateTransport(), windowsRelease()),
+      );
+      await updates.check(manual: true);
+    });
+    addTearDown(() async {
+      updates.dispose();
+      await temporary.delete(recursive: true);
+    });
     await tester.pumpWidget(
       MaterialApp(home: AppUpdateScreen(updates: updates)),
     );
     await tester.pumpAndSettle();
     expect(find.text('当前版本更新日志'), findsOneWidget);
     expect(find.text('Windows 更新日志'), findsOneWidget);
-    await updates.download();
+    await tester.runAsync(updates.download);
     await tester.pumpAndSettle();
     expect(find.text('打开下载位置'), findsOneWidget);
     expect(find.text('安装更新'), findsNothing);
