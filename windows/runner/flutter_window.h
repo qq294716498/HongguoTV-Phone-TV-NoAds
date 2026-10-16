@@ -31,6 +31,14 @@ class FlutterWindow : public Win32Window {
   // The Flutter instance hosted by this window.
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> device_channel_;
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> desktop_channel_;
+  bool tray_active_ = false;
+  bool playback_attached_ = false;
+  bool playing_ = false;
+  bool AddTray();
+  void RemoveTray();
+  void TrayAction(const char* action);
+  void TrayMenu();
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

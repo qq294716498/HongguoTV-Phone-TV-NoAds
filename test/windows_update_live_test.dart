@@ -23,7 +23,8 @@ void main() {
         metadata,
         const InstalledApp(version: '0.1.12', code: 36, abi: 'windows-x64'),
       )!;
-      expect(release.code, 37);
+      expect(release.code, int.parse(expectedTag.split('-').last));
+      expect(metadata['prerelease'], false);
       expect(
         AppRelease.parseWindows(
           metadata,
@@ -84,6 +85,7 @@ void main() {
           'downloadSha256': digest,
           'sameBuildIgnored': true,
           'androidRejectsWindowsTag': true,
+          'windowsPrerelease': false,
           'realCrossVersionInstallationTested': false,
         }),
       );

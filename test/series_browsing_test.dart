@@ -7,6 +7,7 @@ import 'package:duanju_app/follow_updates.dart';
 import 'package:duanju_app/local_store.dart';
 import 'package:duanju_app/models.dart';
 import 'package:duanju_app/player_screen.dart';
+import 'package:duanju_app/player_controls.dart';
 import 'package:duanju_app/saved_library.dart';
 import 'package:duanju_app/series_browser_screen.dart';
 import 'package:duanju_app/series_catalog.dart';
@@ -619,6 +620,7 @@ void main() {
     for (var index = 0; index < 12; index++) {
       await tester.pump(const Duration(milliseconds: 20));
     }
+    expect(find.text('${firstSeason.title} · 第 1 集'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('player-all-seasons')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(ValueKey('all-season-${thirdSeason.id}')));
@@ -628,7 +630,18 @@ void main() {
       await tester.pump(const Duration(milliseconds: 20));
     }
     expect(repository.resolutions.last, (thirdSeason.id, 2));
+    expect(find.text('${thirdSeason.title} · 第 2 集'), findsOneWidget);
     expect(platform.opened.last.uri, contains('synthetic-2'));
+    tester.widget<PlayerControls>(find.byType(PlayerControls)).onNext!();
+    for (var index = 0; index < 20; index++) {
+      await tester.pump(const Duration(milliseconds: 20));
+    }
+    expect(find.text('${thirdSeason.title} · 第 3 集'), findsOneWidget);
+    tester.widget<PlayerControls>(find.byType(PlayerControls)).onPrevious!();
+    for (var index = 0; index < 20; index++) {
+      await tester.pump(const Duration(milliseconds: 20));
+    }
+    expect(find.text('${thirdSeason.title} · 第 2 集'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 100));
     debugDefaultTargetPlatformOverride = null;

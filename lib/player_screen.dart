@@ -40,6 +40,7 @@ import 'lan_screen.dart';
 import 'video_enhancement.dart';
 import 'video_output_size.dart';
 import 'windows_update_runtime.dart';
+import 'windows_desktop.dart';
 
 class PlayerScreen extends StatefulWidget {
   const PlayerScreen({
@@ -175,8 +176,11 @@ class _PlayerScreenState extends State<PlayerScreen>
           defaultTargetPlatform == TargetPlatform.iOS);
   bool get _windowsDesktop =>
       !_television && defaultTargetPlatform == TargetPlatform.windows;
+  bool get _windowsMini =>
+      _windowsDesktop && (WindowsDesktop.current?.mini ?? false);
   bool get _windowsSidebarAvailable =>
       _windowsDesktop &&
+      !_windowsMini &&
       !_showFullscreen &&
       MediaQuery.sizeOf(context).width >= 760;
   bool get _portraitWatching =>
@@ -229,6 +233,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     _detail = widget.detail;
     _index = widget.initialIndex;
     if (_windowsDesktop) {
+      WindowsDesktop.current?.addListener(_desktopChanged);
       _windowsEpisodesExpanded =
           widget.store.preferences.getBool(
             'windows_episode_sidebar_expanded',
@@ -419,6 +424,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     ]) {
       _subscriptions.add(
         stream.listen((_) {
+          _syncDesktopPlayback();
           _syncScreenOn();
           _syncDanmaku();
           _syncPreload();
@@ -486,6 +492,25 @@ class _PlayerScreenState extends State<PlayerScreen>
         );
       }
     });
+    if (_windowsDesktop) {
+      final desktop = WindowsDesktop.current;
+      desktop?.playbackOwner = this;
+      desktop?.togglePlayback = () {
+        if (widget.store.profileEpoch == _profileEpoch &&
+            !widget.store.locked &&
+            widget.store.allowsSource(_detail.drama.source)) {
+          _togglePlayback();
+        }
+      };
+      desktop?.savePlayback = () async {
+        _playIntent = false;
+        await _player.pause();
+        await _saveWindowsVolume();
+        await _saveProgress(flush: true);
+        await widget.store.flushPendingWrites();
+      };
+      _syncDesktopPlayback();
+    }
     if (Platform.isWindows) {
       WindowsUpdateRuntime.owner = this;
       WindowsUpdateRuntime.playing = () =>
@@ -590,6 +615,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     final enabled =
         !_closed &&
         (_lifecycleState == AppLifecycleState.resumed ||
+            _windowsDesktop &&
+                (WindowsDesktop.current?.keepPlayback ?? false) ||
             defaultTargetPlatform == TargetPlatform.windows &&
                 _lifecycleState == AppLifecycleState.inactive) &&
         !_pictureInPictureVisible &&
@@ -691,6 +718,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   void _applyLifecycleVisibility({bool pauseWhenHidden = true}) {
     final visible =
         _lifecycleState == AppLifecycleState.resumed ||
+        _windowsDesktop && (WindowsDesktop.current?.keepPlayback ?? false) ||
         _pictureInPictureVisible ||
         defaultTargetPlatform == TargetPlatform.windows &&
             _lifecycleState == AppLifecycleState.inactive;
@@ -1784,7 +1812,9 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   bool get _showFullscreen =>
       _television ||
-      _fullscreen ||
+      (_windowsDesktop && WindowsDesktop.current != null
+          ? WindowsDesktop.current!.fullscreen
+          : _fullscreen) ||
       (_mobile &&
           !_automaticFullscreenSuppressed &&
           _aspectRatio >= 1 &&
@@ -1804,7 +1834,9 @@ class _PlayerScreenState extends State<PlayerScreen>
       _automaticFullscreenSuppressed = !fullscreen;
     });
     try {
-      if (Platform.isWindows) {
+      if (_windowsDesktop && WindowsDesktop.current != null) {
+        await WindowsDesktop.current!.setFullscreen(fullscreen);
+      } else if (Platform.isWindows) {
         await windowManager.setFullScreen(fullscreen);
       } else if (_mobile) {
         await (_orientationController?.setPlayback(
@@ -1856,6 +1888,43 @@ class _PlayerScreenState extends State<PlayerScreen>
   Future<void> _windowsEpisodes() => _windowsSidebarAvailable
       ? _setWindowsEpisodes(!_windowsEpisodesExpanded)
       : _openPanel(PlayerMenuSection.episodes);
+
+  void _desktopChanged() {
+    if (!mounted || _closed) return;
+    _applyLifecycleVisibility(pauseWhenHidden: false);
+    setState(() {});
+  }
+
+  void _syncDesktopPlayback() {
+    if (!_windowsDesktop || _closed) return;
+    final attached =
+        widget.store.profileEpoch == _profileEpoch &&
+        !widget.store.locked &&
+        widget.store.allowsSource(_detail.drama.source);
+    unawaited(
+      WindowsDesktop.current
+          ?.updatePlayback(
+            attached: attached,
+            playing: attached && _player.state.playing,
+          )
+          .catchError((Object _) {}),
+    );
+  }
+
+  Future<void> _toggleMini() async {
+    final desktop = WindowsDesktop.current;
+    if (desktop == null || _closed) return;
+    _interactions.cancel();
+    try {
+      if (desktop.mini) {
+        await desktop.leaveMini();
+      } else {
+        await desktop.enterMini(aspectRatio: _aspectRatio);
+      }
+    } catch (_) {
+      if (mounted && !_closed) _notice('无法切换迷你窗，请重试');
+    }
+  }
 
   void _notice(String message) {
     if (!mounted || _closed) return;
@@ -2256,6 +2325,10 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   @override
   void dispose() {
+    if (_windowsDesktop) {
+      WindowsDesktop.current?.removeListener(_desktopChanged);
+      unawaited(WindowsDesktop.current?.detachPlayback(this));
+    }
     if (identical(WindowsUpdateRuntime.owner, this)) {
       WindowsUpdateRuntime.owner = null;
       WindowsUpdateRuntime.playing = null;
@@ -2350,14 +2423,22 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Widget _buildPlayer(BuildContext context) {
     final theme = Theme.of(context);
-    final title = _detail.drama.title;
+    final title = _windowsDesktop
+        ? '${_detail.drama.title} · 第 ${_detail.episodes[_index].number} 集'
+        : _detail.drama.title;
     final fullscreen = _showFullscreen;
     final pictureInPicture = _pictureInPictureVisible;
     return PopScope(
-      canPop: _television
+      canPop: _windowsMini
+          ? false
+          : _television
           ? !_televisionOverlayVisible
           : !fullscreen && !_reminderVisible,
       onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _windowsMini) {
+          unawaited(_toggleMini());
+          return;
+        }
         if (!didPop && _reminderVisible) {
           _watchReminders?.dismiss();
           return;
@@ -2398,18 +2479,34 @@ class _PlayerScreenState extends State<PlayerScreen>
           canRequestFocus: !_television,
           skipTraversal: _television,
           child: Scaffold(
-            backgroundColor: fullscreen || pictureInPicture || _portraitWatching
+            backgroundColor:
+                fullscreen ||
+                    _windowsMini ||
+                    pictureInPicture ||
+                    _portraitWatching
                 ? Colors.black
                 : theme.scaffoldBackgroundColor,
-            appBar: pictureInPicture || fullscreen || _mobile
+            appBar: pictureInPicture || fullscreen || _windowsMini || _mobile
                 ? null
                 : AppBar(
                     title: Text(
                       title,
+                      key: _windowsDesktop
+                          ? const ValueKey('windows-player-title')
+                          : null,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     actions: [
+                      if (_windowsDesktop && WindowsDesktop.current != null)
+                        IconButton(
+                          key: const ValueKey('windows-mini'),
+                          tooltip: '迷你窗（置顶）',
+                          onPressed: _toggleMini,
+                          icon: const Icon(
+                            Icons.picture_in_picture_alt_rounded,
+                          ),
+                        ),
                       IconButton(
                         tooltip: '旋转与全屏',
                         onPressed: _rotate,
@@ -2429,6 +2526,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                           final visible =
                               _windowsEpisodesExpanded &&
                               !fullscreen &&
+                              !_windowsMini &&
                               constraints.maxWidth >= 760;
                           return Row(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2443,8 +2541,6 @@ class _PlayerScreenState extends State<PlayerScreen>
                                   ),
                                   width: desktop ? 312 : 210,
                                   child: _episodePanel(
-                                    onCollapse: () =>
-                                        unawaited(_setWindowsEpisodes(false)),
                                     preserveScrollOnResize: true,
                                   ),
                                 ),
@@ -2582,11 +2678,14 @@ class _PlayerScreenState extends State<PlayerScreen>
             showDanmaku: _detail.drama.source == 'hongguo',
             danmakuEnabled: _danmakuEnabled,
             danmakuStatus: _danmaku.status,
-            onEpisodes: _windowsDesktop
-                ? _windowsEpisodes
-                : () => _portraitWatching
-                      ? _openMobileDetails(0)
-                      : _openPanel(PlayerMenuSection.episodes),
+            onEpisodes: () => _portraitWatching
+                ? _openMobileDetails(0)
+                : _openPanel(PlayerMenuSection.episodes),
+            onSidebar: _windowsDesktop ? _windowsEpisodes : null,
+            onMini: _windowsDesktop && WindowsDesktop.current != null
+                ? _toggleMini
+                : null,
+            desktopMini: _windowsMini,
             desktopEpisodesExpanded: _windowsDesktop
                 ? _windowsSidebarAvailable && _windowsEpisodesExpanded
                 : null,
@@ -3234,38 +3333,13 @@ class _PlayerScreenState extends State<PlayerScreen>
     ValueChanged<int>? onSelected,
     BuildContext? panelContext,
     VoidCallback? onAllSeasons,
-    VoidCallback? onCollapse,
     bool preserveScrollOnResize = false,
   }) => ColoredBox(
     color: Theme.of(panelContext ?? context).colorScheme.surface,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (onCollapse != null)
-          Row(
-            children: [
-              Expanded(
-                child: _canBrowseSeasons
-                    ? OutlinedButton.icon(
-                        key: const ValueKey('player-all-seasons'),
-                        onPressed: onAllSeasons ?? _browseSeasons,
-                        icon: const Icon(Icons.video_library_outlined),
-                        label: const Text('查看全季'),
-                      )
-                    : const Padding(
-                        padding: EdgeInsets.only(left: 16),
-                        child: Text('选集'),
-                      ),
-              ),
-              IconButton(
-                key: const ValueKey('windows-collapse-episodes'),
-                tooltip: '收起选集栏',
-                onPressed: onCollapse,
-                icon: const Icon(Icons.chevron_right_rounded),
-              ),
-            ],
-          )
-        else if (_canBrowseSeasons)
+        if (_canBrowseSeasons)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: OutlinedButton.icon(

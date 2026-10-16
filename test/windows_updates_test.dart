@@ -13,12 +13,12 @@ import 'app_updates_test.dart'
 import 'app_update_transport_test.dart' show TestClient, TestResponse;
 
 Map<String, dynamic> windowsRelease({int build = 38}) {
-  const version = '0.1.13-preview.2';
+  const version = '0.1.14';
   final tag = 'windows-v$version-$build';
   const name = 'HongguoTV-$version-windows-x64.zip';
   return {
     'draft': false,
-    'prerelease': true,
+    'prerelease': false,
     'tag_name': tag,
     'body': 'Windows 更新日志',
     'assets': [
@@ -62,7 +62,7 @@ void main() {
     expect(
       () => AppRelease.parseWindows({
         ...data,
-        'prerelease': false,
+        'prerelease': true,
       }, windowsInstalled),
       throwsFormatException,
     );
@@ -110,6 +110,11 @@ void main() {
         windowsRelease(),
         releaseJson(build: 99),
         {...windowsRelease(build: 41), 'draft': true},
+        {...windowsRelease(build: 99), 'prerelease': true},
+        {
+          ...windowsRelease(build: 100),
+          'tag_name': 'windows-v0.1.15-preview.1-100',
+        },
         newest,
       ];
       expect(selectWindowsRelease(data)['tag_name'], newest['tag_name']);

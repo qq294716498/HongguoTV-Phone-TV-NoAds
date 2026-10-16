@@ -21,12 +21,14 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
   final _volumeFocus = FocusNode(debugLabel: 'windows-volume');
   final _volumeSliderFocus = FocusNode(debugLabel: 'windows-volume-slider');
   final _toolbarFocus = FocusNode(debugLabel: 'windows-player-toolbar');
+  final _sidebarFocus = FocusNode(debugLabel: 'windows-sidebar-toggle');
   final List<StreamSubscription<dynamic>> _subscriptions = [];
   Timer? _hideTimer;
   Timer? _volumeCloseTimer;
   Offset? _lastMouse;
   bool _visible = true;
   bool _hoveringToolbar = false;
+  bool _hoveringSidebar = false;
   bool _hoveringVolume = false;
   bool _hoveringPopup = false;
   bool _volumeDragging = false;
@@ -40,13 +42,14 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
   bool get _popup => _volumeOverlay.isShowing;
   bool get _held =>
       _hoveringToolbar ||
+      _hoveringSidebar ||
       _popup ||
       _menuOpen ||
       c.panelOpen ||
       _seek != null ||
       _volumeDragging ||
       c.interactions.boosting ||
-      (_keyboard && _toolbarFocus.hasFocus);
+      (_keyboard && (_toolbarFocus.hasFocus || _sidebarFocus.hasFocus));
   bool get _shown =>
       c.enabled &&
       (_visible ||
@@ -90,6 +93,7 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
     c.interactions.addListener(_interactionChanged);
     _volumeFocus.addListener(_volumeFocusChanged);
     _volumeSliderFocus.addListener(_volumeFocusChanged);
+    _sidebarFocus.addListener(_show);
     FocusManager.instance.addEarlyKeyEventHandler(_earlyKey);
     _scheduleHide();
   }
@@ -232,12 +236,19 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
     focusNode: focus,
     tooltip: tooltip,
     visualDensity: VisualDensity.compact,
-    constraints: const BoxConstraints.tightFor(width: 38, height: 38),
+    constraints: const BoxConstraints.tightFor(width: 34, height: 32),
+    style: IconButton.styleFrom(
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    ),
     padding: EdgeInsets.zero,
     onPressed: c.enabled && action != null ? () => _action(action) : null,
     color: selected ? Theme.of(context).colorScheme.primary : Colors.white,
     disabledColor: Colors.white30,
-    icon: Icon(icon, size: 22),
+    icon: Icon(
+      icon,
+      size: 21,
+      shadows: const [Shadow(color: Colors.black54, blurRadius: 2)],
+    ),
   );
 
   Widget _volume() => OverlayPortal(
@@ -344,67 +355,76 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
     final state = c.player.state;
     final duration = state.duration.inMilliseconds / 1000;
     final position = state.position.inMilliseconds / 1000;
-    return Row(
-      children: [
-        SizedBox(
-          width: 50,
-          child: Text(
-            formatPosition(_seek ?? position),
-            key: const ValueKey('windows-position'),
-            textAlign: TextAlign.center,
-          ),
-        ),
-        Expanded(
-          child: SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              trackHeight: 3,
-              secondaryActiveTrackColor: Colors.white38,
-              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+    return SizedBox(
+      height: 24,
+      child: Row(
+        children: [
+          SizedBox(
+            width: 50,
+            child: Text(
+              formatPosition(_seek ?? position),
+              key: const ValueKey('windows-position'),
+              textAlign: TextAlign.center,
             ),
-            child: Slider(
-              key: const ValueKey('player-progress'),
-              value: (_seek ?? position).clamp(0, duration > 0 ? duration : 1),
-              max: duration > 0 ? duration : 1,
-              secondaryTrackValue: (state.buffer.inMilliseconds / 1000).clamp(
-                0,
-                duration > 0 ? duration : 1,
+          ),
+          Expanded(
+            child: SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 2,
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 10),
+                secondaryActiveTrackColor: Colors.white38,
+                thumbShape: const RoundSliderThumbShape(
+                  enabledThumbRadius: 4.5,
+                ),
               ),
-              semanticFormatterCallback: formatPosition,
-              onChangeStart: c.enabled && duration > 0
-                  ? (value) {
-                      c.interactions.cancel();
-                      setState(() => _seek = value);
-                      _hideTimer?.cancel();
+              child: Slider(
+                key: const ValueKey('player-progress'),
+                value: (_seek ?? position).clamp(
+                  0,
+                  duration > 0 ? duration : 1,
+                ),
+                max: duration > 0 ? duration : 1,
+                secondaryTrackValue: (state.buffer.inMilliseconds / 1000).clamp(
+                  0,
+                  duration > 0 ? duration : 1,
+                ),
+                semanticFormatterCallback: formatPosition,
+                onChangeStart: c.enabled && duration > 0
+                    ? (value) {
+                        c.interactions.cancel();
+                        setState(() => _seek = value);
+                        _hideTimer?.cancel();
+                      }
+                    : null,
+                onChanged: c.enabled && duration > 0
+                    ? (value) => setState(() => _seek = value)
+                    : null,
+                onChangeEnd: (value) async {
+                  try {
+                    if (c.enabled && duration > 0)
+                      await (c.onSeek ?? c.player.seek)(
+                        Duration(milliseconds: (value * 1000).round()),
+                      );
+                  } finally {
+                    if (mounted) {
+                      setState(() => _seek = null);
+                      _show();
                     }
-                  : null,
-              onChanged: c.enabled && duration > 0
-                  ? (value) => setState(() => _seek = value)
-                  : null,
-              onChangeEnd: (value) async {
-                try {
-                  if (c.enabled && duration > 0)
-                    await (c.onSeek ?? c.player.seek)(
-                      Duration(milliseconds: (value * 1000).round()),
-                    );
-                } finally {
-                  if (mounted) {
-                    setState(() => _seek = null);
-                    _show();
                   }
-                }
-              },
+                },
+              ),
             ),
           ),
-        ),
-        SizedBox(
-          width: 50,
-          child: Text(
-            formatPosition(duration),
-            key: const ValueKey('windows-duration'),
-            textAlign: TextAlign.center,
+          SizedBox(
+            width: 50,
+            child: Text(
+              formatPosition(duration),
+              key: const ValueKey('windows-duration'),
+              textAlign: TextAlign.center,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -426,18 +446,20 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
         _scheduleHide();
       },
       child: DecoratedBox(
+        key: const ValueKey('windows-toolbar-background'),
         decoration: BoxDecoration(
-          color: const Color(0xE3151820),
-          borderRadius: BorderRadius.circular(12),
+          color: const Color(0x66151820),
+          borderRadius: BorderRadius.circular(8),
           border: Border.all(color: Colors.white12),
         ),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(10, 0, 10, 7),
+          padding: const EdgeInsets.fromLTRB(8, 0, 8, 2),
           child: DefaultTextStyle(
             style: Theme.of(context).textTheme.labelSmall!.copyWith(
               color: Colors.white70,
               fontSize: 12,
               fontFeatures: const [FontFeature.tabularFigures()],
+              shadows: const [Shadow(color: Colors.black54, blurRadius: 2)],
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -486,7 +508,8 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
                               : null,
                           style: TextButton.styleFrom(
                             foregroundColor: Colors.white,
-                            minimumSize: const Size(42, 38),
+                            minimumSize: const Size(42, 32),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             padding: const EdgeInsets.symmetric(horizontal: 4),
                           ),
                           child: const Tooltip(
@@ -521,7 +544,8 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
                           onPressed: c.enabled ? () => _panel(c.onSpeed) : null,
                           style: TextButton.styleFrom(
                             foregroundColor: Colors.white,
-                            minimumSize: const Size(46, 38),
+                            minimumSize: const Size(44, 32),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             padding: const EdgeInsets.symmetric(horizontal: 4),
                           ),
                           child: Tooltip(
@@ -531,12 +555,9 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
                         ),
                         _button(
                           'player-episodes',
-                          c.episodesTooltip ?? '选集 / 查看全季',
-                          c.desktopEpisodesExpanded == false
-                              ? Icons.view_sidebar_outlined
-                              : Icons.grid_view_rounded,
+                          '选集 / 查看全季',
+                          Icons.grid_view_rounded,
                           () => _panel(c.onEpisodes),
-                          selected: c.desktopEpisodesExpanded == true,
                         ),
                         _volume(),
                         if (c.onPush != null)
@@ -552,6 +573,15 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
                           Icons.tune_rounded,
                           () => _panel(c.onSettings ?? c.onQuality),
                         ),
+                        if (c.onMini != null)
+                          _button(
+                            'windows-mini-control',
+                            c.desktopMini ? '返回原窗口' : '迷你窗（置顶）',
+                            c.desktopMini
+                                ? Icons.open_in_full_rounded
+                                : Icons.picture_in_picture_alt_rounded,
+                            () => _panel(c.onMini!),
+                          ),
                         _button(
                           'player-fullscreen',
                           c.fullscreen ? '退出全屏 (F11)' : '全屏 (F11)',
@@ -622,7 +652,7 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
                       duration: const Duration(milliseconds: 150),
                       child: Stack(
                         children: [
-                          if (c.fullscreen)
+                          if (c.fullscreen || c.desktopMini)
                             Positioned(
                               top: 12,
                               left: 12,
@@ -638,6 +668,9 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
                                   Expanded(
                                     child: Text(
                                       '${c.title} · ${c.episodeLabel}',
+                                      key: const ValueKey(
+                                        'windows-player-title',
+                                      ),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: const TextStyle(
@@ -656,6 +689,51 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
                             bottom: 12,
                             child: _toolbar(),
                           ),
+                          if (c.onSidebar != null)
+                            Positioned(
+                              right: 0,
+                              top: 0,
+                              bottom: 0,
+                              child: Align(
+                                alignment: Alignment.centerRight,
+                                child: MouseRegion(
+                                  onEnter: (_) {
+                                    _hoveringSidebar = true;
+                                    _show();
+                                  },
+                                  onExit: (_) {
+                                    _hoveringSidebar = false;
+                                    _scheduleHide();
+                                  },
+                                  child: Material(
+                                    color: const Color(0x66151820),
+                                    borderRadius: const BorderRadius.horizontal(
+                                      left: Radius.circular(8),
+                                    ),
+                                    child: SizedBox(
+                                      width: 28,
+                                      height: 52,
+                                      child: IconButton(
+                                        key: const ValueKey(
+                                          'windows-episode-toggle',
+                                        ),
+                                        focusNode: _sidebarFocus,
+                                        tooltip: c.episodesTooltip ?? '打开选集',
+                                        padding: EdgeInsets.zero,
+                                        icon: Icon(
+                                          c.desktopEpisodesExpanded == true
+                                              ? Icons.chevron_right_rounded
+                                              : Icons.chevron_left_rounded,
+                                          color: Colors.white,
+                                          size: 22,
+                                        ),
+                                        onPressed: () => _panel(c.onSidebar!),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                     ),
@@ -680,6 +758,7 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
     _volumeFocus.dispose();
     _volumeSliderFocus.dispose();
     _toolbarFocus.dispose();
+    _sidebarFocus.dispose();
     FocusManager.instance.removeEarlyKeyEventHandler(_earlyKey);
     super.dispose();
   }

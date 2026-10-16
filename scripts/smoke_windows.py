@@ -5,9 +5,57 @@ import re
 import subprocess
 import tempfile
 import zipfile
+import ctypes
+import time
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
+
+
+def native_desktop(process, report):
+    user = ctypes.WinDLL('user32', use_last_error=True)
+    callback_type = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+    user.GetWindowThreadProcessId.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulong)]
+    user.PostMessageW.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_size_t, ctypes.c_ssize_t]
+    user.EnumWindows.argtypes = [callback_type, ctypes.c_void_p]
+    def wait(predicate):
+        deadline = time.monotonic() + 100
+        while time.monotonic() < deadline:
+            if process.poll() is not None:
+                raise RuntimeError('Desktop smoke process exited before native actions')
+            try:
+                data = json.loads(report.read_text(encoding='utf-8'))
+                if predicate(data):
+                    return
+            except (FileNotFoundError, json.JSONDecodeError):
+                pass
+            time.sleep(0.1)
+        raise TimeoutError('Native desktop action timed out')
+    wait(lambda data: data.get('desktopReady') is True)
+    windows = []
+    @callback_type
+    def collect(window, _):
+        pid = ctypes.c_ulong()
+        user.GetWindowThreadProcessId(window, ctypes.byref(pid))
+        if pid.value == process.pid:
+            windows.append(window)
+        return True
+    user.EnumWindows(collect, None)
+    user.GetClassNameW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_int]
+    def is_flutter(window):
+        name = ctypes.create_unicode_buffer(256)
+        user.GetClassNameW(window, name, len(name))
+        return name.value == 'FLUTTER_RUNNER_WIN32_WINDOW'
+    window = next(window for window in windows if is_flutter(window))
+    user.PostMessageW(window, 0x0010, 0, 0)
+    wait(lambda data: data.get('trayKeepsPlaying') is True)
+    user.PostMessageW(window, 0x0111, 41002, 0)
+    wait(lambda data: data.get('nativeTrayToggles') == 1 and data.get('playing') is False)
+    user.PostMessageW(window, 0x0111, 41002, 0)
+    wait(lambda data: data.get('nativeTrayToggles') == 2 and data.get('playing') is True)
+    user.PostMessageW(window, 0x0111, 41001, 0)
+    wait(lambda data: data.get('nativeTrayRestored') is True)
+    user.PostMessageW(window, 0x0111, 41003, 0)
 
 
 def main():
@@ -34,12 +82,21 @@ def main():
             os.environ['SystemRoot'],
         ])
         try:
-            process = subprocess.run([str(directory / 'HongguoTV.exe'), '--package-smoke',
+            process = subprocess.Popen([str(directory / 'HongguoTV.exe'), '--package-smoke',
                                       str(report), str(directory / 'fixture.mp4')],
                                      cwd=Path(temporary), env=environment,
-                                     capture_output=True, text=True, errors='replace', timeout=120)
-            print(process.stdout)
-            print(process.stderr)
+                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, errors='replace')
+            try:
+                native_desktop(process, report)
+                stdout, stderr = process.communicate(timeout=30)
+            except BaseException:
+                process.kill()
+                stdout, stderr = process.communicate(timeout=10)
+                print(stdout)
+                print(stderr)
+                raise
+            print(stdout)
+            print(stderr)
             evidence = json.loads(report.read_text(encoding='utf-8'))
             evidence['processExitCode'] = process.returncode
             evidence['cleanPath'] = True

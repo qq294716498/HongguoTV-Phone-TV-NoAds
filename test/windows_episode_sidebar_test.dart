@@ -10,6 +10,7 @@ import 'package:duanju_app/player_controls.dart';
 import 'package:duanju_app/player_menu.dart';
 import 'package:duanju_app/player_screen.dart';
 import 'package:duanju_app/remote_widgets.dart';
+import 'package:duanju_app/windows_desktop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
@@ -19,6 +20,8 @@ import 'package:media_kit/media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'player_fixtures.dart';
+import 'windows_desktop_test.dart' show DesktopHarness;
+import 'player_screen_test.dart' show PreloadingRouteRepository;
 
 Future<void> frames(WidgetTester tester) async {
   for (var i = 0; i < 30; i++) {
@@ -74,6 +77,7 @@ void main() {
   final windows = TargetPlatformVariant.only(TargetPlatform.windows);
   final sidebar = find.byKey(const ValueKey('windows-episode-sidebar'));
   final picker = find.byKey(const ValueKey('player-episodes'));
+  final toggle = find.byKey(const ValueKey('windows-episode-toggle'));
   final detail = DramaDetail(
     const Drama(
       id: 'hongguo:sidebar',
@@ -194,7 +198,11 @@ void main() {
             .current,
         isTrue,
       );
-      await tester.tap(find.byKey(const ValueKey('windows-collapse-episodes')));
+      final pane = tester.getRect(find.byType(PlayerControls));
+      expect(tester.getRect(toggle).right, pane.right);
+      expect(tester.getCenter(toggle).dy, pane.center.dy);
+      expect(find.text('合成选集 · 第 59 集'), findsOneWidget);
+      await tester.tap(toggle);
       await frames(tester);
       expect(sidebar, findsNothing);
       expect(
@@ -204,7 +212,7 @@ void main() {
       expect(preferences.getBool('windows_episode_sidebar_expanded'), isFalse);
       expect(find.byTooltip('展开选集栏'), findsOneWidget);
       await captureSidebar(tester, 'collapsed');
-      await tester.tap(picker);
+      await tester.tap(toggle);
       await frames(tester);
       expect(sidebar, findsOneWidget);
       expect(preferences.getBool('windows_episode_sidebar_expanded'), isTrue);
@@ -273,7 +281,7 @@ void main() {
     await frames(tester);
     expect(sidebar, findsNothing);
     expect(find.byTooltip('展开选集栏'), findsOneWidget);
-    await tester.tap(picker);
+    await tester.tap(toggle);
     await frames(tester);
     expect(sidebar, findsOneWidget);
     expect(
@@ -290,4 +298,97 @@ void main() {
     store.dispose();
     expect(tester.takeException(), isNull);
   }, variant: windows);
+
+  testWidgets(
+    'tray lifecycle and repeated mini/fullscreen keep player, progress and preload sessions',
+    (tester) async {
+      tester.view.physicalSize = const Size(1280, 720);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final harness = DesktopHarness();
+      await harness.initialize();
+      WindowsDesktop.current = harness.desktop;
+      addTearDown(() {
+        WindowsDesktop.current = null;
+        harness.dispose();
+      });
+      final store = LocalStore(await SharedPreferences.getInstance());
+      final platform = ScriptedPlayer();
+      final repository = PreloadingRouteRepository();
+      var creations = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: PlayerScreen(
+            detail: detail,
+            initialIndex: 0,
+            initialPosition: 30,
+            repository: repository,
+            store: store,
+            playerFactory: () {
+              creations++;
+              return Player(platformPlayer: platform);
+            },
+            videoBuilder: (controls) =>
+                ColoredBox(color: Colors.cyan, child: controls),
+          ),
+        ),
+      );
+      await frames(tester);
+      final playerState = tester.state(find.byType(PlayerControls));
+      platform.buffered(const Duration(minutes: 2));
+      await frames(tester);
+      expect(repository.preloadedEpisodes, contains(2));
+      expect(repository.active, contains('preloaded-2'));
+      final active = Set<String>.of(repository.active);
+      await harness.desktop.requestClose();
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      await frames(tester);
+      expect(platform.state.playing, true);
+      expect(repository.active, containsAll(active));
+      await harness.action('toggle');
+      await frames(tester);
+      expect(platform.state.playing, false);
+      await harness.action('toggle');
+      await frames(tester);
+      expect(platform.state.playing, true);
+      await harness.action('restore');
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await frames(tester);
+      for (var repeat = 0; repeat < 3; repeat++) {
+        await harness.desktop.enterMini();
+        tester.view.physicalSize = const Size(480, 300);
+        await frames(tester);
+        expect(tester.state(find.byType(PlayerControls)), same(playerState));
+        expect(find.byTooltip('返回原窗口'), findsOneWidget);
+        expect(find.text('合成选集 · 第 1 集'), findsOneWidget);
+        expect(sidebar, findsNothing);
+        await harness.desktop.setFullscreen(true);
+        tester.view.physicalSize = const Size(1280, 720);
+        await frames(tester);
+        await harness.desktop.setFullscreen(false);
+        await frames(tester);
+        expect(sidebar, findsOneWidget);
+        expect(platform.state.position.inSeconds, 30);
+        expect(platform.opened, hasLength(1));
+        expect(platform.state.playing, true);
+        expect(repository.active, containsAll(active));
+        expect(creations, 1);
+        expect(repository.preloadedEpisodes, [2]);
+      }
+      await harness.desktop.requestClose();
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      await frames(tester);
+      await harness.action('quit');
+      expect(harness.calls.last.method, 'destroy');
+      expect(platform.state.playing, false);
+      expect(store.watched(detail.drama.id)?.position, 30);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await frames(tester);
+      await store.flushPendingWrites();
+      store.dispose();
+      expect(tester.takeException(), isNull);
+    },
+    variant: windows,
+  );
 }

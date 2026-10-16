@@ -11,6 +11,7 @@ import 'package:window_manager/window_manager.dart';
 
 import 'app_layout.dart' show appVersion, windowsBuildNumber;
 import 'windows_update_package.dart';
+import 'windows_desktop.dart';
 
 class WindowsUpdateRuntime {
   static Object? owner;
@@ -220,8 +221,14 @@ class WindowsUpdateRuntime {
           throw StateError(await statusFile.readAsString());
         if (await readyFile.exists() &&
             await readyFile.readAsString() == nonce) {
+          await WindowsDesktop.current?.prepareForUpdate();
+          try {
+            await windowManager.destroy();
+          } catch (_) {
+            await WindowsDesktop.current?.cancelUpdateExit();
+            rethrow;
+          }
           handedOff = true;
-          await windowManager.destroy();
           exit(0);
         }
         await Future<void>.delayed(const Duration(milliseconds: 100));

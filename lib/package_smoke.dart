@@ -13,6 +13,8 @@ import 'core_bridge.dart';
 import 'danmaku_emoji_assets.dart';
 import 'media_pipeline.dart';
 import 'video_enhancement_assets.dart';
+import 'windows_desktop.dart';
+import 'dart:async';
 
 Future<void> runPackageSmoke(List<String> arguments) async {
   if (arguments.length != 3) exit(2);
@@ -90,6 +92,7 @@ Future<void> runPackageSmoke(List<String> arguments) async {
       (time) => time.inMilliseconds >= 400,
     );
     await player.open(Media(remuxed.path));
+    await player.setPlaylistMode(PlaylistMode.single);
     await advancing.timeout(const Duration(seconds: 20));
     await video.waitUntilFirstFrameRendered.timeout(
       const Duration(seconds: 20),
@@ -123,10 +126,87 @@ Future<void> runPackageSmoke(List<String> arguments) async {
     evidence['fullscreen'] = true;
     if (errors.isNotEmpty) throw StateError(errors.join('\n'));
     evidence['mediaKitPlayback'] = true;
-    evidence['ok'] = true;
-    await player.dispose();
-    await report.writeAsString(jsonEncode(evidence), flush: true);
-    exit(0);
+    final desktop = WindowsDesktop(preferences);
+    await desktop.initialize();
+    if (!desktop.available)
+      throw StateError('Native notification area unavailable');
+    desktop.playbackOwner = player;
+    await desktop.updatePlayback(attached: true, playing: true);
+    final originalBounds = await windowManager.getBounds();
+    final originalTopmost = await windowManager.isAlwaysOnTop();
+    for (var repeat = 0; repeat < 3; repeat++) {
+      await desktop.enterMini();
+      if (!await windowManager.isAlwaysOnTop() || !desktop.mini)
+        throw StateError('Mini not topmost');
+      await windowManager.setSize(const Size(520, 340));
+      final resized = await windowManager.getSize();
+      if ((resized.width - 520).abs() > 2 || (resized.height - 340).abs() > 2)
+        throw StateError('Mini resize failed');
+      await desktop.setFullscreen(true);
+      if (desktop.mini || !await windowManager.isFullScreen())
+        throw StateError('Mini to fullscreen failed');
+      await desktop.setFullscreen(false);
+      final restored = await windowManager.getBounds();
+      if ((restored.width - originalBounds.width).abs() > 2 ||
+          (restored.height - originalBounds.height).abs() > 2 ||
+          await windowManager.isAlwaysOnTop() != originalTopmost)
+        throw StateError('Window state restoration failed');
+    }
+    evidence['miniReuseResizeRestore'] = true;
+    await player.play();
+    var toggles = 0;
+    desktop.togglePlayback = () {
+      unawaited(
+        player!.playOrPause().then((_) async {
+          toggles++;
+          await desktop.updatePlayback(
+            attached: true,
+            playing: player!.state.playing,
+          );
+        }),
+      );
+    };
+    Future<void> writes = Future.value();
+    Future<void> write() => writes = writes
+        .then((_) => report.writeAsString(jsonEncode(evidence), flush: true))
+        .then((_) {});
+    evidence['desktopReady'] = true;
+    Timer? timer;
+    timer = Timer.periodic(const Duration(milliseconds: 150), (_) async {
+      if (desktop.quitting) return;
+      if (desktop.inTray && !await windowManager.isVisible()) {
+        evidence['nativeTrayHidden'] = true;
+        if (toggles == 0 && player!.state.playing)
+          evidence['trayKeepsPlaying'] = true;
+      }
+      if (evidence['nativeTrayHidden'] == true &&
+          !desktop.inTray &&
+          await windowManager.isVisible())
+        evidence['nativeTrayRestored'] = true;
+      evidence['nativeTrayToggles'] = toggles;
+      evidence['playing'] = player!.state.playing;
+      await write();
+    });
+    desktop.savePlayback = () async {
+      timer?.cancel();
+      await player!.pause();
+      for (final key in [
+        'nativeTrayHidden',
+        'trayKeepsPlaying',
+        'nativeTrayRestored',
+      ]) {
+        if (evidence[key] != true)
+          throw StateError('Missing native tray check: $key');
+      }
+      if (toggles != 2 || errors.isNotEmpty)
+        throw StateError('Native toggle or Flutter errors: $errors');
+      evidence['nativeTrayQuit'] = true;
+      evidence['ok'] = true;
+      await write();
+      await player!.dispose();
+    };
+    await write();
+    await Completer<void>().future;
   } catch (error) {
     evidence['error'] = error.toString();
     evidence['flutterErrors'] = errors;

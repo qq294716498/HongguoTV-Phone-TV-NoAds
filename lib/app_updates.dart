@@ -19,9 +19,7 @@ const updatePage = 'https://github.com/$updateRepository/releases/latest';
 const windowsUpdateApi =
     'https://api.github.com/repos/$updateRepository/releases?per_page=100';
 const windowsUpdatePage = 'https://github.com/$updateRepository/releases';
-final windowsUpdateTag = RegExp(
-  r'^windows-v(\d+\.\d+\.\d+-preview\.\d+)-(\d+)$',
-);
+final windowsUpdateTag = RegExp(r'^windows-v(\d+\.\d+\.\d+)-(\d+)$');
 const updateMaximumBytes = 256 * 1024 * 1024;
 const updateAbiOffsets = {
   'armeabi-v7a': 1000,
@@ -131,8 +129,8 @@ class AppRelease {
     Map<String, dynamic> json,
     InstalledApp installed,
   ) {
-    if (json['draft'] != false || json['prerelease'] != true) {
-      throw const FormatException('更新信息不是 Windows 测试版本');
+    if (json['draft'] != false || json['prerelease'] != false) {
+      throw const FormatException('更新信息不是 Windows 正式版本');
     }
     final tag = json['tag_name'];
     final match = tag is String ? windowsUpdateTag.firstMatch(tag) : null;
@@ -140,6 +138,7 @@ class AppRelease {
       throw const FormatException('Windows 标签或架构无法识别');
     }
     final code = int.parse(match[2]!);
+    if (code < 1 || code > 65535) throw const FormatException('Windows 版本编号无效');
     if (code <= installed.code) return null;
     final version = match[1]!;
     final name = 'HongguoTV-$version-windows-x64.zip';
@@ -391,7 +390,7 @@ Map<String, dynamic> selectWindowsRelease(Object? data) {
       .where(
         (item) =>
             item['draft'] == false &&
-            item['prerelease'] == true &&
+            item['prerelease'] == false &&
             item['tag_name'] is String &&
             windowsUpdateTag.hasMatch(item['tag_name'] as String),
       )
@@ -404,7 +403,7 @@ Map<String, dynamic> selectWindowsRelease(Object? data) {
           int.parse(windowsUpdateTag.firstMatch(a['tag_name'] as String)![2]!),
         ),
   );
-  if (candidates.isEmpty) throw const FormatException('尚无可用的 Windows 测试版本');
+  if (candidates.isEmpty) throw const FormatException('尚无可用的 Windows 正式版本');
   return candidates.first;
 }
 
@@ -530,10 +529,12 @@ class AppUpdates extends ChangeNotifier {
   DateTime? _lastAttempt;
   bool _permissionOpened = false;
   bool _startupCleaned = false;
-  String get _cacheKey =>
-      windows ? 'app_update_windows_cache_v1' : 'app_update_stable_cache_v1';
-  String get _checkedKey =>
-      windows ? 'app_update_windows_checked_at_v1' : 'app_update_checked_at_v1';
+  String get _cacheKey => windows
+      ? 'app_update_windows_stable_cache_v1'
+      : 'app_update_stable_cache_v1';
+  String get _checkedKey => windows
+      ? 'app_update_windows_stable_checked_at_v1'
+      : 'app_update_checked_at_v1';
   String get _pendingName => windows ? 'pending.zip' : 'pending.apk';
   bool get busy => [
     UpdateStage.checking,
@@ -578,7 +579,7 @@ class AppUpdates extends ChangeNotifier {
     }
     _lastAttempt = now();
     stage = UpdateStage.checking;
-    message = windows ? '正在检查 Windows 测试版本…' : '正在检查稳定版本…';
+    message = windows ? '正在检查 Windows 正式版本…' : '正在检查稳定版本…';
     _notify();
     try {
       installedApp = await platform.installed().timeout(
@@ -613,7 +614,7 @@ class AppUpdates extends ChangeNotifier {
       if (_disposed) return;
       release = candidate;
       stage = candidate == null ? UpdateStage.idle : UpdateStage.available;
-      final channel = windows ? 'Windows 测试版本' : '稳定版本';
+      final channel = windows ? 'Windows 正式版本' : '稳定版本';
       message = candidate == null
           ? '已是最新$channel'
           : '发现$channel ${candidate.version}';

@@ -1,4 +1,4 @@
-name: Windows desktop preview
+name: Windows desktop
 
 on:
   push:
@@ -102,7 +102,7 @@ jobs:
           retention-days: 14
 
   release:
-    if: false
+    if: github.ref == 'refs/heads/windows/0.1.14-stable-final'
     needs: [checks, windows]
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -118,8 +118,8 @@ jobs:
         with:
           name: hongguotv-windows-x64
           path: dist/windows
-      - name: Publish validated Windows preview without changing Android Latest
-        run: python3 scripts/publish_windows_preview.py stage
+      - name: Publish validated Windows stable release without changing Android Latest
+        run: python3 scripts/publish_windows_stable.py stage
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.47.4'
@@ -138,7 +138,7 @@ jobs:
           done
           exit 1
       - name: Verify Android assets unchanged and attach checksums
-        run: python3 scripts/publish_windows_preview.py finalize
+        run: python3 scripts/publish_windows_stable.py finalize
       - uses: actions/upload-artifact@v4
         if: always()
         with:

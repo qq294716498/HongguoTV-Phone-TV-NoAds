@@ -103,7 +103,7 @@ class AppUpdateScreen extends StatelessWidget {
                         Padding(
                           padding: EdgeInsets.all(16),
                           child: Text(
-                            'Windows 0.1.14-preview.1：桌面播放工具栏、悬浮音量与两秒自动隐藏；下载校验后可自动替换并重启，失败回滚旧版，暂停状态与进度保留。此版本尚未发布。手机亮度手势、画中画与观看提醒暂不提供。测试版未签名。',
+                            'Windows 0.1.14：更薄更透明的底栏、右缘居中选集入口、随切集切季更新的标题；关闭到托盘并保持播放状态，托盘可恢复、播放暂停或退出；置顶可调大小的迷你窗复用当前播放器。正式更新渠道支持校验、替换、重启和失败回滚。手机亮度手势与观看提醒暂不提供。未签名。',
                           ),
                         ),
                       ],
@@ -209,7 +209,7 @@ class AppUpdateScreen extends StatelessWidget {
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     title: Text(
-                      controller.windows ? '自动检查 Windows 测试版本' : '自动检查稳定版本',
+                      controller.windows ? '自动检查 Windows 正式版本' : '自动检查稳定版本',
                     ),
                     subtitle: const Text('常规每 12 小时检查一次，失败稍后重试；不会自动下载或打断播放'),
                     value: controller.automatic,
@@ -219,7 +219,7 @@ class AppUpdateScreen extends StatelessWidget {
                   ),
                   Text(
                     controller.windows
-                        ? 'Windows 测试版未签名。点击安装并重启后自动校验、解压和替换完整程序目录，启动失败回滚旧版。播放中请先暂停；观看进度与配置会保存。旧版与配置备份保留在更新事务中。目录只读、占用或包含额外文件时将停止更新，不申请管理员权限。'
+                        ? 'Windows 正式版未签名。点击安装并重启后自动校验、解压和替换完整程序目录，启动失败回滚旧版。播放中请先暂停；观看进度与配置会保存。旧版与配置备份保留在更新事务中。目录只读、占用或包含额外文件时将停止更新，不申请管理员权限。'
                         : '下载来自本项目的 GitHub Release。验证完成后，需要你确认安装；安装时请先保存或结束当前播放。返回此页可重试，观看记录不会因取消而删除。',
                   ),
                   const SizedBox(height: 8),

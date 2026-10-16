@@ -19,6 +19,7 @@ import 'diary_service.dart';
 import 'app_update_screen.dart';
 import 'watch_reminder_settings.dart';
 import 'app_layout.dart';
+import 'windows_desktop.dart';
 
 String storageSize(int bytes) {
   if (bytes < 0) return '暂不可用';
@@ -146,6 +147,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
             padding: const EdgeInsets.all(16),
             children: [
               const AppUpdateTile(),
+              if (WindowsDesktop.current case final desktop?)
+                ListenableBuilder(
+                  listenable: desktop,
+                  builder: (context, _) => Column(
+                    children: [
+                      SwitchListTile(
+                        title: const Text('关闭窗口时进入托盘'),
+                        subtitle: Text(
+                          desktop.available
+                              ? '保留当前播放状态；托盘右键可恢复、播放/暂停或真正退出。关闭此项则直接退出。'
+                              : '系统托盘暂不可用，关闭窗口将直接退出。',
+                        ),
+                        value: desktop.closeToTray,
+                        onChanged: desktop.available
+                            ? (value) => saveUserChange(
+                                context,
+                                () => desktop.setCloseToTray(value),
+                              )
+                            : null,
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.exit_to_app_rounded),
+                        title: const Text('退出红果TV'),
+                        subtitle: const Text('保存观看进度并结束进程'),
+                        onTap: () => saveUserChange(context, desktop.quit),
+                      ),
+                      if (desktop.error != null) Text(desktop.error!),
+                    ],
+                  ),
+                ),
               if ((Platform.isAndroid || Platform.isIOS) &&
                   !AppLayout.isTelevision(context) &&
                   (context

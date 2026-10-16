@@ -44,6 +44,9 @@ class PlayerControls extends StatefulWidget {
     this.onSettings,
     this.desktopEpisodesExpanded,
     this.episodesTooltip,
+    this.onSidebar,
+    this.onMini,
+    this.desktopMini = false,
     this.desktopActivityRevision = 0,
     this.onRetryDanmaku,
     this.onPush,
@@ -54,6 +57,8 @@ class PlayerControls extends StatefulWidget {
   });
 
   final Player player;
+  final Future<void> Function()? onMini;
+  final bool desktopMini;
   final PlayerInteractions interactions;
   final bool enabled;
   final bool fullscreen;
@@ -83,6 +88,7 @@ class PlayerControls extends StatefulWidget {
   final Future<void> Function()? onSettings;
   final bool? desktopEpisodesExpanded;
   final String? episodesTooltip;
+  final Future<void> Function()? onSidebar;
   final int desktopActivityRevision;
   final Future<void> Function()? onRetryDanmaku;
   final Future<void> Function()? onPush;

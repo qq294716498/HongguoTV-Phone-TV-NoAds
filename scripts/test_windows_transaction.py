@@ -56,8 +56,8 @@ def transaction(base, fixtures, mode, real=False):
         Path(environment['LOCALAPPDATA']).mkdir()
     install.mkdir()
     stage.mkdir()
-    build = 38 if real else 39
-    old_build = 37 if real else 38
+    build = int(re.search(r'^version:.*\+(\d+)', (root / 'pubspec.yaml').read_text(), re.M).group(1)) if real else 39
+    old_build = build - 1 if real else 38
     if real:
         version = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(encoding='utf-8'), re.M).group(1).split('+')[0]
         package = root / 'dist/windows' / f'HongguoTV-{version}-windows-x64.zip'
@@ -159,7 +159,8 @@ def transaction(base, fixtures, mode, real=False):
             phase = json.loads(phase_file.read_text(encoding='utf-8'))
             assert phase['phase'] == 'acknowledged' and phase['nonce'] == nonce, phase
         return {'case': 'real-client-startup-ack' if real else mode, 'ok': True, 'status': status,
-                'configurationPreserved': True, 'architecture': 'x64'}
+                'configurationPreserved': True, 'architecture': 'x64',
+                'build': build, 'oldBuild': old_build, 'startupAcknowledged': real}
     except BaseException:
         if real:
             diagnostic = {'case': 'real-client-startup-ack', 'ok': False,
@@ -210,7 +211,8 @@ def main():
         results.append(transaction(base / 'real', base, 'success', real=True))
         print(json.dumps(results[-1]))
     report = root / 'dist/windows/Windows-update-transaction.json'
-    report.write_text(json.dumps({'ok': True, 'cases': results, 'signed': False,
+    identity = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(encoding='utf-8'), re.M).group(1).split('+')
+    report.write_text(json.dumps({'ok': True, 'version': identity[0], 'build': int(identity[1]), 'cases': results, 'signed': False,
                                  'elevated': False, 'publicReleaseTested': False}, indent=2) + '\n', encoding='utf-8')
 
 

@@ -26,6 +26,7 @@ import 'danmaku_emoji_assets.dart';
 import 'diary_service.dart';
 import 'app_updates.dart';
 import 'windows_update_runtime.dart';
+import 'windows_desktop.dart';
 import 'models.dart';
 import 'watch_reminder_runtime.dart';
 import 'television_navigation.dart';
@@ -138,6 +139,8 @@ class _AppBootstrapState extends State<AppBootstrap>
     AppUpdates.current = null;
     WatchReminderRuntime.current?.dispose();
     WatchReminderRuntime.current = null;
+    WindowsDesktop.current?.dispose();
+    WindowsDesktop.current = null;
     store?.dispose();
     super.dispose();
   }
@@ -192,6 +195,14 @@ class _AppBootstrapState extends State<AppBootstrap>
     });
     try {
       final preferences = await SharedPreferences.getInstance();
+      if (Platform.isWindows && WindowsDesktop.current == null) {
+        final desktop = WindowsDesktop(preferences);
+        await desktop.initialize();
+        WindowsDesktop.current = desktop;
+        desktop.flushStore = () async {
+          await store?.flushPendingWrites();
+        };
+      }
       await _refreshDevice();
       if (!mounted) return;
       if ((Platform.isAndroid || Platform.isWindows) &&

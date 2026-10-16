@@ -26,6 +26,19 @@ void main() {
           ..background = const Color(0xFF6BCADE);
         await fixture.mount(tester, mobile: false, size: const Size(1000, 700));
         if (playing) await fixture.player.playOrPause();
+        final background = tester.widget<DecoratedBox>(
+          find.byKey(const ValueKey('windows-toolbar-background')),
+        );
+        expect(
+          (background.decoration as BoxDecoration).color!.a,
+          closeTo(.4, .001),
+        );
+        expect(
+          tester
+              .getSize(find.byKey(const ValueKey('windows-toolbar-background')))
+              .height,
+          lessThanOrEqualTo(60),
+        );
         fixture.interactions.hint('合成视频校验 · 快进至 0:44');
         await tester.pump(const Duration(milliseconds: 200));
         final bottom = tester.getRect(
