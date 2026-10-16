@@ -47,6 +47,7 @@ def main():
             evidence['nonAsciiPath'] = True
             evidence['differentWorkingDirectory'] = True
             output.write_text(json.dumps(evidence, indent=2) + '\n', encoding='utf-8')
+            print(json.dumps(evidence, ensure_ascii=True))
             if process.returncode != 0 or evidence.get('ok') is not True:
                 raise SystemExit('Windows 包启动验收未通过。')
             startup_report = directory / 'startup.json'
