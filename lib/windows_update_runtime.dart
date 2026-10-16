@@ -24,8 +24,23 @@ class WindowsUpdateRuntime {
     if (!Platform.isWindows ||
         arguments.firstOrNull != '--windows-update-start')
       return;
-    if (arguments.length != 2) throw const FormatException('更新启动参数无效');
     final support = await getApplicationSupportDirectory();
+    await loadStartup(
+      arguments,
+      support: support,
+      executable: Platform.resolvedExecutable,
+    );
+  }
+
+  static Future<void> loadStartup(
+    List<String> arguments, {
+    required Directory support,
+    required String executable,
+  }) async {
+    startupTransaction = null;
+    if (arguments.length != 2 || arguments.first != '--windows-update-start') {
+      throw const FormatException('更新启动参数无效');
+    }
     final plan = File(arguments[1]);
     final transaction = plan.parent;
     final nonce = p.basename(transaction.path);
@@ -39,18 +54,41 @@ class WindowsUpdateRuntime {
     }
     final fields = await readPlan(plan);
     if (fields['nonce'] != nonce ||
-        !p.equals(fields['root']!, p.dirname(Platform.resolvedExecutable))) {
+        !p.equals(fields['root'] ?? '', p.dirname(executable))) {
       throw const FormatException('更新启动目录不匹配');
     }
     startupTransaction = transaction;
+    await startupPhase('validated');
   }
 
-  static Future<Map<String, String>> readPlan(File file) async => {
-    for (final line in await file.readAsLines())
-      line.substring(0, line.indexOf('=')): line.substring(
-        line.indexOf('=') + 1,
-      ),
-  };
+  static Future<Map<String, String>> readPlan(File file) async {
+    if (await file.length() > 65536) throw const FormatException('更新计划过大');
+    final result = <String, String>{};
+    for (final line in await file.readAsLines()) {
+      final equals = line.indexOf('=');
+      if (equals <= 0 || result.containsKey(line.substring(0, equals))) {
+        throw const FormatException('更新计划格式无效或字段重复');
+      }
+      result[line.substring(0, equals)] = line.substring(equals + 1);
+    }
+    return result;
+  }
+
+  static Future<void> startupPhase(String phase, {Object? error}) async {
+    final transaction = startupTransaction;
+    if (transaction == null) return;
+    await File(
+      p.join(transaction.path, 'startup-$windowsBuildNumber.json'),
+    ).writeAsString(
+      jsonEncode({
+        'phase': phase,
+        'build': windowsBuildNumber,
+        'nonce': p.basename(transaction.path),
+        if (error != null) 'error': error.toString(),
+      }),
+      flush: true,
+    );
+  }
 
   static Future<Map<String, dynamic>?> ready() async {
     final transaction = startupTransaction;
@@ -60,6 +98,7 @@ class WindowsUpdateRuntime {
       await File(
         p.join(transaction.path, 'ack.txt'),
       ).writeAsString(fields['nonce']!, flush: true);
+      await startupPhase('acknowledged');
     }
     final delivered = File(
       p.join(transaction.path, 'resume-$windowsBuildNumber.txt'),

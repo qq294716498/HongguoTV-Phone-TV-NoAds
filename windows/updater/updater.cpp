@@ -141,8 +141,25 @@ PROCESS_INFORMATION Start(const fs::path& root, const fs::path& plan) {
   std::wstring command = L"\"" + exe.native() + L"\" --windows-update-start \"" + plan.native() + L"\"";
   STARTUPINFOW startup{};
   startup.cb = sizeof(startup);
+  SECURITY_ATTRIBUTES attributes{sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE};
+  const auto output = CreateFileW((plan.parent_path() / L"startup-processes.log").c_str(), FILE_APPEND_DATA,
+      FILE_SHARE_READ | FILE_SHARE_WRITE, &attributes, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+  const auto input = CreateFileW(L"NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+      &attributes, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+  if (output == INVALID_HANDLE_VALUE || input == INVALID_HANDLE_VALUE) {
+    if (output != INVALID_HANDLE_VALUE) CloseHandle(output);
+    if (input != INVALID_HANDLE_VALUE) CloseHandle(input);
+    throw std::runtime_error("Cannot open startup diagnostics");
+  }
+  startup.dwFlags = STARTF_USESTDHANDLES;
+  startup.hStdOutput = output;
+  startup.hStdError = output;
+  startup.hStdInput = input;
   PROCESS_INFORMATION process{};
-  if (!CreateProcessW(exe.c_str(), command.data(), nullptr, nullptr, FALSE, 0, nullptr, root.c_str(), &startup, &process))
+  const BOOL created = CreateProcessW(exe.c_str(), command.data(), nullptr, nullptr, TRUE, 0, nullptr, root.c_str(), &startup, &process);
+  CloseHandle(output);
+  CloseHandle(input);
+  if (!created)
     throw std::runtime_error("Cannot restart application");
   CloseHandle(process.hThread);
   std::ofstream evidence(plan.parent_path() / L"started-pids.txt", std::ios::app);

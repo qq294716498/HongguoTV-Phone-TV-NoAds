@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,6 +8,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'core_bridge.dart';
 import 'app_layout.dart';
@@ -42,7 +44,24 @@ Future<void> main(List<String> arguments) async {
   if (Platform.isWindows) {
     await windowManager.ensureInitialized();
     await windowManager.setMinimumSize(const Size(800, 600));
-    await WindowsUpdateRuntime.initialize(arguments);
+    try {
+      await WindowsUpdateRuntime.initialize(arguments);
+    } catch (error) {
+      stderr.writeln('Windows update startup rejected: $error');
+      rethrow;
+    }
+    if (arguments.firstOrNull == '--update-environment-smoke') {
+      if (arguments.length != 2) exit(2);
+      await File(arguments[1]).writeAsString(
+        jsonEncode({
+          'support': (await getApplicationSupportDirectory()).path,
+          'executable': Platform.resolvedExecutable,
+          'build': windowsBuildNumber,
+        }),
+        flush: true,
+      );
+      exit(0);
+    }
   }
   MediaKit.ensureInitialized();
   VideoEnhancementAssets.registerLicenses();
@@ -239,9 +258,23 @@ class _AppBootstrapState extends State<AppBootstrap>
           };
         });
         widget.onReady?.call();
-        if (Platform.isWindows) unawaited(_finishWindowsUpdate());
+        if (Platform.isWindows) {
+          unawaited(
+            _finishWindowsUpdate().catchError(
+              (Object failure) => WindowsUpdateRuntime.startupPhase(
+                'ready-failed',
+                error: failure,
+              ),
+            ),
+          );
+        }
       }
     } catch (failure) {
+      if (Platform.isWindows)
+        await WindowsUpdateRuntime.startupPhase(
+          'bootstrap-failed',
+          error: failure,
+        );
       if (mounted) {
         setState(() {
           error = failure;
@@ -252,8 +285,11 @@ class _AppBootstrapState extends State<AppBootstrap>
 
   Future<void> _finishWindowsUpdate() async {
     WindowsUpdateRuntime.flushStore = () async => store?.flushPendingWrites();
+    await WindowsUpdateRuntime.startupPhase('bootstrap-ready');
     await WidgetsBinding.instance.waitUntilFirstFrameRasterized;
+    await WindowsUpdateRuntime.startupPhase('first-frame');
     await WidgetsBinding.instance.endOfFrame;
+    await WindowsUpdateRuntime.startupPhase('rendered');
     if (store?.configurationError != null)
       throw StateError(store!.configurationError!);
     final resume = await WindowsUpdateRuntime.ready();

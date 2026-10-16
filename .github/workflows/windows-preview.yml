@@ -79,7 +79,7 @@ jobs:
       - run: python -m pip install pefile==2024.8.26
       - run: python scripts/build_windows.py --all-sources
       - name: Validate updater ZIP handling on Windows filesystem
-        run: flutter test --no-pub test/windows_update_package_test.dart --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true --reporter=expanded
+        run: flutter test --no-pub test/windows_update_package_test.dart test/windows_update_startup_test.dart --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true --reporter=expanded
       - name: Verify version, x64 architecture, DLL imports, resources and hashes
         run: python scripts/verify_windows_package.py
       - name: Start unpacked client with synthetic H264 and AAC media

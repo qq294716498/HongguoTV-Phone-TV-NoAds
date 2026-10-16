@@ -52,9 +52,8 @@ def transaction(base, fixtures, mode, real=False):
         environment['APPDATA'] = str(base / 'appdata')
         environment['LOCALAPPDATA'] = str(base / 'localappdata')
         environment['HONGGUOTV_DISABLE_IMAGES'] = '1'
-        support = Path(os.environ['APPDATA']) / '红果TV' / '红果TV'
-    tx = support / 'windows-updates' / nonce
-    tx.mkdir(parents=True)
+        Path(environment['APPDATA']).mkdir()
+        Path(environment['LOCALAPPDATA']).mkdir()
     install.mkdir()
     stage.mkdir()
     build = 38 if real else 39
@@ -64,8 +63,23 @@ def transaction(base, fixtures, mode, real=False):
         package = root / 'dist/windows' / f'HongguoTV-{version}-windows-x64.zip'
         with zipfile.ZipFile(package) as archive:
             archive.extractall(stage)
+        probe_file = base / 'environment.json'
+        probe = subprocess.run([str(stage / 'HongguoTV.exe'), '--update-environment-smoke', str(probe_file)],
+                               cwd=base.parent, env=environment, capture_output=True,
+                               text=True, errors='replace', timeout=30)
+        if probe.returncode != 0 or not probe_file.exists():
+            raise RuntimeError(f'Update environment probe failed ({probe.returncode}): {probe.stdout}\n{probe.stderr}')
+        measured = json.loads(probe_file.read_text(encoding='utf-8'))
+        support = Path(measured['support'])
+        stage = Path(measured['executable']).parent
+        install = stage.parent / install.name
+        backup = stage.parent / backup.name
+        print(json.dumps({'case': 'real-client-environment', 'support': str(support),
+                          'programDirectory': str(stage.parent), 'build': measured['build']}), flush=True)
     else:
         shutil.copyfile(fixtures / 'fixture-39.exe', stage / 'HongguoTV.exe')
+    tx = support / 'windows-updates' / nonce
+    tx.mkdir(parents=True)
     shutil.copyfile(fixtures / f'fixture-{old_build}.exe', install / 'HongguoTV.exe')
     (tx / 'test-mode').write_text(mode, encoding='ascii')
     config = support / 'shared_preferences.json'
@@ -140,8 +154,23 @@ def transaction(base, fixtures, mode, real=False):
             assert code == 1 and status.startswith('failed') and not backup.exists(), status
             if mode == 'unowned':
                 assert (install / 'personal-file.txt').read_text() == 'preserve this file'
+        if real:
+            phase_file = tx / f'startup-{build}.json'
+            phase = json.loads(phase_file.read_text(encoding='utf-8'))
+            assert phase['phase'] == 'acknowledged' and phase['nonce'] == nonce, phase
         return {'case': 'real-client-startup-ack' if real else mode, 'ok': True, 'status': status,
                 'configurationPreserved': True, 'architecture': 'x64'}
+    except BaseException:
+        if real:
+            diagnostic = {'case': 'real-client-startup-ack', 'ok': False,
+                          'files': {}}
+            for name in ['status.txt', f'startup-{build}.json', 'startup-processes.log']:
+                file = tx / name
+                if file.exists():
+                    diagnostic['files'][name] = file.read_text(encoding='utf-8', errors='replace')[-16000:]
+            (root / 'dist/windows/Windows-update-failure.json').write_text(json.dumps(diagnostic, indent=2) + '\n', encoding='utf-8')
+            print(json.dumps(diagnostic, ensure_ascii=True), flush=True)
+        raise
     finally:
         (tx / 'stop-old').touch()
         (tx / 'stop-new').touch()
