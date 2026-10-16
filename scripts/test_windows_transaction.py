@@ -31,7 +31,8 @@ def records(directory, target):
 
 
 def compile_fixtures(directory):
-    for build in [37, 38, 39]:
+    current_build = int(re.search(r'^version:.*\+(\d+)', (root / 'pubspec.yaml').read_text(), re.M).group(1))
+    for build in sorted({37, 38, 39, current_build - 1}):
         resource = directory / f'fixture-{build}.o'
         subprocess.run(['windres.exe', f'-DTEST_BUILD={build}',
                         str(root / 'windows/updater/test_fixture.rc'), str(resource)], check=True)
@@ -96,7 +97,7 @@ def transaction(base, fixtures, mode, real=False):
     plan = tx / 'plan.txt'
     fields = {'root': str(install), 'stage': str(stage), 'backup': str(backup),
               'nonce': nonce, 'pid': parent.pid, 'build': build, 'oldBuild': old_build,
-              'version': '0.1.14', 'oldVersion': '0.1.14', 'config': str(config)}
+              'version': version if real else '0.1.14', 'oldVersion': '0.1.14', 'config': str(config)}
     if mode == 'version':
         fields['build'] = 40
     if mode == 'semantic':
