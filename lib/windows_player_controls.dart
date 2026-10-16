@@ -517,6 +517,13 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
                           () => _panel(c.onEpisodes),
                         ),
                         _volume(),
+                        if (c.onPush != null)
+                          _button(
+                            'windows-lan-push',
+                            '推送到局域网设备',
+                            Icons.cast_rounded,
+                            () => _panel(c.onPush!),
+                          ),
                         _button(
                           'windows-settings',
                           '播放设置',
