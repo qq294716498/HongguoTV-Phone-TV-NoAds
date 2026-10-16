@@ -505,7 +505,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
     final enabled =
         !_closed &&
-        _lifecycleState == AppLifecycleState.resumed &&
+        (_lifecycleState == AppLifecycleState.resumed ||
+            defaultTargetPlatform == TargetPlatform.windows &&
+                _lifecycleState == AppLifecycleState.inactive) &&
         !_pictureInPictureVisible &&
         _error == null &&
         widget.store.profileEpoch == _profileEpoch &&
@@ -605,7 +607,9 @@ class _PlayerScreenState extends State<PlayerScreen>
   void _applyLifecycleVisibility({bool pauseWhenHidden = true}) {
     final visible =
         _lifecycleState == AppLifecycleState.resumed ||
-        _pictureInPictureVisible;
+        _pictureInPictureVisible ||
+        defaultTargetPlatform == TargetPlatform.windows &&
+            _lifecycleState == AppLifecycleState.inactive;
     if (_foreground != visible) _health.reset();
     _foreground = visible;
     _syncScreenOn();

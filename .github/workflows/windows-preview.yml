@@ -71,9 +71,10 @@ jobs:
       - name: Use runner MinGW compiler
         shell: pwsh
         run: |
-          $compiler = 'C:\msys64\mingw64\bin'
-          if (-not (Test-Path "$compiler\gcc.exe")) { throw 'Runner MinGW x64 compiler missing' }
-          $compiler | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          $compiler = (Get-Command gcc.exe -ErrorAction Stop).Source
+          $target = & $compiler -dumpmachine
+          if ($target -notmatch '^x86_64-w64-mingw32$') { throw "Expected x64 MinGW, found $target" }
+          (Split-Path $compiler) | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - run: python -m pip install pefile==2024.8.26
       - run: python scripts/build_windows.py --all-sources
       - name: Verify version, x64 architecture, DLL imports, resources and hashes
