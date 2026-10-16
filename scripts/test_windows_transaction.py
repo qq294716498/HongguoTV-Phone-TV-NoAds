@@ -84,6 +84,8 @@ def transaction(base, fixtures, mode, real=False):
               'version': '0.1.14', 'oldVersion': '0.1.14', 'config': str(config)}
     if mode == 'version':
         fields['build'] = 40
+    if mode == 'semantic':
+        fields['version'] = '0.1.15'
     plan.write_text('\n'.join(f'{key}={value}' for key, value in fields.items()), encoding='utf-8')
     handle = None
     process = None
@@ -170,7 +172,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix='hongguo-update-') as temporary:
         base = Path(temporary)
         compile_fixtures(base)
-        for mode in ['success', 'crash', 'hang', 'busy', 'tamper', 'version', 'architecture', 'unowned', 'junction']:
+        for mode in ['success', 'crash', 'hang', 'busy', 'tamper', 'version', 'semantic', 'architecture', 'unowned', 'junction']:
             results.append(transaction(base / mode, base, mode))
             print(json.dumps(results[-1]))
         results.append(transaction(base / 'real', base, 'success', real=True))

@@ -110,6 +110,9 @@ def main():
               'dllImportsResolved': True, 'nativeLibrariesLoaded': True, 'files': records}
     (package.parent / 'Windows-validation.json').write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
     print(f'Validated {package.name}: {len(records)} files, x64, version {version}+{build}')
+    print(json.dumps({key: result[key] for key in ['ok', 'version', 'build', 'architecture',
+                                                   'package', 'bytes', 'sha256', 'dllImportsResolved',
+                                                   'nativeLibrariesLoaded']}, sort_keys=True))
 
 
 if __name__ == '__main__':
