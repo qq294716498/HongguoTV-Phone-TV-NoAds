@@ -136,7 +136,9 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
         _closeVolume();
         _scheduleHide();
       });
-    } else if (oldWidget.controls.panelOpen != c.panelOpen) {
+    } else if (oldWidget.controls.panelOpen != c.panelOpen ||
+        oldWidget.controls.desktopActivityRevision !=
+            c.desktopActivityRevision) {
       _show();
     }
   }
@@ -442,6 +444,16 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _progress(),
+                if (c.interactions.feedback.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      c.interactions.feedback,
+                      key: const ValueKey('windows-player-feedback'),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 Wrap(
                   alignment: WrapAlignment.spaceBetween,
                   crossAxisAlignment: WrapCrossAlignment.center,
@@ -519,9 +531,12 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
                         ),
                         _button(
                           'player-episodes',
-                          '选集 / 查看全季',
-                          Icons.grid_view_rounded,
+                          c.episodesTooltip ?? '选集 / 查看全季',
+                          c.desktopEpisodesExpanded == false
+                              ? Icons.view_sidebar_outlined
+                              : Icons.grid_view_rounded,
                           () => _panel(c.onEpisodes),
+                          selected: c.desktopEpisodesExpanded == true,
                         ),
                         _volume(),
                         if (c.onPush != null)
@@ -595,26 +610,6 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
                 if (c.player.state.buffering && c.enabled)
                   const IgnorePointer(
                     child: Center(child: CircularProgressIndicator()),
-                  ),
-                if (c.interactions.feedback.isNotEmpty)
-                  IgnorePointer(
-                    child: Center(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.black87,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          c.interactions.feedback,
-                          key: const ValueKey('windows-player-feedback'),
-                          style: const TextStyle(color: Colors.white),
-                        ),
-                      ),
-                    ),
                   ),
                 IgnorePointer(
                   key: const ValueKey('windows-player-chrome-layer'),

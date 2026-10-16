@@ -176,6 +176,7 @@ class EpisodeBrowser extends StatefulWidget {
     this.keyPrefix = 'episode',
     this.title = '选集',
     this.compact = false,
+    this.preserveScrollOnResize = false,
   });
   final List<Episode> episodes;
   final ValueChanged<int> onSelected;
@@ -184,6 +185,7 @@ class EpisodeBrowser extends StatefulWidget {
   final String keyPrefix;
   final String title;
   final bool compact;
+  final bool preserveScrollOnResize;
   @override
   State<EpisodeBrowser> createState() => _EpisodeBrowserState();
 }
@@ -191,6 +193,7 @@ class EpisodeBrowser extends StatefulWidget {
 class _EpisodeBrowserState extends State<EpisodeBrowser> {
   final _scroll = ScrollController();
   String _layout = '';
+  String _location = '';
   int get _pageSize => episodePageSize;
   late int _page =
       max(
@@ -284,18 +287,22 @@ class _EpisodeBrowserState extends State<EpisodeBrowser> {
                   '$_page:$_located:${widget.currentNumber}:$columns:$extent:${constraints.maxHeight}';
               if (layout != _layout) {
                 _layout = layout;
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (!mounted || !_scroll.hasClients || _layout != layout) {
-                    return;
-                  }
-                  _scroll.jumpTo(
-                    (18 +
-                            target ~/ columns * (extent + 8) -
-                            constraints.maxHeight / 2 +
-                            extent / 2)
-                        .clamp(0.0, _scroll.position.maxScrollExtent),
-                  );
-                });
+                final location = '$_page:$_located:${widget.currentNumber}';
+                if (!widget.preserveScrollOnResize || location != _location) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (!mounted || !_scroll.hasClients || _layout != layout) {
+                      return;
+                    }
+                    _location = location;
+                    _scroll.jumpTo(
+                      (18 +
+                              target ~/ columns * (extent + 8) -
+                              constraints.maxHeight / 2 +
+                              extent / 2)
+                          .clamp(0.0, _scroll.position.maxScrollExtent),
+                    );
+                  });
+                }
               }
               return RemoteGrid(
                 key: ValueKey('episode-page-$_page-$_located'),

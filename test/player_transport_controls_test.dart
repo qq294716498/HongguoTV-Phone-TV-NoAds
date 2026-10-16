@@ -28,6 +28,7 @@ class TransportFixture {
   var unmounted = false;
   bool? fullscreenValue;
   Future<void> Function()? openMenu;
+  Color background = const Color(0xFF17212A);
 
   Future<void> mount(
     WidgetTester tester, {
@@ -80,7 +81,7 @@ class TransportFixture {
           body: RepaintBoundary(
             key: const ValueKey('transport-capture'),
             child: ColoredBox(
-              color: const Color(0xFF17212A),
+              color: background,
               child: StatefulBuilder(
                 builder: (context, setState) {
                   rebuild = setState;

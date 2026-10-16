@@ -18,6 +18,82 @@ void main() {
   final volume = find.byKey(const ValueKey('windows-volume'));
   final popup = find.byKey(const ValueKey('windows-volume-popup'));
 
+  for (final playing in [false, true]) {
+    testWidgets(
+      'Windows ${playing ? 'playing' : 'paused'} keeps video bright and playback controls at bottom',
+      (tester) async {
+        final fixture = TransportFixture()
+          ..background = const Color(0xFF6BCADE);
+        await fixture.mount(tester, mobile: false, size: const Size(1000, 700));
+        if (playing) await fixture.player.playOrPause();
+        fixture.interactions.hint('合成视频校验 · 快进至 0:44');
+        await tester.pump(const Duration(milliseconds: 200));
+        final bottom = tester.getRect(
+          find.byKey(const ValueKey('windows-toolbar-layout')),
+        );
+        expect(bottom.top, greaterThan(450));
+        for (final id in [
+          'windows-play',
+          'windows-previous',
+          'windows-next',
+          'player-desktop-forward',
+          'windows-volume',
+          'player-speed',
+          'player-episodes',
+          'windows-settings',
+          'player-fullscreen',
+          'windows-player-feedback',
+        ]) {
+          expect(
+            bottom.contains(tester.getCenter(find.byKey(ValueKey(id)))),
+            isTrue,
+            reason: id,
+          );
+        }
+        final center = const Rect.fromLTWH(300, 150, 400, 300);
+        for (final button in tester.widgetList<IconButton>(
+          find.byType(IconButton),
+        )) {
+          expect(
+            center.contains(tester.getCenter(find.byWidget(button))),
+            isFalse,
+          );
+        }
+        final boundary = tester.renderObject<RenderRepaintBoundary>(
+          find.byKey(const ValueKey('transport-capture')),
+        );
+        await tester.runAsync(() async {
+          final image = await boundary.toImage(pixelRatio: 1);
+          final pixels = (await image.toByteData(
+            format: ui.ImageByteFormat.rawRgba,
+          ))!;
+          for (final sample in [
+            const Offset(250, 200),
+            const Offset(500, 350),
+            const Offset(750, 450),
+          ]) {
+            final index =
+                (sample.dy.toInt() * image.width + sample.dx.toInt()) * 4;
+            expect(pixels.buffer.asUint8List(index, 4), [107, 202, 222, 255]);
+          }
+          final directory = Platform.environment['HG_UI_CAPTURE_DIR'];
+          if (directory != null) {
+            final bytes = (await image.toByteData(
+              format: ui.ImageByteFormat.png,
+            ))!;
+            await File(
+              '$directory/windows-bottom-controls-${playing ? 'playing' : 'paused'}.png',
+            ).writeAsBytes(bytes.buffer.asUint8List());
+          }
+          image.dispose();
+        });
+        expect(tester.takeException(), isNull);
+        await fixture.unmount(tester);
+      },
+      variant: windows,
+    );
+  }
+
   testWidgets(
     'Windows groups transport controls and hides after two idle seconds',
     (tester) async {

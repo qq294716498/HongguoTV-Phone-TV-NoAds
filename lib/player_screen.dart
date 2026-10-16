@@ -128,6 +128,8 @@ class _PlayerScreenState extends State<PlayerScreen>
   bool _forceOnline = false;
   bool _localFailure = false;
   bool _fullscreen = false;
+  bool _windowsEpisodesExpanded = true;
+  int _windowsActivityRevision = 0;
   bool _automaticFullscreenSuppressed = false;
   bool _panelOpen = false;
   int _mobileTab = 0;
@@ -171,6 +173,12 @@ class _PlayerScreenState extends State<PlayerScreen>
       !_television &&
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS);
+  bool get _windowsDesktop =>
+      !_television && defaultTargetPlatform == TargetPlatform.windows;
+  bool get _windowsSidebarAvailable =>
+      _windowsDesktop &&
+      !_showFullscreen &&
+      MediaQuery.sizeOf(context).width >= 760;
   bool get _portraitWatching =>
       _mobile &&
       !_showFullscreen &&
@@ -220,6 +228,13 @@ class _PlayerScreenState extends State<PlayerScreen>
     WidgetsBinding.instance.addObserver(this);
     _detail = widget.detail;
     _index = widget.initialIndex;
+    if (_windowsDesktop) {
+      _windowsEpisodesExpanded =
+          widget.store.preferences.getBool(
+            'windows_episode_sidebar_expanded',
+          ) ??
+          true;
+    }
     _profileEpoch = widget.handoff?.profileEpoch ?? widget.store.profileEpoch;
     final preferences = widget.store.playbackPreferences;
     _speed = preferences.speed;
@@ -1819,6 +1834,29 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
+  Future<void> _setWindowsEpisodes(bool expanded) async {
+    if (!_windowsDesktop || _closed || !mounted) return;
+    _interactions.cancel();
+    setState(() {
+      _windowsEpisodesExpanded = expanded;
+      _windowsActivityRevision++;
+    });
+    _playerFocus.requestFocus();
+    try {
+      final saved = await widget.store.preferences.setBool(
+        'windows_episode_sidebar_expanded',
+        expanded,
+      );
+      if (!saved && mounted && !_closed) _interactions.hint('选集栏偏好暂未保存');
+    } catch (_) {
+      if (mounted && !_closed) _interactions.hint('选集栏偏好暂未保存');
+    }
+  }
+
+  Future<void> _windowsEpisodes() => _windowsSidebarAvailable
+      ? _setWindowsEpisodes(!_windowsEpisodesExpanded)
+      : _openPanel(PlayerMenuSection.episodes);
+
   void _notice(String message) {
     if (!mounted || _closed) return;
     ScaffoldMessenger.of(
@@ -2387,6 +2425,33 @@ class _PlayerScreenState extends State<PlayerScreen>
                     child: LayoutBuilder(
                       builder: (context, constraints) {
                         final desktop = constraints.maxWidth >= 840;
+                        if (_windowsDesktop) {
+                          final visible =
+                              _windowsEpisodesExpanded &&
+                              !fullscreen &&
+                              constraints.maxWidth >= 760;
+                          return Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Expanded(child: _videoPane(context)),
+                              Visibility(
+                                visible: visible,
+                                maintainState: true,
+                                child: SizedBox(
+                                  key: const ValueKey(
+                                    'windows-episode-sidebar',
+                                  ),
+                                  width: desktop ? 312 : 210,
+                                  child: _episodePanel(
+                                    onCollapse: () =>
+                                        unawaited(_setWindowsEpisodes(false)),
+                                    preserveScrollOnResize: true,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
+                        }
                         if (fullscreen || _portraitWatching) {
                           return _videoPane(context);
                         }
@@ -2517,9 +2582,20 @@ class _PlayerScreenState extends State<PlayerScreen>
             showDanmaku: _detail.drama.source == 'hongguo',
             danmakuEnabled: _danmakuEnabled,
             danmakuStatus: _danmaku.status,
-            onEpisodes: () => _portraitWatching
-                ? _openMobileDetails(0)
-                : _openPanel(PlayerMenuSection.episodes),
+            onEpisodes: _windowsDesktop
+                ? _windowsEpisodes
+                : () => _portraitWatching
+                      ? _openMobileDetails(0)
+                      : _openPanel(PlayerMenuSection.episodes),
+            desktopEpisodesExpanded: _windowsDesktop
+                ? _windowsSidebarAvailable && _windowsEpisodesExpanded
+                : null,
+            desktopActivityRevision: _windowsActivityRevision,
+            episodesTooltip: !_windowsDesktop || !_windowsSidebarAvailable
+                ? null
+                : _windowsEpisodesExpanded
+                ? '收起选集栏'
+                : '展开选集栏',
             onSpeed: () => _openPanel(PlayerMenuSection.speed),
             onQuality: () => _openPanel(PlayerMenuSection.quality),
             onSettings: () => _openPanel(PlayerMenuSection.settings),
@@ -3158,12 +3234,38 @@ class _PlayerScreenState extends State<PlayerScreen>
     ValueChanged<int>? onSelected,
     BuildContext? panelContext,
     VoidCallback? onAllSeasons,
+    VoidCallback? onCollapse,
+    bool preserveScrollOnResize = false,
   }) => ColoredBox(
     color: Theme.of(panelContext ?? context).colorScheme.surface,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (_canBrowseSeasons)
+        if (onCollapse != null)
+          Row(
+            children: [
+              Expanded(
+                child: _canBrowseSeasons
+                    ? OutlinedButton.icon(
+                        key: const ValueKey('player-all-seasons'),
+                        onPressed: onAllSeasons ?? _browseSeasons,
+                        icon: const Icon(Icons.video_library_outlined),
+                        label: const Text('查看全季'),
+                      )
+                    : const Padding(
+                        padding: EdgeInsets.only(left: 16),
+                        child: Text('选集'),
+                      ),
+              ),
+              IconButton(
+                key: const ValueKey('windows-collapse-episodes'),
+                tooltip: '收起选集栏',
+                onPressed: onCollapse,
+                icon: const Icon(Icons.chevron_right_rounded),
+              ),
+            ],
+          )
+        else if (_canBrowseSeasons)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: OutlinedButton.icon(
@@ -3180,6 +3282,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             currentIndex: _index,
             compact: compact,
             title: compact ? '剧集' : '选集',
+            preserveScrollOnResize: preserveScrollOnResize,
             onSelected: onSelected ?? (index) => _play(index),
           ),
         ),

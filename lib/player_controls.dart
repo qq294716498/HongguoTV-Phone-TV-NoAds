@@ -42,6 +42,9 @@ class PlayerControls extends StatefulWidget {
     this.onSeek,
     this.onDanmaku,
     this.onSettings,
+    this.desktopEpisodesExpanded,
+    this.episodesTooltip,
+    this.desktopActivityRevision = 0,
     this.onRetryDanmaku,
     this.onPush,
     this.onPictureInPicture,
@@ -78,6 +81,9 @@ class PlayerControls extends StatefulWidget {
   final Future<void> Function(Duration)? onSeek;
   final Future<void> Function()? onDanmaku;
   final Future<void> Function()? onSettings;
+  final bool? desktopEpisodesExpanded;
+  final String? episodesTooltip;
+  final int desktopActivityRevision;
   final Future<void> Function()? onRetryDanmaku;
   final Future<void> Function()? onPush;
   final Future<void> Function()? onPictureInPicture;
