@@ -27,7 +27,7 @@ def native_desktop(process, report):
                 data = json.loads(report.read_text(encoding='utf-8'))
                 if predicate(data):
                     return
-            except (FileNotFoundError, json.JSONDecodeError):
+            except (FileNotFoundError, PermissionError, json.JSONDecodeError):
                 pass
             time.sleep(0.1)
         raise TimeoutError('Native desktop action timed out')
