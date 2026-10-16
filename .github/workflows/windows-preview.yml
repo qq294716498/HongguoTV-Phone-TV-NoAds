@@ -4,9 +4,15 @@ on:
   push:
     branches: ['windows/**']
   workflow_dispatch:
+    inputs:
+      reuse_run_id:
+        description: Prior run with the identical application source and Windows package
+        required: false
+        type: string
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: windows-preview-${{ github.ref }}
@@ -78,6 +84,22 @@ jobs:
           (Split-Path $compiler) | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - run: python -m pip install pefile==2024.8.26
       - run: python scripts/build_windows.py --all-sources
+        if: ${{ !inputs.reuse_run_id }}
+      - uses: actions/download-artifact@v4
+        if: ${{ inputs.reuse_run_id }}
+        with:
+          name: hongguotv-windows-x64
+          run-id: ${{ inputs.reuse_run_id }}
+          github-token: ${{ github.token }}
+          path: dist/windows
+      - name: Restore binary only after verifying the original run and identical application source
+        if: ${{ inputs.reuse_run_id }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REUSE_RUN_ID: ${{ inputs.reuse_run_id }}
+        run: python scripts/reuse_windows_package.py
+      - run: flutter pub get --enforce-lockfile
+        if: ${{ inputs.reuse_run_id }}
       - name: Validate updater ZIP handling on Windows filesystem
         run: flutter test --no-pub test/windows_update_package_test.dart test/windows_update_startup_test.dart --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true --reporter=expanded
       - name: Verify version, x64 architecture, DLL imports, resources and hashes
@@ -110,6 +132,8 @@ jobs:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
+      WINDOWS_BINARY_COMMIT: ${{ inputs.reuse_run_id && 'ee60cf8abada4b75f9f57dac24a6adb154641f06' || github.sha }}
+      WINDOWS_BINARY_RUN: ${{ inputs.reuse_run_id || github.run_id }}
     steps:
       - uses: actions/checkout@v4
         with:
