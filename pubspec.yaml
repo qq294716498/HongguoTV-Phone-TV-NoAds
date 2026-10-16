@@ -46,5 +46,6 @@ flutter:
     enable-swift-package-manager: false
   uses-material-design: true
   assets:
+    - assets/app_identity/
     - assets/video_enhancement/
     - assets/danmaku_emoji/

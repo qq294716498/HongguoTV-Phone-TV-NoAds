@@ -223,7 +223,11 @@ class WindowsUpdateRuntime {
             await readyFile.readAsString() == nonce) {
           await WindowsDesktop.current?.prepareForUpdate();
           try {
-            await windowManager.destroy();
+            if (WindowsDesktop.current case final desktop?) {
+              await desktop.finishExit();
+            } else {
+              await windowManager.destroy();
+            }
           } catch (_) {
             await WindowsDesktop.current?.cancelUpdateExit();
             rethrow;

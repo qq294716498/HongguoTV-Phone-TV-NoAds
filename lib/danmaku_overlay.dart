@@ -7,6 +7,7 @@ import 'danmaku_controller.dart';
 import 'danmaku_emoji_render.dart';
 import 'danmaku_models.dart';
 import 'danmaku_text.dart';
+import 'windows_danmaku_overlay.dart';
 
 String danmakuFlightText(DanmakuItem item) {
   final characters = danmakuDisplayText(item.text).characters;
@@ -86,6 +87,7 @@ class DanmakuOverlay extends StatefulWidget {
     this.mobile = false,
     this.speed,
     this.opacity,
+    this.desktop = false,
   });
   final DanmakuController controller;
   final double aspectRatio;
@@ -93,6 +95,7 @@ class DanmakuOverlay extends StatefulWidget {
   final bool mobile;
   final double? speed;
   final double? opacity;
+  final bool desktop;
 
   @override
   State<DanmakuOverlay> createState() => _DanmakuOverlayState();
@@ -244,7 +247,18 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
   }
 
   @override
-  Widget build(BuildContext context) => RepaintBoundary(
+  Widget build(BuildContext context) =>
+      widget.desktop && !widget.mobile && !widget.television
+      ? WindowsDanmakuOverlay(
+          controller: widget.controller,
+          aspectRatio: widget.aspectRatio,
+          flightText: danmakuFlightText,
+          speed: widget.speed ?? 1,
+          opacity: widget.opacity ?? .62,
+        )
+      : _legacy(context);
+
+  Widget _legacy(BuildContext context) => RepaintBoundary(
     child: IgnorePointer(
       child: ExcludeSemantics(
         child: LayoutBuilder(

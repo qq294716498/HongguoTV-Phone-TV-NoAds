@@ -7,10 +7,42 @@ import subprocess
 import sys
 import tempfile
 import zipfile
+import struct
 from pathlib import Path
 
 
 root = Path(__file__).resolve().parents[1]
+
+
+def ico_images(content):
+    reserved, kind, count = struct.unpack_from('<HHH', content)
+    if reserved != 0 or kind != 1 or count < 5:
+        raise ValueError('Expected multi-resolution Windows brand icon')
+    result = []
+    for index in range(count):
+        width, height, _, _, _, _, length, offset = struct.unpack_from('<BBBBHHII', content, 6 + index * 16)
+        data = content[offset:offset + length]
+        if len(data) != length:
+            raise ValueError('Truncated icon data')
+        result.append((width or 256, height or 256, data))
+    return result
+
+
+def verify_brand_icon(binary, expected):
+    resources = {entry.id: entry for entry in binary.DIRECTORY_ENTRY_RESOURCE.entries}
+    if 3 not in resources or 14 not in resources:
+        raise ValueError('Executable missing embedded icon resources')
+    group = resources[14].directory.entries
+    if not any(entry.id == 101 for entry in group):
+        raise ValueError('Window and tray icon group 101 missing')
+    embedded = []
+    for entry in resources[3].directory.entries:
+        for language in entry.directory.entries:
+            data = language.data.struct
+            embedded.append(binary.get_data(data.OffsetToData, data.Size))
+    if set(embedded) != {data for _, _, data in expected}:
+        raise ValueError('Embedded EXE icon does not match Android brand ICO frames')
+    return [f'{width}x{height}' for width, height, _ in expected]
 
 
 def validate_aot_elf(header):
@@ -30,6 +62,12 @@ def main():
     package = root / 'dist/windows' / f'HongguoTV-{version}-windows-x64.zip'
     expected_version = tuple(map(int, version.split('-')[0].split('.'))) + (int(build),)
     records = []
+    identity = json.loads((root / 'assets/app_identity/identity.json').read_text(encoding='utf-8'))
+    source_brand = root / identity['androidBrandSource']
+    ico = (root / 'windows/runner/resources/app_icon.ico').read_bytes()
+    if hashlib.sha256(source_brand.read_bytes()).hexdigest() != identity['brandSha256'] or hashlib.sha256(ico).hexdigest() != identity['windowsIcoSha256']:
+        raise ValueError('Brand icon identity changed without verification')
+    expected_icons = ico_images(ico)
     with tempfile.TemporaryDirectory(prefix='hongguotv-verify-') as temporary:
         bundle = Path(temporary)
         with zipfile.ZipFile(package) as archive:
@@ -45,6 +83,7 @@ def main():
                     'data/flutter_assets/assets/danmaku_emoji/2764-fe0f.png',
                     'data/flutter_assets/assets/danmaku_emoji/LICENSE.txt',
                     'data/flutter_assets/assets/video_enhancement/manifest.json']
+        required += ['data/flutter_assets/assets/app_identity/github-avatar.png', 'data/flutter_assets/assets/app_identity/app-icon.png', 'data/flutter_assets/assets/app_identity/identity.json']
         missing = [name for name in required if not (bundle / name).is_file()]
         if missing:
             raise ValueError('Missing package files: ' + ', '.join(missing))
@@ -84,7 +123,8 @@ def main():
                     if file.name == 'HongguoTV-updater.exe' and any(
                             name.startswith(('vcruntime', 'msvcp', 'flutter', 'libstdc++', 'libgcc')) for name in imports):
                         raise ValueError('Update helper must run independently of application DLLs')
-                    if file.name == 'HongguoTV.exe':
+                    if file.suffix.lower() == '.exe':
+                        record['brandIconSizes'] = verify_brand_icon(binary, expected_icons)
                         info = binary.VS_FIXEDFILEINFO[0]
                         actual = (info.FileVersionMS >> 16, info.FileVersionMS & 65535,
                                   info.FileVersionLS >> 16, info.FileVersionLS & 65535)
@@ -92,6 +132,9 @@ def main():
                             raise ValueError(f'Wrong executable version: {actual}')
             records.append(record)
         ownership = json.loads((bundle / 'windows-package.json').read_text(encoding='utf-8'))
+        for name, digest in [('app-icon.png', identity['brandSha256']), ('github-avatar.png', identity['avatarSha256'])]:
+            if hashlib.sha256((bundle / 'data/flutter_assets/assets/app_identity' / name).read_bytes()).hexdigest() != digest:
+                raise ValueError('Bundled identity asset changed: ' + name)
         if ownership['version'] != version or ownership['build'] != int(build) or ownership['architecture'] != 'x64':
             raise ValueError('Wrong update ownership manifest')
         actual_files = {record['path']: {'bytes': record['bytes'], 'sha256': record['sha256']}
@@ -107,7 +150,7 @@ def main():
     result = {'ok': True, 'version': version, 'build': int(build), 'architecture': 'x64',
               'package': package.name, 'bytes': package.stat().st_size,
               'sha256': hashlib.file_digest(package.open('rb'), 'sha256').hexdigest(),
-              'dllImportsResolved': True, 'nativeLibrariesLoaded': True, 'files': records}
+              'dllImportsResolved': True, 'nativeLibrariesLoaded': True, 'brandIconsVerified': True, 'identityAssetsVerified': True, 'files': records}
     (package.parent / 'Windows-validation.json').write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
     print(f'Validated {package.name}: {len(records)} files, x64, version {version}+{build}')
     print(json.dumps({key: result[key] for key in ['ok', 'version', 'build', 'architecture',

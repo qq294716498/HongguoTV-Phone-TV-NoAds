@@ -130,10 +130,18 @@ Future<void> runPackageSmoke(List<String> arguments) async {
     evidence['fullscreen'] = true;
     if (errors.isNotEmpty) throw StateError(errors.join('\n'));
     evidence['mediaKitPlayback'] = true;
-    final desktop = WindowsDesktop(preferences);
+    final desktop = WindowsDesktop(preferences, exitProcess: exit);
     await desktop.initialize();
     if (!desktop.available)
       throw StateError('Native notification area unavailable');
+    final branding = await desktop.channel.invokeMapMethod<String, dynamic>(
+      'branding',
+    );
+    for (final field in ['windowBrandIcon', 'trayBrandIcon']) {
+      if (branding?[field] != true)
+        throw StateError('Native brand icon missing: $field');
+      evidence[field] = true;
+    }
     desktop.playbackOwner = player;
     await desktop.updatePlayback(attached: true, playing: true);
     final originalBounds = await windowManager.getBounds();
@@ -190,6 +198,8 @@ Future<void> runPackageSmoke(List<String> arguments) async {
           await windowManager.isVisible())
         evidence['nativeTrayRestored'] = true;
       evidence['nativeTrayToggles'] = toggles;
+      evidence['currentlyInTray'] = desktop.inTray;
+      evidence['windowVisible'] = await windowManager.isVisible();
       evidence['playing'] = player!.state.playing;
       await write();
     });
@@ -209,7 +219,17 @@ Future<void> runPackageSmoke(List<String> arguments) async {
       evidence['nativeTrayQuit'] = true;
       evidence['ok'] = true;
       await write();
+    };
+    desktop.detachUI = () async {
+      runApp(const SizedBox.shrink());
+      WidgetsBinding.instance.scheduleForcedFrame();
+      await WidgetsBinding.instance.endOfFrame;
+      evidence['playerUiDetached'] = true;
       await player!.dispose();
+      if (errors.isNotEmpty)
+        throw StateError('Flutter teardown failed: ${errors.join('\n')}');
+      evidence['playerDisposedBeforeExit'] = true;
+      await write();
     };
     await write();
     await Completer<void>().future;

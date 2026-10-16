@@ -9,6 +9,7 @@ class DesktopHarness {
   final calls = <MethodCall>[];
   bool visible = true, topmost = false, fullscreen = false, maximized = false;
   bool trayAvailable = true;
+  void Function(int)? exitProcess;
   Map<String, double> bounds = {
     'x': 100,
     'y': 80,
@@ -63,7 +64,10 @@ class DesktopHarness {
           return null;
         });
     SharedPreferences.setMockInitialValues({});
-    desktop = WindowsDesktop(await SharedPreferences.getInstance());
+    desktop = WindowsDesktop(
+      await SharedPreferences.getInstance(),
+      exitProcess: exitProcess,
+    );
     await desktop.initialize();
   }
 
@@ -85,6 +89,34 @@ class DesktopHarness {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test(
+    'actual process exit waits for saved state, detached UI and released player',
+    () async {
+      final order = <String>[];
+      final released = Completer<void>();
+      final harness = DesktopHarness()
+        ..exitProcess = (code) => order.add('exit:$code');
+      await harness.initialize();
+      addTearDown(harness.dispose);
+      harness.desktop.savePlayback = () async {
+        order.add('save');
+      };
+      harness.desktop.flushStore = () async {
+        order.add('flush');
+      };
+      harness.desktop.detachUI = () async {
+        order.add('detach');
+        harness.desktop.playbackDisposal = released.future;
+      };
+      final closing = harness.desktop.quit();
+      await Future<void>.delayed(Duration.zero);
+      expect(order, ['save', 'flush', 'detach']);
+      released.complete();
+      await closing;
+      expect(order, ['save', 'flush', 'detach', 'flush', 'exit:0']);
+      expect(harness.calls.where((call) => call.method == 'destroy'), isEmpty);
+    },
+  );
   test(
     'close hides only, native menu restores, toggles and saves before actual destruction',
     () async {

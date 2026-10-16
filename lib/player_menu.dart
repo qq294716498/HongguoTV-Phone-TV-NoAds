@@ -272,7 +272,9 @@ class _PlayerMenuState extends State<PlayerMenu> {
                     ),
                   ),
           ),
-          if (widget.mobile) ...[
+          if (widget.mobile ||
+              (!AppLayout.isTelevision(context) &&
+                  defaultTargetPlatform == TargetPlatform.windows)) ...[
             const Text('弹幕速度（独立于视频倍速）'),
             const SizedBox(height: 8),
             Wrap(
@@ -282,10 +284,14 @@ class _PlayerMenuState extends State<PlayerMenu> {
                 for (final speed in danmakuSpeeds)
                   ChoiceChip(
                     key: ValueKey('menu-danmaku-speed-$speed'),
-                    label: Text('${speed}x${speed == 1.15 ? '（默认）' : ''}'),
+                    label: Text(
+                      '${speed}x${speed == (widget.mobile ? 1.15 : 1) ? '（默认）' : ''}',
+                    ),
                     selected:
                         speed ==
-                        preferences.effectiveDanmakuSpeed(mobile: true),
+                        preferences.effectiveDanmakuSpeed(
+                          mobile: widget.mobile,
+                        ),
                     onSelected: _busy
                         ? null
                         : (_) => _run(

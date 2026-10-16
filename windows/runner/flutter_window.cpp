@@ -21,7 +21,8 @@ bool FlutterWindow::AddTray() {
   icon.uID = 1;
   icon.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
   icon.uCallbackMessage = kTrayMessage;
-  icon.hIcon = LoadIcon(GetModuleHandle(nullptr), MAKEINTRESOURCE(IDI_APP_ICON));
+  tray_icon_ = LoadIcon(GetModuleHandle(nullptr), MAKEINTRESOURCE(IDI_APP_ICON));
+  icon.hIcon = tray_icon_;
   wcscpy_s(icon.szTip, L"红果TV · 右键恢复 / 播放暂停 / 退出");
   tray_active_ = Shell_NotifyIconW(NIM_ADD, &icon) != FALSE;
   if (tray_active_) {
@@ -38,6 +39,7 @@ void FlutterWindow::RemoveTray() {
   icon.uID = 1;
   Shell_NotifyIconW(NIM_DELETE, &icon);
   tray_active_ = false;
+  tray_icon_ = nullptr;
 }
 
 void FlutterWindow::TrayAction(const char* action) {
@@ -92,6 +94,13 @@ bool FlutterWindow::OnCreate() {
   desktop_channel_->SetMethodCallHandler([this](const auto& call, auto result) {
     if (call.method_name() == "initialize") {
       result->Success(flutter::EncodableValue(tray_active_ || AddTray()));
+    } else if (call.method_name() == "branding") {
+      const auto brand = LoadIcon(GetModuleHandle(nullptr), MAKEINTRESOURCE(IDI_APP_ICON));
+      const auto window_icon = reinterpret_cast<HICON>(GetClassLongPtr(GetHandle(), GCLP_HICON));
+      flutter::EncodableMap values;
+      values[flutter::EncodableValue("windowBrandIcon")] = flutter::EncodableValue(brand != nullptr && window_icon == brand);
+      values[flutter::EncodableValue("trayBrandIcon")] = flutter::EncodableValue(tray_active_ && tray_icon_ == brand && brand != nullptr);
+      result->Success(flutter::EncodableValue(values));
     } else if (call.method_name() == "dispose") {
       RemoveTray();
       result->Success();
@@ -115,6 +124,13 @@ bool FlutterWindow::OnCreate() {
   device_channel_->SetMethodCallHandler(
       [](const flutter::MethodCall<flutter::EncodableValue>& call,
          std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+        if (call.method_name() == "openProjectPage") {
+          const auto opened = reinterpret_cast<INT_PTR>(ShellExecuteW(nullptr, L"open",
+            L"https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds", nullptr, nullptr, SW_SHOWNORMAL));
+          if (opened > 32) result->Success();
+          else result->Error("no_browser", "Unable to open project repository");
+          return;
+        }
         if (call.method_name() == "setPlaybackScreenOn") {
           const auto* arguments = std::get_if<flutter::EncodableMap>(call.arguments());
           bool enabled = false;

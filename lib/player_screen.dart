@@ -2371,13 +2371,13 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
     unawaited(_releaseSession(_session));
     unawaited(_loader.close().catchError((Object _) {}));
-    unawaited(
-      _operations.catchError((Object _) {}).then((_) async {
-        await _interactions.pendingRates.catchError((Object _) {});
-        await enhancementClosed.catchError((Object _) {});
-        await _player.dispose();
-      }),
-    );
+    final disposal = _operations.catchError((Object _) {}).then((_) async {
+      await _interactions.pendingRates.catchError((Object _) {});
+      await enhancementClosed.catchError((Object _) {});
+      await _player.dispose();
+    });
+    if (_windowsDesktop) WindowsDesktop.current?.playbackDisposal = disposal;
+    unawaited(disposal);
     if (Platform.isWindows) {
       unawaited(windowManager.setFullScreen(false));
     } else if (_mobile || _television && Platform.isAndroid) {
@@ -2751,6 +2751,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         if (!hideOverlayForPictureInPicture && !_hasRetainedFrame)
           DanmakuOverlay(
             controller: _danmaku,
+            desktop: _windowsDesktop,
             speed: _preferences.effectiveDanmakuSpeed(mobile: _mobile),
             opacity: _preferences.effectiveDanmakuOpacity(
               mobile: _mobile,

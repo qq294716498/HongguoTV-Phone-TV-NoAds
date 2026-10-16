@@ -83,7 +83,7 @@ def transaction(base, fixtures, mode, real=False):
     shutil.copyfile(fixtures / f'fixture-{old_build}.exe', install / 'HongguoTV.exe')
     (tx / 'test-mode').write_text(mode, encoding='ascii')
     config = support / 'shared_preferences.json'
-    original = '{"flutter.localSnapshot.v1":"preserved"}' if not real else '{}'
+    original = '{"flutter.localSnapshot.v1":"preserved"}' if not real else '{"flutter.app_origin_notice_acknowledged_v1":true}'
     existing_config = config.read_bytes() if config.exists() else None
     config.write_text(original, encoding='utf-8')
     shutil.copyfile(config, tx / 'preferences-backup.json')
@@ -158,6 +158,7 @@ def transaction(base, fixtures, mode, real=False):
             phase_file = tx / f'startup-{build}.json'
             phase = json.loads(phase_file.read_text(encoding='utf-8'))
             assert phase['phase'] == 'acknowledged' and phase['nonce'] == nonce, phase
+            assert json.loads(config.read_text(encoding='utf-8'))['flutter.app_origin_notice_acknowledged_v1'] is True
         return {'case': 'real-client-startup-ack' if real else mode, 'ok': True, 'status': status,
                 'configurationPreserved': True, 'architecture': 'x64',
                 'build': build, 'oldBuild': old_build, 'startupAcknowledged': real}

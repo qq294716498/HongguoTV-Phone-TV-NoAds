@@ -11,6 +11,7 @@ import 'package:duanju_app/player_menu.dart';
 import 'package:duanju_app/player_screen.dart';
 import 'package:duanju_app/remote_widgets.dart';
 import 'package:duanju_app/windows_desktop.dart';
+import 'package:duanju_app/windows_danmaku_overlay.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
@@ -339,6 +340,7 @@ void main() {
       await frames(tester);
       expect(repository.preloadedEpisodes, contains(2));
       expect(repository.active, contains('preloaded-2'));
+      final danmakuState = tester.state(find.byType(WindowsDanmakuOverlay));
       final active = Set<String>.of(repository.active);
       await harness.desktop.requestClose();
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
@@ -376,6 +378,10 @@ void main() {
         expect(platform.opened, hasLength(1));
         expect(platform.state.playing, true);
         expect(repository.active, containsAll(active));
+        expect(
+          tester.state(find.byType(WindowsDanmakuOverlay)),
+          same(danmakuState),
+        );
         expect(creations, 1);
         expect(repository.preloadedEpisodes, [2]);
       }

@@ -360,6 +360,14 @@ class MainActivity : FlutterActivity() {
                             setFullscreenBrightness(false)
                             result.success(true)
                         }
+                        "openProjectPage" -> {
+                            try {
+                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds")))
+                                result.success(null)
+                            } catch (error: Exception) {
+                                result.error("no_browser", "未找到可用浏览器", null)
+                            }
+                        }
                         "openExternalPlayer" -> {
                             val url = call.argument<String>("url")
                             val title = call.argument<String>("title") ?: "短剧"

@@ -1,4 +1,5 @@
 import 'app_update_screen.dart';
+import 'app_origin.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -1062,13 +1063,19 @@ class _HomeScreenState extends State<HomeScreen> {
                         context: context,
                         applicationName: appName,
                         applicationVersion: AppLayout.versionOf(context),
-                        applicationIcon: const Icon(
-                          Icons.play_circle_filled_rounded,
-                          size: 48,
-                          color: Color(0xFFFF765F),
+                        applicationIcon: Image.asset(
+                          'assets/app_identity/app-icon.png',
+                          width: 48,
+                          height: 48,
+                          errorBuilder: (_, _, _) => const Icon(
+                            Icons.play_circle_filled_rounded,
+                            size: 48,
+                          ),
                         ),
                         children: [
                           const Text('独立运行，打开即可浏览和播放。观看记录与追剧收藏保存在当前设备。'),
+                          const SizedBox(height: 16),
+                          const ProjectOrigin(),
                           TextButton.icon(
                             onPressed: () {
                               Navigator.of(context, rootNavigator: true).pop();

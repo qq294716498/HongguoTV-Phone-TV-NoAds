@@ -55,6 +55,8 @@ def native_desktop(process, report):
     wait(lambda data: data.get('nativeTrayToggles') == 2 and data.get('playing') is True)
     user.PostMessageW(window, 0x0111, 41001, 0)
     wait(lambda data: data.get('nativeTrayRestored') is True)
+    user.PostMessageW(window, 0x0010, 0, 0)
+    wait(lambda data: data.get('currentlyInTray') is True and data.get('windowVisible') is False)
     user.PostMessageW(window, 0x0111, 41003, 0)
 
 
@@ -119,7 +121,10 @@ def main():
             ui = json.loads(startup_report.read_text(encoding='utf-8'))
             if ui.get('ok') is not True or ui.get('normalAppStartup') is not True:
                 raise RuntimeError('Application bootstrap did not complete')
+            if ui.get('firstLaunchNoticeVisible') is not True:
+                raise RuntimeError('First launch provenance notice did not render')
             evidence.update(normalAppStartup=True, remoteImagesDisabled=ui['remoteImagesDisabled'])
+            evidence['firstLaunchNoticeVisible'] = True
             output.write_text(json.dumps(evidence, indent=2) + '\n', encoding='utf-8')
             print(json.dumps(evidence))
         except BaseException:

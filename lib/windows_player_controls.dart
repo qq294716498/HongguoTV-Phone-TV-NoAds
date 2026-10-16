@@ -51,11 +51,7 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
       c.interactions.boosting ||
       (_keyboard && (_toolbarFocus.hasFocus || _sidebarFocus.hasFocus));
   bool get _shown =>
-      c.enabled &&
-      (_visible ||
-          !c.player.state.playing ||
-          c.player.state.buffering ||
-          _held);
+      c.enabled && (_visible || c.player.state.buffering || _held);
 
   @override
   void initState() {
@@ -149,13 +145,9 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
 
   void _scheduleHide() {
     _hideTimer?.cancel();
-    if (!mounted || !c.enabled || _held || !c.player.state.playing) return;
-    _hideTimer = Timer(const Duration(seconds: 2), () {
-      if (mounted &&
-          !_held &&
-          c.enabled &&
-          c.player.state.playing &&
-          !c.player.state.buffering) {
+    if (!mounted || !c.enabled || _held) return;
+    _hideTimer = Timer(const Duration(seconds: 1), () {
+      if (mounted && !_held && c.enabled && !c.player.state.buffering) {
         setState(() => _visible = false);
       }
     });
@@ -626,6 +618,10 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
         },
         child: MouseRegion(
           onHover: _hover,
+          onEnter: (_) => _show(),
+          onExit: (_) {
+            _scheduleHide();
+          },
           cursor: visible ? SystemMouseCursors.basic : SystemMouseCursors.none,
           child: LayoutBuilder(
             builder: (context, constraints) => Stack(

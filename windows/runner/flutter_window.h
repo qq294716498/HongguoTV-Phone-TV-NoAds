@@ -35,6 +35,7 @@ class FlutterWindow : public Win32Window {
   bool tray_active_ = false;
   bool playback_attached_ = false;
   bool playing_ = false;
+  HICON tray_icon_ = nullptr;
   bool AddTray();
   void RemoveTray();
   void TrayAction(const char* action);

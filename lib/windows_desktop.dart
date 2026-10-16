@@ -13,6 +13,7 @@ class WindowsDesktop extends ChangeNotifier
     this.preferences, {
     WindowManager? manager,
     MethodChannel? channel,
+    this.exitProcess,
   }) : manager = manager ?? windowManager,
        channel = channel ?? const MethodChannel('duanju/desktop');
 
@@ -20,6 +21,7 @@ class WindowsDesktop extends ChangeNotifier
   final SharedPreferences preferences;
   final WindowManager manager;
   final MethodChannel channel;
+  final void Function(int)? exitProcess;
   bool available = false;
   bool inTray = false;
   bool mini = false;
@@ -30,6 +32,9 @@ class WindowsDesktop extends ChangeNotifier
   VoidCallback? togglePlayback;
   Future<void> Function()? savePlayback;
   Future<void> Function()? flushStore;
+  Future<void> Function()? detachUI;
+  Future<void> Function()? restoreUI;
+  Future<void>? playbackDisposal;
   Rect? _bounds;
   bool _maximized = false;
   bool _topmost = false;
@@ -195,6 +200,9 @@ class WindowsDesktop extends ChangeNotifier
     await _operation;
     quitting = true;
     try {
+      await detachUI?.call();
+      await playbackDisposal;
+      await flushStore?.call();
       await channel.invokeMethod<void>('dispose');
       await manager.setPreventClose(false);
     } catch (_) {
@@ -207,11 +215,20 @@ class WindowsDesktop extends ChangeNotifier
     available = await channel.invokeMethod<bool>('initialize') ?? false;
     await manager.setPreventClose(true);
     quitting = false;
+    await restoreUI?.call();
     notifyListeners();
     if (inTray && !available) await restore();
   }
 
   Future<void> quit() => _run(_quit);
+
+  Future<void> finishExit() async {
+    if (exitProcess case final finish?) {
+      finish(0);
+    } else {
+      await manager.destroy();
+    }
+  }
 
   Future<void> _quit() async {
     if (quitting) return;
@@ -220,11 +237,15 @@ class WindowsDesktop extends ChangeNotifier
     try {
       await savePlayback?.call();
       await flushStore?.call();
+      await detachUI?.call();
+      await playbackDisposal;
+      await flushStore?.call();
       await channel.invokeMethod<void>('dispose');
       await manager.setPreventClose(false);
-      await manager.destroy();
+      await finishExit();
     } catch (_) {
       quitting = false;
+      await restoreUI?.call();
       notifyListeners();
       rethrow;
     }

@@ -1,0 +1,26 @@
+#pragma code_page(65001)
+#include <winres.h>
+101 ICON "@CMAKE_SOURCE_DIR@/runner/resources/app_icon.ico"
+1 VERSIONINFO
+FILEVERSION @FLUTTER_VERSION_MAJOR@,@FLUTTER_VERSION_MINOR@,@FLUTTER_VERSION_PATCH@,@FLUTTER_VERSION_BUILD@
+PRODUCTVERSION @FLUTTER_VERSION_MAJOR@,@FLUTTER_VERSION_MINOR@,@FLUTTER_VERSION_PATCH@,@FLUTTER_VERSION_BUILD@
+FILEOS VOS__WINDOWS32
+FILETYPE VFT_APP
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904b0"
+    BEGIN
+      VALUE "FileDescription", "红果TV更新助手"
+      VALUE "FileVersion", "@FLUTTER_VERSION@"
+      VALUE "InternalName", "HongguoTV-updater.exe"
+      VALUE "OriginalFilename", "HongguoTV-updater.exe"
+      VALUE "ProductName", "红果TV"
+      VALUE "ProductVersion", "@FLUTTER_VERSION@"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x409, 1200
+  END
+END

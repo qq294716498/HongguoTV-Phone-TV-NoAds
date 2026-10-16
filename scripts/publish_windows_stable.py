@@ -55,13 +55,15 @@ def main():
             raise ValueError('Actual client restart was not acknowledged')
         if validation['ok'] is not True or validation['architecture'] != 'x64' or validation['build'] != int(build) or validation['version'] != version:
             raise ValueError('Windows package identity was not validated')
+        if validation.get('brandIconsVerified') is not True or validation.get('identityAssetsVerified') is not True:
+            raise ValueError('Windows branding and provenance assets were not validated')
         with package.open('rb') as stream:
             digest = hashlib.file_digest(stream, 'sha256').hexdigest()
         if validation['sha256'] != digest:
             raise ValueError('Validated package bytes changed')
         for field in ['ok', 'nativeCore', 'preferences', 'bundledAssets', 'ffprobe', 'remux',
                       'flutterWindow', 'videoFrameRendered', 'seekRateVolume', 'playbackPower',
-                      'fullscreen', 'miniReuseResizeRestore', 'nativeTrayHidden', 'trayKeepsPlaying', 'nativeTrayRestored', 'nativeTrayQuit', 'mediaKitPlayback', 'cleanPath', 'nonAsciiPath', 'differentWorkingDirectory', 'javaEnvironmentRemoved', 'normalAppStartup', 'remoteImagesDisabled']:
+                      'fullscreen', 'miniReuseResizeRestore', 'nativeTrayHidden', 'trayKeepsPlaying', 'nativeTrayRestored', 'nativeTrayQuit', 'playerUiDetached', 'playerDisposedBeforeExit', 'windowBrandIcon', 'trayBrandIcon', 'firstLaunchNoticeVisible', 'mediaKitPlayback', 'cleanPath', 'nonAsciiPath', 'differentWorkingDirectory', 'javaEnvironmentRemoved', 'normalAppStartup', 'remoteImagesDisabled']:
             if smoke.get(field) is not True:
                 raise ValueError('Missing Windows smoke check: ' + field)
         if smoke.get('nativeTrayToggles') != 2:

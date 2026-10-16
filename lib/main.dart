@@ -27,6 +27,7 @@ import 'diary_service.dart';
 import 'app_updates.dart';
 import 'windows_update_runtime.dart';
 import 'windows_desktop.dart';
+import 'app_origin.dart';
 import 'models.dart';
 import 'watch_reminder_runtime.dart';
 import 'television_navigation.dart';
@@ -95,8 +96,21 @@ Future<void> main(List<String> arguments) async {
       await WidgetsBinding.instance.waitUntilFirstFrameRasterized;
       await Future<void>.delayed(const Duration(seconds: 2));
       if (errors.isNotEmpty) throw StateError(errors.join('\n'));
+      var originText = false, originButton = false;
+      void inspect(Element element) {
+        if (element.widget is Text &&
+            (element.widget as Text).data == projectFreeNotice)
+          originText = true;
+        if (element.widget.key == const ValueKey('acknowledge-project-origin'))
+          originButton = true;
+        element.visitChildren(inspect);
+      }
+
+      WidgetsBinding.instance.rootElement?.visitChildren(inspect);
+      if (!originText || !originButton)
+        throw StateError('First launch notice did not render');
       await report.writeAsString(
-        '{"ok":true,"normalAppStartup":true,"remoteImagesDisabled":true}',
+        '{"ok":true,"normalAppStartup":true,"remoteImagesDisabled":true,"firstLaunchNoticeVisible":true}',
         flush: true,
       );
       exit(0);
@@ -126,6 +140,7 @@ class _AppBootstrapState extends State<AppBootstrap>
   final navigator = GlobalKey<NavigatorState>();
   LocalStore? store;
   Object? error;
+  bool _exiting = false;
   late AppDevice device = widget.device;
 
   @override
@@ -196,11 +211,19 @@ class _AppBootstrapState extends State<AppBootstrap>
     try {
       final preferences = await SharedPreferences.getInstance();
       if (Platform.isWindows && WindowsDesktop.current == null) {
-        final desktop = WindowsDesktop(preferences);
+        final desktop = WindowsDesktop(preferences, exitProcess: exit);
         await desktop.initialize();
         WindowsDesktop.current = desktop;
         desktop.flushStore = () async {
           await store?.flushPendingWrites();
+        };
+        desktop.detachUI = () async {
+          if (mounted) setState(() => _exiting = true);
+          WidgetsBinding.instance.scheduleForcedFrame();
+          await WidgetsBinding.instance.endOfFrame;
+        };
+        desktop.restoreUI = () async {
+          if (mounted) setState(() => _exiting = false);
         };
       }
       await _refreshDevice();
@@ -336,15 +359,18 @@ class _AppBootstrapState extends State<AppBootstrap>
   }
 
   @override
-  Widget build(BuildContext context) => DuanjuApp(
-    repository: repository,
-    store: store,
-    bootstrapError: error?.toString(),
-    onRetry: _initialize,
-    television: device.television,
-    version: device.version,
-    navigatorKey: navigator,
-  );
+  Widget build(BuildContext context) => _exiting
+      ? const SizedBox.shrink()
+      : DuanjuApp(
+          repository: repository,
+          store: store,
+          bootstrapError: error?.toString(),
+          onRetry: _initialize,
+          television: device.television,
+          version: device.version,
+          navigatorKey: navigator,
+          requireOriginNotice: true,
+        );
 }
 
 class DuanjuApp extends StatefulWidget {
@@ -357,6 +383,7 @@ class DuanjuApp extends StatefulWidget {
     this.television = false,
     this.version = appVersion,
     this.navigatorKey,
+    this.requireOriginNotice = false,
   });
   final AppRepository repository;
   final LocalStore? store;
@@ -365,6 +392,7 @@ class DuanjuApp extends StatefulWidget {
   final bool television;
   final String version;
   final GlobalKey<NavigatorState>? navigatorKey;
+  final bool requireOriginNotice;
 
   @override
   State<DuanjuApp> createState() => _DuanjuAppState();
@@ -441,45 +469,49 @@ class _DuanjuAppState extends State<DuanjuApp> {
       );
     },
     home: store != null
-        ? store!.locked
-              ? ProfilesScreen(store: store!, locked: true)
-              : HomeScreen(
-                  key: ValueKey(
-                    'profile-${store!.profile.id}-${store!.profileEpoch}',
-                  ),
-                  repository: repository,
-                  store: store!,
+        ? widget.requireOriginNotice
+              ? FirstLaunchNotice(
+                  preferences: store!.preferences,
+                  child: _home(),
                 )
-        : Scaffold(
-            body: Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.play_circle_fill_rounded,
-                      color: Color(0xFFFF765F),
-                      size: 72,
-                    ),
-                    const SizedBox(height: 24),
-                    Text(
-                      bootstrapError ?? '正在打开$appName',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 18),
-                    ),
-                    const SizedBox(height: 24),
-                    if (bootstrapError == null)
-                      const CircularProgressIndicator()
-                    else
-                      FilledButton(
-                        onPressed: onRetry,
-                        child: const Text('重新打开'),
-                      ),
-                  ],
-                ),
-              ),
+              : _home()
+        : _loading(),
+  );
+
+  Widget _home() => store!.locked
+      ? ProfilesScreen(store: store!, locked: true)
+      : HomeScreen(
+          key: ValueKey('profile-${store!.profile.id}-${store!.profileEpoch}'),
+          repository: repository,
+          store: store!,
+        );
+
+  Widget _loading() => Scaffold(
+    body: Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.play_circle_fill_rounded,
+              color: Color(0xFFFF765F),
+              size: 72,
             ),
-          ),
+            const SizedBox(height: 24),
+            Text(
+              bootstrapError ?? '正在打开$appName',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 18),
+            ),
+            const SizedBox(height: 24),
+            if (bootstrapError == null)
+              const CircularProgressIndicator()
+            else
+              FilledButton(onPressed: onRetry, child: const Text('重新打开')),
+          ],
+        ),
+      ),
+    ),
   );
 }

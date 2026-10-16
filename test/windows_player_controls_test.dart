@@ -108,7 +108,7 @@ void main() {
   }
 
   testWidgets(
-    'Windows groups transport controls and hides after two idle seconds',
+    'Windows groups transport controls and hides after one idle second',
     (tester) async {
       final fixture = TransportFixture();
       await fixture.mount(tester, mobile: false);
@@ -122,7 +122,7 @@ void main() {
       final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
       await mouse.addPointer(location: const Offset(300, 200));
       await mouse.moveTo(const Offset(301, 200));
-      await tester.pump(const Duration(milliseconds: 1900));
+      await tester.pump(const Duration(milliseconds: 900));
       expect(tester.widget<AnimatedOpacity>(chrome).opacity, 1);
       await tester.sendEventToBinding(
         const PointerHoverEvent(position: Offset(301, 200)),
@@ -138,9 +138,15 @@ void main() {
       await tester.pump();
       expect(tester.widget<AnimatedOpacity>(chrome).opacity, 1);
       await fixture.player.pause();
-      await mouse.removePointer();
-      await tester.pump(const Duration(seconds: 4));
+      await mouse.moveTo(const Offset(-10, -10));
+      await tester.pump(const Duration(milliseconds: 900));
       expect(tester.widget<AnimatedOpacity>(chrome).opacity, 1);
+      await tester.pump(const Duration(milliseconds: 150));
+      expect(tester.widget<AnimatedOpacity>(chrome).opacity, 0);
+      await mouse.moveTo(const Offset(302, 200));
+      await tester.pump();
+      expect(tester.widget<AnimatedOpacity>(chrome).opacity, 1);
+      await mouse.removePointer();
       await fixture.unmount(tester);
     },
     variant: windows,

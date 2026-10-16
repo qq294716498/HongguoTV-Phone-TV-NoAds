@@ -22,12 +22,12 @@ class WindowsStablePublishTests(unittest.TestCase):
             'ok', 'nativeCore', 'preferences', 'bundledAssets', 'ffprobe', 'remux',
             'flutterWindow', 'videoFrameRendered', 'seekRateVolume', 'playbackPower',
             'fullscreen', 'miniReuseResizeRestore', 'nativeTrayHidden', 'trayKeepsPlaying',
-            'nativeTrayRestored', 'nativeTrayQuit', 'mediaKitPlayback', 'cleanPath',
+            'nativeTrayRestored', 'nativeTrayQuit', 'playerUiDetached', 'playerDisposedBeforeExit', 'windowBrandIcon', 'trayBrandIcon', 'firstLaunchNoticeVisible', 'mediaKitPlayback', 'cleanPath',
             'nonAsciiPath', 'differentWorkingDirectory', 'javaEnvironmentRemoved', 'normalAppStartup', 'remoteImagesDisabled']}
         self.smoke.update(processExitCode=0, version='0.1.14', build=39, nativeTrayToggles=2)
         self.write('Windows-smoke.json', self.smoke)
         self.write('Windows-validation.json', {'ok': True, 'architecture': 'x64', 'build': 39,
-                   'version': '0.1.14', 'sha256': hashlib.sha256(self.package.read_bytes()).hexdigest()})
+                   'version': '0.1.14', 'brandIconsVerified': True, 'identityAssetsVerified': True, 'sha256': hashlib.sha256(self.package.read_bytes()).hexdigest()})
         self.write('Windows-signature.json', {'status': 'NotSigned', 'signed': False})
         self.transactions = {'ok': True, 'version': '0.1.14', 'build': 39, 'cases': [{'case': name, 'ok': True, 'build': 39, 'oldBuild': 38, 'startupAcknowledged': True} for name in [
             'success', 'crash', 'hang', 'busy', 'tamper', 'version', 'semantic', 'architecture',
