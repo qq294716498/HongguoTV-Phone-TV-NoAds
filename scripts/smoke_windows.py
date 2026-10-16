@@ -22,7 +22,7 @@ def native_desktop(process, report):
         deadline = time.monotonic() + 100
         while time.monotonic() < deadline:
             if process.poll() is not None:
-                raise RuntimeError('Desktop smoke process exited before native actions')
+                raise RuntimeError(f'Desktop smoke process exited before native actions ({process.returncode})')
             try:
                 data = json.loads(report.read_text(encoding='utf-8'))
                 if predicate(data):

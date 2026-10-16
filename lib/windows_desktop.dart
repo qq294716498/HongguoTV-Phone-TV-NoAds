@@ -41,6 +41,7 @@ class WindowsDesktop extends ChangeNotifier
   bool get keepPlayback => !quitting && (inTray || mini || _restoring);
 
   Future<void> initialize() async {
+    await manager.waitUntilReadyToShow();
     channel.setMethodCallHandler((call) async {
       if (call.method != 'trayAction') return;
       switch (call.arguments) {

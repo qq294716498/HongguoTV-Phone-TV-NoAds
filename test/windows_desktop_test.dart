@@ -168,6 +168,12 @@ void main() {
     await harness.initialize();
     addTearDown(harness.dispose);
     await harness.desktop.requestClose();
+    expect(
+      harness.calls.indexWhere((call) => call.method == 'waitUntilReadyToShow'),
+      lessThan(
+        harness.calls.indexWhere((call) => call.method == 'setSkipTaskbar'),
+      ),
+    );
     await harness.desktop.prepareForUpdate();
     await harness.desktop.requestClose();
     await harness.desktop.restore();

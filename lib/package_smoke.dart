@@ -167,9 +167,11 @@ Future<void> runPackageSmoke(List<String> arguments) async {
       );
     };
     Future<void> writes = Future.value();
-    Future<void> write() => writes = writes
-        .then((_) => report.writeAsString(jsonEncode(evidence), flush: true))
-        .then((_) {});
+    Future<void> write() => writes = writes.then((_) async {
+      final pending = File('${report.path}.next');
+      await pending.writeAsString(jsonEncode(evidence), flush: true);
+      await pending.rename(report.path);
+    });
     evidence['desktopReady'] = true;
     Timer? timer;
     timer = Timer.periodic(const Duration(milliseconds: 150), (_) async {
