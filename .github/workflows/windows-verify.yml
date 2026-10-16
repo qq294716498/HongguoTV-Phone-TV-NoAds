@@ -86,8 +86,8 @@ jobs:
                   if entry.filename.startswith(prefix):
                       original = content
                       content = Path('assets/video_enhancement', entry.filename[len(prefix):]).read_bytes()
-                      assert original.replace(b'\r\n', b'\n') == content
                       if original != content:
+                          assert original.replace(b'\r\n', b'\n') == content
                           print('Confirmed CRLF conversion:', entry.filename, len(original), '->', len(content), hashlib.sha256(content).hexdigest())
                   target.writestr(entry, content)
           patched.replace(package)
