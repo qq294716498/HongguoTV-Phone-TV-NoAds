@@ -96,6 +96,18 @@ class AppUpdateScreen extends StatelessWidget {
                     '当前版本：${controller.installedApp?.version ?? AppLayout.versionOf(context)}'
                     '${controller.installedApp == null ? '' : ' · ${controller.installedApp!.abi} · ${controller.installedApp!.code}'}',
                   ),
+                  if (controller.windows)
+                    const ExpansionTile(
+                      title: Text('当前版本更新日志'),
+                      children: [
+                        Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Text(
+                            'Windows 0.1.13-preview.1：基于 Android 0.1.12 已发布修复源码。保留全部站源、弹幕表情与设置、预加载与连播、全季浏览、追剧进度、搜索发现和下载。新增独立 Windows 更新渠道，支持鼠标、键盘、全屏和播放时保持亮屏。手机亮度手势、画中画与观看提醒暂不提供。测试版未签名。',
+                          ),
+                        ),
+                      ],
+                    ),
                   const SizedBox(height: 12),
                   Text(
                     controller.message,
@@ -142,8 +154,12 @@ class AppUpdateScreen extends StatelessWidget {
                         FilledButton.icon(
                           key: const ValueKey('install-app-update'),
                           onPressed: () => unawaited(controller.install()),
-                          icon: const Icon(Icons.install_mobile),
-                          label: const Text('安装更新'),
+                          icon: Icon(
+                            controller.windows
+                                ? Icons.folder_open
+                                : Icons.install_mobile,
+                          ),
+                          label: Text(controller.windows ? '打开下载位置' : '安装更新'),
                         ),
                       if (stage == UpdateStage.permission) ...[
                         FilledButton(
@@ -192,18 +208,24 @@ class AppUpdateScreen extends StatelessWidget {
                   const SizedBox(height: 24),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: const Text('自动检查稳定版本'),
+                    title: Text(
+                      controller.windows ? '自动检查 Windows 测试版本' : '自动检查稳定版本',
+                    ),
                     subtitle: const Text('常规每 12 小时检查一次，失败稍后重试；不会自动下载或打断播放'),
                     value: controller.automatic,
                     onChanged: controller.supportedEdition
                         ? (value) => unawaited(controller.setAutomatic(value))
                         : null,
                   ),
-                  const Text(
-                    '下载来自本项目的 GitHub Release。验证完成后，需要你确认安装；安装时请先保存或结束当前播放。返回此页可重试，观看记录不会因取消而删除。',
+                  Text(
+                    controller.windows
+                        ? 'Windows 测试版未签名。下载并校验 ZIP 后，请退出应用并完整解压到新目录；不要单独复制 EXE。应用不会自动替换文件或运行新版本。'
+                        : '下载来自本项目的 GitHub Release。验证完成后，需要你确认安装；安装时请先保存或结束当前播放。返回此页可重试，观看记录不会因取消而删除。',
                   ),
                   const SizedBox(height: 8),
-                  const SelectableText(updatePage),
+                  SelectableText(
+                    controller.windows ? windowsUpdatePage : updatePage,
+                  ),
                 ],
               ),
             ),

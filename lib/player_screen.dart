@@ -499,7 +499,10 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   void _syncScreenOn() {
     if (_closed) _screenOnDeadline?.cancel();
-    if (defaultTargetPlatform != TargetPlatform.android) return;
+    if (defaultTargetPlatform != TargetPlatform.android &&
+        defaultTargetPlatform != TargetPlatform.windows) {
+      return;
+    }
     final enabled =
         !_closed &&
         _lifecycleState == AppLifecycleState.resumed &&

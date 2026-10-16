@@ -33,6 +33,26 @@ bool FlutterWindow::OnCreate() {
   device_channel_->SetMethodCallHandler(
       [](const flutter::MethodCall<flutter::EncodableValue>& call,
          std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+        if (call.method_name() == "setPlaybackScreenOn") {
+          const auto* arguments = std::get_if<flutter::EncodableMap>(call.arguments());
+          bool enabled = false;
+          if (arguments) {
+            const auto value = arguments->find(flutter::EncodableValue("enabled"));
+            if (value != arguments->end()) {
+              const auto* flag = std::get_if<bool>(&value->second);
+              enabled = flag && *flag;
+            }
+          }
+          const EXECUTION_STATE state = enabled
+              ? ES_CONTINUOUS | ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED
+              : ES_CONTINUOUS;
+          if (SetThreadExecutionState(state) == 0) {
+            result->Error("screen_on", "Unable to update playback power state");
+          } else {
+            result->Success();
+          }
+          return;
+        }
         if (call.method_name() != "playbackPower") {
           result->NotImplemented();
           return;
@@ -66,6 +86,7 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  SetThreadExecutionState(ES_CONTINUOUS);
   device_channel_.reset();
   if (flutter_controller_) {
     flutter_controller_ = nullptr;

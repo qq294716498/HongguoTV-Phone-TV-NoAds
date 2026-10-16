@@ -2,16 +2,25 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_build.dart';
+import 'app_layout.dart' show appVersion, windowsBuildNumber;
 
 const updateRepository = 'qq294716498/HongguoTV-Phone-TV-NoAds';
 const updateApi =
     'https://api.github.com/repos/$updateRepository/releases/latest';
 const updatePage = 'https://github.com/$updateRepository/releases/latest';
+const windowsUpdateApi =
+    'https://api.github.com/repos/$updateRepository/releases?per_page=100';
+const windowsUpdatePage = 'https://github.com/$updateRepository/releases';
+final windowsUpdateTag = RegExp(
+  r'^windows-v(\d+\.\d+\.\d+-preview\.\d+)-(\d+)$',
+);
 const updateMaximumBytes = 256 * 1024 * 1024;
 const updateAbiOffsets = {
   'armeabi-v7a': 1000,
@@ -117,6 +126,60 @@ class AppRelease {
     );
   }
 
+  static AppRelease? parseWindows(
+    Map<String, dynamic> json,
+    InstalledApp installed,
+  ) {
+    if (json['draft'] != false || json['prerelease'] != true) {
+      throw const FormatException('更新信息不是 Windows 测试版本');
+    }
+    final tag = json['tag_name'];
+    final match = tag is String ? windowsUpdateTag.firstMatch(tag) : null;
+    if (match == null || installed.abi != 'windows-x64') {
+      throw const FormatException('Windows 标签或架构无法识别');
+    }
+    final code = int.parse(match[2]!);
+    if (code <= installed.code) return null;
+    final version = match[1]!;
+    final name = 'HongguoTV-$version-windows-x64.zip';
+    final assets = json['assets'];
+    if (assets is! List) throw const FormatException('缺少 Windows 压缩包');
+    final matches = assets
+        .whereType<Map>()
+        .where((a) => a['name'] == name)
+        .toList();
+    if (matches.length != 1) throw const FormatException('Windows 压缩包不唯一');
+    final asset = matches.single;
+    final bytes = asset['size'];
+    final digest = asset['digest'];
+    final url = Uri.tryParse(asset['browser_download_url']?.toString() ?? '');
+    final expected = Uri.parse(
+      'https://github.com/$updateRepository/releases/download/$tag/$name',
+    );
+    if (bytes is! int ||
+        bytes <= 0 ||
+        bytes > 512 * 1024 * 1024 ||
+        digest is! String ||
+        !RegExp(r'^sha256:[a-fA-F0-9]{64}$').hasMatch(digest) ||
+        asset['state'] != 'uploaded' ||
+        url != expected) {
+      throw const FormatException('Windows 压缩包地址、大小或校验信息无效');
+    }
+    final body = json['body'];
+    final notes = body is String && body.trim().isNotEmpty
+        ? body
+        : '此版本未提供更新说明。';
+    return AppRelease(
+      version: version,
+      code: code,
+      abi: installed.abi,
+      notes: notes.length > 12000 ? '${notes.substring(0, 12000)}…' : notes,
+      url: url!,
+      bytes: bytes,
+      sha256: digest.substring(7).toLowerCase(),
+    );
+  }
+
   Map<String, Object> get validation => {
     'version': version,
     'code': code,
@@ -137,7 +200,9 @@ bool trustedUpdateUrl(
       uri.fragment.isNotEmpty) {
     return false;
   }
-  if (metadata) return uri.toString() == updateApi;
+  if (metadata) {
+    return uri.toString() == updateApi || uri.toString() == windowsUpdateApi;
+  }
   if (uri.host == 'github.com') {
     return uri.query.isEmpty &&
         uri.path.startsWith('/$updateRepository/releases/download/') &&
@@ -160,9 +225,12 @@ abstract class UpdateTransport {
 }
 
 class GithubUpdateTransport implements UpdateTransport {
-  GithubUpdateTransport({HttpClient Function()? clientFactory})
-    : clientFactory = clientFactory ?? HttpClient.new;
+  GithubUpdateTransport({
+    HttpClient Function()? clientFactory,
+    this.windows = false,
+  }) : clientFactory = clientFactory ?? HttpClient.new;
   final HttpClient Function() clientFactory;
+  final bool windows;
   HttpClient? _active;
   bool _cancelled = false;
 
@@ -236,7 +304,7 @@ class GithubUpdateTransport implements UpdateTransport {
       return await (() async {
         final response = await _open(
           client,
-          Uri.parse(updateApi),
+          Uri.parse(windows ? windowsUpdateApi : updateApi),
           metadata: true,
         );
         final bytes = <int>[];
@@ -247,6 +315,7 @@ class GithubUpdateTransport implements UpdateTransport {
           if (bytes.length > 1024 * 1024) throw const FormatException('更新信息过大');
         }
         final data = jsonDecode(utf8.decode(bytes));
+        if (windows) return selectWindowsRelease(data);
         if (data is! Map<String, dynamic>) {
           throw const FormatException('更新信息格式错误');
         }
@@ -314,6 +383,30 @@ class GithubUpdateTransport implements UpdateTransport {
   }
 }
 
+Map<String, dynamic> selectWindowsRelease(Object? data) {
+  if (data is! List) throw const FormatException('Windows 更新列表格式错误');
+  final candidates = data
+      .whereType<Map<String, dynamic>>()
+      .where(
+        (item) =>
+            item['draft'] == false &&
+            item['prerelease'] == true &&
+            item['tag_name'] is String &&
+            windowsUpdateTag.hasMatch(item['tag_name'] as String),
+      )
+      .toList();
+  candidates.sort(
+    (a, b) =>
+        int.parse(
+          windowsUpdateTag.firstMatch(b['tag_name'] as String)![2]!,
+        ).compareTo(
+          int.parse(windowsUpdateTag.firstMatch(a['tag_name'] as String)![2]!),
+        ),
+  );
+  if (candidates.isEmpty) throw const FormatException('尚无可用的 Windows 测试版本');
+  return candidates.first;
+}
+
 class UpdateCancelled implements Exception {
   const UpdateCancelled();
 }
@@ -363,6 +456,39 @@ class AndroidUpdatePlatform implements UpdatePlatform {
       'returned';
 }
 
+class WindowsUpdatePlatform implements UpdatePlatform {
+  @override
+  Future<InstalledApp> installed() async => const InstalledApp(
+    version: appVersion,
+    code: windowsBuildNumber,
+    abi: 'windows-x64',
+  );
+  @override
+  Future<String> directory() async =>
+      '${(await getApplicationSupportDirectory()).path}/windows-updates';
+  @override
+  Future<void> validate(AppRelease release) async {
+    if (release.abi != 'windows-x64') throw const FormatException('更新架构不匹配');
+    final file = File('${await directory()}/pending.zip');
+    if (await file.length() != release.bytes ||
+        (await sha256.bind(file.openRead()).first).toString() !=
+            release.sha256) {
+      throw const FormatException('Windows 压缩包大小或 SHA-256 校验失败');
+    }
+  }
+
+  @override
+  Future<bool> canInstall() async => true;
+  @override
+  Future<void> openPermission() async {}
+  @override
+  Future<String> install(AppRelease release) async {
+    await validate(release);
+    await Process.start('explorer.exe', [await directory()]);
+    return 'manual';
+  }
+}
+
 class AppUpdates extends ChangeNotifier {
   AppUpdates({
     required this.preferences,
@@ -370,12 +496,21 @@ class AppUpdates extends ChangeNotifier {
     UpdateTransport? transport,
     UpdatePlatform? platform,
     DateTime Function()? now,
-  }) : transport = transport ?? GithubUpdateTransport(),
-       platform = platform ?? AndroidUpdatePlatform(),
+    bool? windows,
+  }) : windows = windows ?? Platform.isWindows,
+       transport =
+           transport ??
+           GithubUpdateTransport(windows: windows ?? Platform.isWindows),
+       platform =
+           platform ??
+           ((windows ?? Platform.isWindows)
+               ? WindowsUpdatePlatform()
+               : AndroidUpdatePlatform()),
        now = now ?? DateTime.now;
   static AppUpdates? current;
   final SharedPreferences preferences;
   final bool supportedEdition;
+  final bool windows;
   final UpdateTransport transport;
   final UpdatePlatform platform;
   final DateTime Function() now;
@@ -391,8 +526,11 @@ class AppUpdates extends ChangeNotifier {
   DateTime? _lastAttempt;
   bool _permissionOpened = false;
   bool _startupCleaned = false;
-  static const _cacheKey = 'app_update_stable_cache_v1';
-  static const _checkedKey = 'app_update_checked_at_v1';
+  String get _cacheKey =>
+      windows ? 'app_update_windows_cache_v1' : 'app_update_stable_cache_v1';
+  String get _checkedKey =>
+      windows ? 'app_update_windows_checked_at_v1' : 'app_update_checked_at_v1';
+  String get _pendingName => windows ? 'pending.zip' : 'pending.apk';
   bool get busy => [
     UpdateStage.checking,
     UpdateStage.downloading,
@@ -436,7 +574,7 @@ class AppUpdates extends ChangeNotifier {
     }
     _lastAttempt = now();
     stage = UpdateStage.checking;
-    message = '正在检查稳定版本…';
+    message = windows ? '正在检查 Windows 测试版本…' : '正在检查稳定版本…';
     _notify();
     try {
       installedApp = await platform.installed().timeout(
@@ -461,7 +599,9 @@ class AppUpdates extends ChangeNotifier {
       if (_disposed) return;
       data ??= await transport.latest();
       if (_disposed) return;
-      final candidate = AppRelease.parse(data, installedApp!);
+      final candidate = windows
+          ? AppRelease.parseWindows(data, installedApp!)
+          : AppRelease.parse(data, installedApp!);
       await preferences.setString(_cacheKey, jsonEncode(data));
       if (manual || !fresh) {
         await preferences.setInt(_checkedKey, now().millisecondsSinceEpoch);
@@ -469,7 +609,10 @@ class AppUpdates extends ChangeNotifier {
       if (_disposed) return;
       release = candidate;
       stage = candidate == null ? UpdateStage.idle : UpdateStage.available;
-      message = candidate == null ? '已是最新稳定版本' : '发现稳定版本 ${candidate.version}';
+      final channel = windows ? 'Windows 测试版本' : '稳定版本';
+      message = candidate == null
+          ? '已是最新$channel'
+          : '发现$channel ${candidate.version}';
     } catch (error) {
       if (_disposed) return;
       release = null;
@@ -522,8 +665,8 @@ class AppUpdates extends ChangeNotifier {
       var notifiedAt = -200;
       final directory = Directory(await platform.directory());
       await directory.create(recursive: true);
-      _file = File('${directory.path}/pending.apk');
-      _partial = File('${directory.path}/pending.apk.part');
+      _file = File('${directory.path}/$_pendingName');
+      _partial = File('${directory.path}/$_pendingName.part');
       await _removeFile();
       if (_cancelled || _disposed) throw const UpdateCancelled();
       await transport.download(candidate, _partial!, (bytes) {
@@ -539,12 +682,14 @@ class AppUpdates extends ChangeNotifier {
       await _partial!.rename(_file!.path);
       if (_cancelled || _disposed) throw const UpdateCancelled();
       stage = UpdateStage.validating;
-      message = '正在验证大小、SHA-256、签名、版本与架构…';
+      message = windows ? '正在验证压缩包大小与 SHA-256…' : '正在验证大小、SHA-256、签名、版本与架构…';
       _notify();
       await platform.validate(candidate);
       if (_cancelled || _disposed) throw const UpdateCancelled();
       stage = UpdateStage.ready;
-      message = '安装包验证通过。点击安装后由 Android 确认';
+      message = windows
+          ? '压缩包校验通过。打开下载位置后，请退出应用并完整解压到新目录。'
+          : '安装包验证通过。点击安装后由 Android 确认';
     } catch (error) {
       await _removeFile();
       if (_disposed) return;
@@ -579,6 +724,15 @@ class AppUpdates extends ChangeNotifier {
       if (!await _candidateStillNewer(candidate)) return;
       await platform.validate(candidate);
       if (_disposed) return;
+      if (windows) {
+        await platform.install(candidate);
+        if (_disposed) return;
+        stage = UpdateStage.ready;
+        message =
+            '已打开下载位置。请退出应用，将 pending.zip 完整解压到新目录，再运行 HongguoTV.exe；观看数据保留。';
+        _notify();
+        return;
+      }
       final allowed = await platform.canInstall();
       if (_disposed) return;
       if (!allowed) {
@@ -657,8 +811,8 @@ class AppUpdates extends ChangeNotifier {
     if (_startupCleaned && !complete) return;
     final path = await platform.directory();
     if (_disposed) return;
-    _file = File('$path/pending.apk');
-    _partial = File('$path/pending.apk.part');
+    _file = File('$path/$_pendingName');
+    _partial = File('$path/$_pendingName.part');
     try {
       if (await _partial!.exists()) await _partial!.delete();
     } catch (_) {}

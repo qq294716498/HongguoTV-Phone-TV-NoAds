@@ -50,10 +50,10 @@ class AppBuildTests(unittest.TestCase):
     def test_windows_reads_defines_from_flutter_tool_environment(self):
         branding = Path(__file__).resolve().parents[1] / 'windows/runner/app_branding.cmake'
         for flags, expected in [
-            ([], '红果鉴'),
-            (['ALL_SOURCES=true'], '真果鉴'),
-            (['OTHER=true', 'ALL_SOURCES=false'], '红果鉴'),
-            (['ALL_SOURCES=true', 'ALL_SOURCES=false'], '红果鉴'),
+            ([], '红果TV'),
+            (['ALL_SOURCES=true'], '红果TV'),
+            (['OTHER=true', 'ALL_SOURCES=false'], '红果TV'),
+            (['ALL_SOURCES=true', 'ALL_SOURCES=false'], '红果TV'),
         ]:
             with self.subTest(flags=flags), tempfile.TemporaryDirectory() as temporary:
                 script = Path(temporary) / 'check.cmake'

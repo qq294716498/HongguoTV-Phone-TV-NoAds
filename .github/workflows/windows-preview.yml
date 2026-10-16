@@ -1,0 +1,96 @@
+name: Windows desktop preview
+
+on:
+  push:
+    branches: ['windows/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-preview-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  GOPROXY: https://proxy.golang.org,direct
+  GOSUMDB: sum.golang.org
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: native/go.mod
+          cache-dependency-path: native/go.sum
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - run: python3 -m unittest discover -s scripts -p 'test_*.py'
+      - run: flutter pub get --enforce-lockfile
+      - run: dart format --output=none --set-exit-if-changed lib test integration_test test_driver
+      - run: flutter analyze --no-pub --no-fatal-infos lib test integration_test test_driver
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: flutter test --no-pub --dart-define=DISABLE_REMOTE_IMAGES=true --concurrency=2
+      - run: flutter test --no-pub --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true --concurrency=2
+      - run: go test -race ./...
+        working-directory: native
+      - run: go test -race -ldflags="-X duanjuapp/native/core.buildAllSources=true" ./...
+        working-directory: native
+
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: native/go.mod
+          cache-dependency-path: native/go.sum
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - name: Use runner MinGW compiler
+        shell: pwsh
+        run: |
+          $compiler = 'C:\msys64\mingw64\bin'
+          if (-not (Test-Path "$compiler\gcc.exe")) { throw 'Runner MinGW x64 compiler missing' }
+          $compiler | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - run: python -m pip install pefile==2024.8.26
+      - run: python scripts/build_windows.py --all-sources
+      - name: Verify version, x64 architecture, DLL imports, resources and hashes
+        run: python scripts/verify_windows_package.py
+      - name: Start unpacked client with synthetic H264 and AAC media
+        run: python scripts/smoke_windows.py
+      - name: Record Authenticode status
+        shell: pwsh
+        run: |
+          $exe = 'build\windows\x64\runner\Release\HongguoTV.exe'
+          $signature = Get-AuthenticodeSignature $exe
+          @{ status = $signature.Status.ToString(); signed = ($signature.Status -eq 'Valid'); file = 'HongguoTV.exe' } | ConvertTo-Json | Set-Content -Encoding utf8 dist\windows\Windows-signature.json
+          if ($signature.Status -ne 'NotSigned') { throw 'Unexpected executable signature state' }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hongguotv-windows-x64
+          path: dist/windows/*
+          if-no-files-found: warn
+          retention-days: 14

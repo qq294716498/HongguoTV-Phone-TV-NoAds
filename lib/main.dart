@@ -34,6 +34,7 @@ Future<void> main(List<String> arguments) async {
   }
   if (Platform.isWindows) {
     await windowManager.ensureInitialized();
+    await windowManager.setMinimumSize(const Size(800, 600));
   }
   MediaKit.ensureInitialized();
   VideoEnhancementAssets.registerLicenses();
@@ -89,7 +90,8 @@ class _AppBootstrapState extends State<AppBootstrap>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     WatchReminderRuntime.current?.lifecycle(state);
-    if (state == AppLifecycleState.resumed && Platform.isAndroid) {
+    if (state == AppLifecycleState.resumed &&
+        (Platform.isAndroid || Platform.isWindows)) {
       unawaited(_refreshDevice());
       unawaited(AppUpdates.current?.returnedFromSettings());
       unawaited(AppUpdates.current?.check());
@@ -130,7 +132,8 @@ class _AppBootstrapState extends State<AppBootstrap>
       final preferences = await SharedPreferences.getInstance();
       await _refreshDevice();
       if (!mounted) return;
-      if (Platform.isAndroid && AppUpdates.current == null) {
+      if ((Platform.isAndroid || Platform.isWindows) &&
+          AppUpdates.current == null) {
         AppUpdates.current = AppUpdates(preferences: preferences);
         unawaited(AppUpdates.current!.check());
       }
