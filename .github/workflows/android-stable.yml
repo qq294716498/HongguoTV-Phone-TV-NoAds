@@ -1,0 +1,178 @@
+name: Android stable release
+
+on:
+  push:
+    branches: [android/0.1.16-stable-41]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-stable-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  GOPROXY: https://proxy.golang.org,direct
+  GOSUMDB: sum.golang.org
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: python3 -m unittest discover -s scripts -p 'test_*.py'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: native/go.mod
+          cache-dependency-path: native/go.sum
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - name: Check committed Dart formatting
+        run: |
+          dart format lib test integration_test test_driver
+          git diff --exit-code -- lib test integration_test test_driver
+      - run: flutter analyze --no-pub --no-fatal-infos lib test integration_test test_driver
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: flutter test --no-pub --dart-define=DISABLE_REMOTE_IMAGES=true --concurrency=2
+      - run: flutter test --no-pub --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true --concurrency=2
+      - run: go test -race ./...
+        working-directory: native
+      - run: go test -race -ldflags="-X duanjuapp/native/core.buildAllSources=true" ./...
+        working-directory: native
+
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Confirm existing Android signing Secrets without exposing values
+        run: python3 scripts/check_android_signing.py
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: native/go.mod
+          cache-dependency-path: native/go.sum
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platforms;android-36"
+          accept-android-sdk-licenses: true
+      - run: sdkmanager 'ndk;28.2.13676358'
+      - name: Configure Android signing
+        id: signing
+        run: |
+          python scripts/configure_signing.py
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      - run: python scripts/build_android.py --all-sources
+      - name: Verify release identity, certificate, ABI and APK integrity
+        run: python scripts/verify_release_apks.py
+      - name: Remove signing files
+        if: always()
+        run: python scripts/configure_signing.py --clean
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hongguotv-android-0.1.16
+          path: dist/android/*
+          if-no-files-found: warn
+          retention-days: 14
+  release:
+    needs: [checks, android]
+    if: github.ref == 'refs/heads/android/0.1.16-stable-41'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      EXPECTED_UPDATE_TAG: app-v0.1.16-41
+      CHECK_LIVE_UPDATE: 'true'
+      CHECK_UPDATE_DOWNLOAD: 'true'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/download-artifact@v4
+        with:
+          name: hongguotv-android-0.1.16
+          path: dist/android
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - name: Stage signed immutable Android candidate and preserve Windows assets
+        run: python3 scripts/publish_android_stable.py stage
+      - name: Download staged APKs through the actual updater
+        env:
+          UPDATE_METADATA_FILE: staged-release.json
+          CHECK_STAGED_UPDATE: 'true'
+        run: flutter test --no-pub test/app_update_live_test.dart --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true --reporter=expanded
+      - name: Verify downloaded APK certificates, versions, ABIs, assets and integrity
+        run: |
+          python3 scripts/verify_release_apks.py --directory dist/update-check --report staged-apk-validation.json
+          cp dist/update-check/staged-apk-validation.json dist/android/
+      - name: Promote only downloaded and signature-verified Android release
+        run: python3 scripts/publish_android_stable.py promote
+      - name: Verify public Latest downloads and channel isolation
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if flutter test --no-pub test/app_update_live_test.dart --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true --reporter=expanded; then
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
+      - name: Verify final public APK signatures again
+        run: |
+          python3 scripts/verify_release_apks.py --directory dist/update-check --report latest-apk-validation.json
+          cp dist/update-check/latest-apk-validation.json dist/android/
+      - name: Confirm Windows and previous Android assets unchanged and publish evidence
+        run: python3 scripts/publish_android_stable.py finalize
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-0.1.16-release-evidence
+          path: |
+            dist/android/*
+            dist/update-check/*-update-check.json
+          retention-days: 14

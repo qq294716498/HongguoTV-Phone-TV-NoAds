@@ -4,6 +4,7 @@ import os
 import re
 import subprocess
 import zipfile
+import argparse
 from pathlib import Path
 
 
@@ -13,6 +14,12 @@ def run(*arguments):
 
 def main():
     root = Path(__file__).resolve().parents[1]
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--directory', type=Path, default=root / 'dist/android')
+    parser.add_argument('--report', default='APK-validation.json')
+    options = parser.parse_args()
+    if Path(options.report).name != options.report:
+        raise SystemExit('Expected report filename without directories')
     version = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(),
                         re.MULTILINE).group(1)
     name, build = version.split('+')
@@ -21,7 +28,8 @@ def main():
     tools = Path(os.environ['ANDROID_HOME']) / 'build-tools'
     sdk = max(tools.iterdir(), key=lambda p: tuple(int(n) for n in re.findall(r'\d+', p.name)))
     certificate = '55c3c3395a00e56e99b8bfd580b14c99618da74db19692a2e42606eb05c47ba9'
-    output = root / 'dist/android'
+    output = options.directory
+    identity = json.loads((root / 'assets/app_identity/identity.json').read_text())
     results = []
     for abi, offset in [('arm64-v8a', 2000), ('armeabi-v7a', 1000), ('x86_64', 4000)]:
         apk = output / f'HongguoTV-{name}-{abi}.apk'
@@ -41,12 +49,15 @@ def main():
                            if re.fullmatch(r'lib/[^/]+/[^/]+\.so', p)}
             if native_abis != {abi}:
                 raise SystemExit('APK ABI mismatch: ' + abi)
+            for filename, digest in [('github-avatar.png', identity['avatarSha256']), ('app-icon.png', identity['brandSha256'])]:
+                if hashlib.sha256(archive.read('assets/flutter_assets/assets/app_identity/' + filename)).hexdigest() != digest:
+                    raise SystemExit('APK identity asset mismatch: ' + filename)
         results.append(dict(name=apk.name, bytes=apk.stat().st_size,
                             sha256=hashlib.file_digest(apk.open('rb'), 'sha256').hexdigest(),
                             package='com.hongguo.tv', version=name,
                             code=offset + int(build), abi=abi, certificate=certificate,
-                            crcVerified=True, zipAlignmentVerified=True))
-    (output / 'APK-validation.json').write_text(json.dumps(results, indent=2) + '\n')
+                            crcVerified=True, zipAlignmentVerified=True, identityAssetsVerified=True))
+    (output / options.report).write_text(json.dumps(results, indent=2) + '\n')
     print(json.dumps(results, indent=2))
 
 
