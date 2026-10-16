@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:duanju_app/app_updates.dart';
+import 'package:duanju_app/app_update_screen.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -171,6 +173,41 @@ void main() {
       expect(preferences.getInt('app_update_installing_code'), isNull);
     },
   );
+  testWidgets('desktop update page shows ZIP workflow and current changelog', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final temporary = await Directory.systemTemp.createTemp(
+      'windows-update-page-',
+    );
+    addTearDown(() => temporary.delete(recursive: true));
+    SharedPreferences.setMockInitialValues({});
+    final platform = FakeUpdatePlatform(temporary.path)..app = windowsInstalled;
+    final updates = AppUpdates(
+      preferences: await SharedPreferences.getInstance(),
+      windows: true,
+      supportedEdition: true,
+      platform: platform,
+      transport: _WindowsTransport(FakeUpdateTransport(), windowsRelease()),
+    );
+    addTearDown(updates.dispose);
+    await updates.check(manual: true);
+    await tester.pumpWidget(
+      MaterialApp(home: AppUpdateScreen(updates: updates)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('当前版本更新日志'), findsOneWidget);
+    expect(find.text('Windows 更新日志'), findsOneWidget);
+    await updates.download();
+    await tester.pumpAndSettle();
+    expect(find.text('打开下载位置'), findsOneWidget);
+    expect(find.text('安装更新'), findsNothing);
+    expect(platform.installs, 0);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
   test(
     'Windows rejects ZIP corruption before exposing download location',
     () async {
