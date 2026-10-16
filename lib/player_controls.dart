@@ -891,6 +891,19 @@ class _PlayerControlsState extends State<PlayerControls> {
     required double volume,
   }) {
     final tools = [
+      _toolText(
+        key: const ValueKey('player-desktop-forward'),
+        tooltip: '快进15秒',
+        label: '+15s',
+        width: 42,
+        onPressed:
+            widget.enabled && widget.player.state.duration > Duration.zero
+            ? () {
+                widget.onForward();
+                _show();
+              }
+            : null,
+      ),
       if (showSpeedQuality) ...[
         _toolText(
           key: const ValueKey('player-speed'),

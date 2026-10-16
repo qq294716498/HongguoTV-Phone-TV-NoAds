@@ -32,6 +32,7 @@ class TransportFixture {
     Size size = const Size(960, 540),
     bool fullscreen = true,
     bool showOnPlaybackReady = true,
+    bool mobile = true,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
@@ -87,7 +88,7 @@ class TransportFixture {
                     enabled: enabled,
                     fullscreen: fullscreen,
                     showOnPlaybackReady: showOnPlaybackReady,
-                    swipeEnabled: true,
+                    swipeEnabled: mobile,
                     title: '合成视频 · 播放按钮验证',
                     episodeLabel: '第 1 集',
                     onFullscreen: () {},
@@ -146,6 +147,27 @@ void main() {
   setUp(mockPlayerDevice);
   final forward = find.byKey(const ValueKey('player-mobile-forward'));
   final next = find.byKey(const ValueKey('player-mobile-next'));
+
+  testWidgets(
+    'desktop forward button seeks fifteen seconds and resumes playback',
+    (tester) async {
+      final fixture = TransportFixture();
+      await fixture.mount(
+        tester,
+        size: const Size(800, 600),
+        fullscreen: false,
+        mobile: false,
+      );
+      final forward = find.byKey(const ValueKey('player-desktop-forward'));
+      expect(forward, findsOneWidget);
+      await tester.tap(forward);
+      await tester.pumpAndSettle();
+      expect(fixture.forwardCalls, 1);
+      expect(fixture.platform.state.position, const Duration(seconds: 44));
+      expect(fixture.platform.state.playing, isTrue);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'fullscreen play, forward fifteen and next keep order and seek bounds',
