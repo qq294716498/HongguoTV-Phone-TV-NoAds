@@ -96,3 +96,48 @@ jobs:
           path: dist/windows/*
           if-no-files-found: warn
           retention-days: 14
+
+  release:
+    if: github.ref == 'refs/heads/windows/0.1.13-preview.1-release'
+    needs: [checks, windows]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: hongguotv-windows-x64
+          path: dist/windows
+      - name: Publish validated Windows preview without changing Android Latest
+        run: python3 scripts/publish_windows_preview.py stage
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - name: Verify public Windows updater download and Android channel
+        env:
+          CHECK_WINDOWS_UPDATE: 'true'
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if flutter test --no-pub test/windows_update_live_test.dart --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true --reporter=expanded; then
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
+      - name: Verify Android assets unchanged and attach checksums
+        run: python3 scripts/publish_windows_preview.py finalize
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hongguotv-windows-release-evidence
+          path: dist/windows/*
+          retention-days: 14
