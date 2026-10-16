@@ -21,7 +21,7 @@ String windowsPackagePath(String name) {
             part.endsWith(' ') ||
             RegExp(r'[<>:"|?*\x00-\x1f\x7f]').hasMatch(part) ||
             RegExp(
-              r'^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\.|$)',
+              r'^(con|prn|aux|nul|conin\$|conout\$|com[1-9¹²³]|lpt[1-9¹²³])([ .]*\.|[ .]*$)',
               caseSensitive: false,
             ).hasMatch(part),
       )) {
