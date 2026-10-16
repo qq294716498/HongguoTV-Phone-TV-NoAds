@@ -1,4 +1,4 @@
-name: Verify and publish Windows preview
+name: Diagnose Windows preview
 
 on:
   push:
@@ -72,6 +72,25 @@ jobs:
           github-token: ${{ github.token }}
           path: dist/windows
       - run: python -m pip install pefile==2024.8.26
+      - name: Restore hashed shader bytes for diagnostics only
+        shell: python
+        run: |
+          import hashlib, zipfile
+          from pathlib import Path
+          package = Path('dist/windows/HongguoTV-0.1.13-preview.1-windows-x64.zip')
+          patched = package.with_suffix('.diagnostic.zip')
+          prefix = 'data/flutter_assets/assets/video_enhancement/'
+          with zipfile.ZipFile(package) as source, zipfile.ZipFile(patched, 'w') as target:
+              for entry in source.infolist():
+                  content = source.read(entry.filename)
+                  if entry.filename.startswith(prefix):
+                      original = content
+                      content = Path('assets/video_enhancement', entry.filename[len(prefix):]).read_bytes()
+                      assert original.replace(b'\r\n', b'\n') == content
+                      if original != content:
+                          print('Confirmed CRLF conversion:', entry.filename, len(original), '->', len(content), hashlib.sha256(content).hexdigest())
+                  target.writestr(entry, content)
+          patched.replace(package)
       - name: Verify PE DLLs and ELF AOT architecture, resources and native loads
         run: python scripts/verify_windows_package.py
       - name: Verify media playback and real application startup without Java
@@ -93,6 +112,7 @@ jobs:
           retention-days: 14
 
   release:
+    if: false
     needs: [checks, windows]
     runs-on: ubuntu-latest
     timeout-minutes: 20

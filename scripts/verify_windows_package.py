@@ -48,6 +48,12 @@ def main():
         missing = [name for name in required if not (bundle / name).is_file()]
         if missing:
             raise ValueError('Missing package files: ' + ', '.join(missing))
+        shaders = bundle / 'data/flutter_assets/assets/video_enhancement'
+        manifest = json.loads((shaders / 'manifest.json').read_text(encoding='utf-8'))
+        for name, expected in manifest['shaders'].items():
+            content = (shaders / name).read_bytes()
+            if len(content) != expected['bytes'] or hashlib.sha256(content).hexdigest() != expected['sha256']:
+                raise ValueError('Bundled shader bytes do not match manifest: ' + name)
         bundled = {file.name.lower() for file in bundle.iterdir() if file.is_file()}
         system = Path(os.environ['SystemRoot']) / 'System32'
         for file in sorted(bundle.rglob('*')):
