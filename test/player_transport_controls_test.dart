@@ -26,6 +26,8 @@ class TransportFixture {
   var forwardCalls = 0;
   var toggleCalls = 0;
   var unmounted = false;
+  bool? fullscreenValue;
+  Future<void> Function()? openMenu;
 
   Future<void> mount(
     WidgetTester tester, {
@@ -86,7 +88,7 @@ class TransportFixture {
                     player: player,
                     interactions: interactions,
                     enabled: enabled,
-                    fullscreen: fullscreen,
+                    fullscreen: fullscreenValue ?? fullscreen,
                     showOnPlaybackReady: showOnPlaybackReady,
                     swipeEnabled: mobile,
                     title: '合成视频 · 播放按钮验证',
@@ -115,7 +117,7 @@ class TransportFixture {
                     },
                     onEpisodes: () async {},
                     onSpeed: () async {},
-                    onQuality: () async {},
+                    onQuality: () async => openMenu?.call(),
                     onPictureInPicture: () async {},
                     speed: 1.25,
                     qualityLabel: '自动',

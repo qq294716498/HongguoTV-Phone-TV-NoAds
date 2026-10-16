@@ -121,11 +121,14 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
         oldWidget.controls.enabled != c.enabled) {
       _hideTimer?.cancel();
       _volumeCloseTimer?.cancel();
-      _volumeOverlay.hide();
       _hoveringPopup = _hoveringVolume = _volumeDragging = false;
       _seek = null;
       _visible = true;
-      _scheduleHide();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _closeVolume();
+        _scheduleHide();
+      });
     } else if (oldWidget.controls.panelOpen != c.panelOpen) {
       _show();
     }
@@ -164,6 +167,10 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
     _show();
   }
 
+  void _closeVolume() {
+    if (_popup) _volumeOverlay.hide();
+  }
+
   void _closeVolumeLater() {
     _volumeCloseTimer?.cancel();
     _volumeCloseTimer = Timer(const Duration(milliseconds: 180), () {
@@ -173,7 +180,7 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
           _volumeDragging ||
           (_keyboard && (_volumeFocus.hasFocus || _volumeSliderFocus.hasFocus)))
         return;
-      _volumeOverlay.hide();
+      _closeVolume();
       if (!_keyboard) c.onFocusSurface();
       _scheduleHide();
     });
@@ -181,7 +188,7 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
 
   Future<void> _panel(Future<void> Function() open) async {
     _hideTimer?.cancel();
-    _volumeOverlay.hide();
+    _closeVolume();
     setState(() {
       _menuOpen = true;
       _visible = true;
@@ -225,6 +232,7 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
   );
 
   Widget _volume() => OverlayPortal(
+    key: const ValueKey('windows-volume-portal'),
     controller: _volumeOverlay,
     overlayChildBuilder: (_) => CompositedTransformFollower(
       link: _volumeLink,
@@ -417,13 +425,14 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(10, 0, 10, 7),
           child: DefaultTextStyle(
-            style: const TextStyle(
+            style: Theme.of(context).textTheme.labelSmall!.copyWith(
               color: Colors.white70,
               fontSize: 12,
-              fontFeatures: [FontFeature.tabularFigures()],
+              fontFeatures: const [FontFeature.tabularFigures()],
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _progress(),
                 Wrap(
@@ -543,7 +552,7 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
           _keyboard = true;
           _show();
           if (_popup && event.logicalKey == LogicalKeyboardKey.escape) {
-            _volumeOverlay.hide();
+            _closeVolume();
             c.onFocusSurface();
             _scheduleHide();
             return KeyEventResult.handled;
@@ -611,6 +620,7 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
                               ),
                             ),
                           Positioned(
+                            key: const ValueKey('windows-toolbar-layout'),
                             left: 12,
                             right: 12,
                             bottom: 12,

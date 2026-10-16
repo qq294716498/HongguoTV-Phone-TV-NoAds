@@ -82,6 +82,8 @@ def transaction(base, fixtures, mode, real=False):
     fields = {'root': str(install), 'stage': str(stage), 'backup': str(backup),
               'nonce': nonce, 'pid': parent.pid, 'build': build, 'oldBuild': old_build,
               'version': '0.1.14', 'oldVersion': '0.1.14', 'config': str(config)}
+    if mode == 'version':
+        fields['build'] = 40
     plan.write_text('\n'.join(f'{key}={value}' for key, value in fields.items()), encoding='utf-8')
     handle = None
     process = None
@@ -89,6 +91,21 @@ def transaction(base, fixtures, mode, real=False):
         if mode == 'tamper':
             with (stage / 'HongguoTV.exe').open('ab') as stream:
                 stream.write(b'tamper')
+        if mode == 'architecture':
+            executable = stage / 'HongguoTV.exe'
+            content = bytearray(executable.read_bytes())
+            offset = int.from_bytes(content[60:64], 'little')
+            content[offset + 4:offset + 6] = bytes.fromhex('4c01')
+            executable.write_bytes(content)
+            records(stage, tx / 'new-files.tsv')
+        if mode == 'unowned':
+            (install / 'personal-file.txt').write_text('preserve this file')
+        if mode == 'junction':
+            target = base / 'external'
+            target.mkdir()
+            (target / 'personal-file.txt').write_text('preserve this file')
+            subprocess.run(['cmd.exe', '/d', '/c', 'mklink', '/J', str(stage / 'link'), str(target)],
+                           check=True, capture_output=True)
         if mode == 'busy':
             kernel = ctypes.WinDLL('kernel32', use_last_error=True)
             kernel.CreateFileW.restype = ctypes.c_void_p
@@ -118,6 +135,8 @@ def transaction(base, fixtures, mode, real=False):
             assert hashlib.sha256((install / 'HongguoTV.exe').read_bytes()).digest() == hashlib.sha256((fixtures / 'fixture-38.exe').read_bytes()).digest()
         else:
             assert code == 1 and status.startswith('failed') and not backup.exists(), status
+            if mode == 'unowned':
+                assert (install / 'personal-file.txt').read_text() == 'preserve this file'
         return {'case': 'real-client-startup-ack' if real else mode, 'ok': True, 'status': status,
                 'configurationPreserved': True, 'architecture': 'x64'}
     finally:
@@ -151,7 +170,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix='hongguo-update-') as temporary:
         base = Path(temporary)
         compile_fixtures(base)
-        for mode in ['success', 'crash', 'hang', 'busy', 'tamper']:
+        for mode in ['success', 'crash', 'hang', 'busy', 'tamper', 'version', 'architecture', 'unowned', 'junction']:
             results.append(transaction(base / mode, base, mode))
             print(json.dumps(results[-1]))
         results.append(transaction(base / 'real', base, 'success', real=True))

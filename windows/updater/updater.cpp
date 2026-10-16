@@ -83,6 +83,7 @@ void CheckTree(const fs::path& root, const fs::path& records) {
   std::istringstream lines(Read(records));
   std::string line;
   while (std::getline(lines, line)) {
+    if (!line.empty() && line.back() == '\r') line.pop_back();
     const auto tab = line.find('\t');
     if (tab != 64 || line.size() < 66) throw std::runtime_error("Invalid file record");
     const fs::path relative(Wide(line.substr(65)));
@@ -171,6 +172,7 @@ int wmain(int argc, wchar_t** argv) {
     std::istringstream lines(Read(plan));
     std::string line;
     while (std::getline(lines, line)) {
+      if (!line.empty() && line.back() == '\r') line.pop_back();
       const auto equals = line.find('=');
       if (equals == std::string::npos || !fields.emplace(line.substr(0, equals), line.substr(equals + 1)).second)
         throw std::runtime_error("Invalid update plan");

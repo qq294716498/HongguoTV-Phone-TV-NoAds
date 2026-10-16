@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
@@ -145,4 +146,54 @@ void main() {
       await fixture.unmount(tester);
     }, variant: windows);
   }
+
+  testWidgets(
+    'menus and seek dragging hold controls, fullscreen transition closes volume',
+    (tester) async {
+      final fixture = TransportFixture();
+      await fixture.mount(tester, mobile: false);
+      await fixture.player.playOrPause();
+      await tester.pump();
+      final pending = Completer<void>();
+      fixture.openMenu = () => pending.future;
+      fixture.rebuild(() {});
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('windows-settings')));
+      await tester.pump(const Duration(seconds: 4));
+      expect(tester.widget<AnimatedOpacity>(chrome).opacity, 1);
+      pending.complete();
+      await tester.pump();
+      final progress = tester.widget<Slider>(
+        find.byKey(const ValueKey('player-progress')),
+      );
+      progress.onChangeStart!(44);
+      progress.onChanged!(44);
+      await fixture.player.seek(const Duration(seconds: 31));
+      await tester.pump(const Duration(seconds: 4));
+      expect(tester.widget<AnimatedOpacity>(chrome).opacity, 1);
+      expect(
+        tester
+            .widget<Slider>(find.byKey(const ValueKey('player-progress')))
+            .value,
+        44,
+      );
+      progress.onChangeEnd!(44);
+      await tester.pump();
+      expect(fixture.player.state.position.inSeconds, 44);
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: const Offset(200, 200));
+      await mouse.moveTo(tester.getCenter(volume));
+      await tester.pump();
+      expect(popup, findsOneWidget);
+      fixture.rebuild(() => fixture.fullscreenValue = false);
+      await tester.pump();
+      await tester.pump();
+      expect(popup, findsNothing);
+      await mouse.removePointer();
+      await fixture.unmount(tester);
+      await tester.pump(const Duration(seconds: 5));
+      expect(tester.takeException(), isNull);
+    },
+    variant: windows,
+  );
 }
