@@ -97,7 +97,9 @@ class DramaCover extends StatelessWidget {
   final Drama drama;
   final AppRepository repository;
   final double radius;
-  static const imagesDisabled = bool.fromEnvironment('DISABLE_REMOTE_IMAGES');
+  static bool imagesDisabled = const bool.fromEnvironment(
+    'DISABLE_REMOTE_IMAGES',
+  );
 
   @override
   Widget build(BuildContext context) {

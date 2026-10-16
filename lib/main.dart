@@ -25,6 +25,7 @@ import 'diary_service.dart';
 import 'app_updates.dart';
 import 'watch_reminder_runtime.dart';
 import 'television_navigation.dart';
+import 'widgets.dart' show DramaCover;
 
 Future<void> main(List<String> arguments) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -47,12 +48,47 @@ Future<void> main(List<String> arguments) async {
   DiaryService.add(
     '[App] 应用启动，版本: ${device.version}, 平台: ${Platform.operatingSystem}',
   );
+  if (Platform.isWindows && arguments.firstOrNull == '--startup-smoke') {
+    if (arguments.length != 2) exit(2);
+    DramaCover.imagesDisabled = true;
+    final ready = Completer<void>();
+    final errors = <String>[];
+    FlutterError.onError = (details) => errors.add(details.exceptionAsString());
+    runApp(
+      AppBootstrap(
+        device: device,
+        onReady: () {
+          if (!ready.isCompleted) ready.complete();
+        },
+      ),
+    );
+    final report = File(arguments[1]);
+    try {
+      await ready.future.timeout(const Duration(seconds: 30));
+      await WidgetsBinding.instance.waitUntilFirstFrameRasterized;
+      await Future<void>.delayed(const Duration(seconds: 2));
+      if (errors.isNotEmpty) throw StateError(errors.join('\n'));
+      await report.writeAsString(
+        '{"ok":true,"normalAppStartup":true,"remoteImagesDisabled":true}',
+        flush: true,
+      );
+      exit(0);
+    } catch (error) {
+      await report.writeAsString(error.toString(), flush: true);
+      exit(1);
+    }
+  }
   runApp(AppBootstrap(device: device));
 }
 
 class AppBootstrap extends StatefulWidget {
-  const AppBootstrap({super.key, this.device = const AppDevice()});
+  const AppBootstrap({
+    super.key,
+    this.device = const AppDevice(),
+    this.onReady,
+  });
   final AppDevice device;
+  final VoidCallback? onReady;
   @override
   State<AppBootstrap> createState() => _AppBootstrapState();
 }
@@ -195,6 +231,7 @@ class _AppBootstrapState extends State<AppBootstrap>
             );
           };
         });
+        widget.onReady?.call();
       }
     } catch (failure) {
       if (mounted) {

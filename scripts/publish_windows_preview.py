@@ -49,7 +49,7 @@ def main():
             raise ValueError('Validated package bytes changed')
         for field in ['ok', 'nativeCore', 'preferences', 'bundledAssets', 'ffprobe', 'remux',
                       'flutterWindow', 'videoFrameRendered', 'seekRateVolume', 'playbackPower',
-                      'fullscreen', 'mediaKitPlayback', 'cleanPath', 'nonAsciiPath', 'differentWorkingDirectory', 'javaEnvironmentRemoved']:
+                      'fullscreen', 'mediaKitPlayback', 'cleanPath', 'nonAsciiPath', 'differentWorkingDirectory', 'javaEnvironmentRemoved', 'normalAppStartup', 'remoteImagesDisabled']:
             if smoke.get(field) is not True:
                 raise ValueError('Missing Windows smoke check: ' + field)
         if smoke['processExitCode'] != 0 or smoke['version'] != version or smoke['build'] != int(build):

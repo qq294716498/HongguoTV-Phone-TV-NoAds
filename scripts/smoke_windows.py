@@ -49,6 +49,20 @@ def main():
             output.write_text(json.dumps(evidence, indent=2) + '\n', encoding='utf-8')
             if process.returncode != 0 or evidence.get('ok') is not True:
                 raise SystemExit('Windows 包启动验收未通过。')
+            startup_report = directory / 'startup.json'
+            startup = subprocess.run([str(directory / 'HongguoTV.exe'), '--startup-smoke', str(startup_report)],
+                                     cwd=Path(temporary), env=environment, capture_output=True,
+                                     text=True, errors='replace', timeout=60)
+            print(startup.stdout)
+            print(startup.stderr)
+            if startup.returncode != 0:
+                detail = startup_report.read_text(encoding='utf-8') if startup_report.exists() else 'no startup report'
+                raise RuntimeError(f'Normal application startup failed ({startup.returncode}): {detail}')
+            ui = json.loads(startup_report.read_text(encoding='utf-8'))
+            if ui.get('ok') is not True or ui.get('normalAppStartup') is not True:
+                raise RuntimeError('Application bootstrap did not complete')
+            evidence.update(normalAppStartup=True, remoteImagesDisabled=ui['remoteImagesDisabled'])
+            output.write_text(json.dumps(evidence, indent=2) + '\n', encoding='utf-8')
             print(json.dumps(evidence))
         except BaseException:
             if report.exists() and not output.exists():
