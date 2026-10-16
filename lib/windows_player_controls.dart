@@ -617,6 +617,7 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
                     ),
                   ),
                 IgnorePointer(
+                  key: const ValueKey('windows-player-chrome-layer'),
                   ignoring: !visible,
                   child: ExcludeFocus(
                     excluding: !visible,
