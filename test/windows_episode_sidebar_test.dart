@@ -345,6 +345,10 @@ void main() {
       await frames(tester);
       expect(platform.state.playing, true);
       expect(repository.active, containsAll(active));
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await frames(tester);
+      expect(platform.state.playing, true);
+      expect(repository.active, containsAll(active));
       await harness.action('toggle');
       await frames(tester);
       expect(platform.state.playing, false);

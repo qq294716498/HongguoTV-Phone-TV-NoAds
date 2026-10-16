@@ -2823,6 +2823,7 @@ class _PlayerScreenState extends State<PlayerScreen>
               else
                 Video(
                   controller: _video!,
+                  pauseUponEnteringBackgroundMode: !_windowsDesktop,
                   fit: BoxFit.contain,
                   controls: (_) => layeredControls,
                 ),

@@ -34,6 +34,8 @@ class WindowsStablePublishTests(unittest.TestCase):
             'unowned', 'junction', 'second-instance', 'real-client-startup-ack']]}
         self.write('Windows-update-transaction.json', self.transactions)
         for patch in [mock.patch.object(publish, 'root', self.root), mock.patch.object(publish, 'output', self.output),
+                      mock.patch.object(publish, 'github', return_value=json.dumps({'object': {'sha': 'current'}})),
+                      mock.patch.dict(publish.os.environ, {'GITHUB_SHA': 'current'}),
                       mock.patch.object(publish.os, 'chdir')]:
             patch.start()
             self.addCleanup(patch.stop)
@@ -76,6 +78,13 @@ class WindowsStablePublishTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.stage()
             github.assert_not_called()
+
+    def test_superseded_commit_cannot_publish(self):
+        with mock.patch.object(publish, 'github', return_value=json.dumps({'object': {'sha': 'newer'}})), \
+                mock.patch.object(publish.subprocess, 'run') as writes:
+            with self.assertRaisesRegex(ValueError, 'superseded'):
+                self.stage()
+            writes.assert_not_called()
 
 
 if __name__ == '__main__':

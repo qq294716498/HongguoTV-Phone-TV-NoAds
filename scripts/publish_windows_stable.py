@@ -39,6 +39,9 @@ def main():
     tag = f'windows-v{version}-{build}'
     package = output / f'HongguoTV-{version}-windows-x64.zip'
     if sys.argv[1] == 'stage':
+        current_head = json.loads(github('api', f'repos/{repository}/git/ref/heads/windows/0.1.14-stable-final'))['object']['sha']
+        if current_head != os.environ['GITHUB_SHA']:
+            raise ValueError('A newer source commit superseded this release candidate')
         validation = read_json('Windows-validation.json')
         smoke = read_json('Windows-smoke.json')
         signature = read_json('Windows-signature.json')

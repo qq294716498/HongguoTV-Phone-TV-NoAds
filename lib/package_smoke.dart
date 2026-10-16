@@ -79,7 +79,11 @@ Future<void> runPackageSmoke(List<String> arguments) async {
     runApp(
       MaterialApp(
         home: Scaffold(
-          body: Video(controller: video, controls: NoVideoControls),
+          body: Video(
+            controller: video,
+            controls: NoVideoControls,
+            pauseUponEnteringBackgroundMode: false,
+          ),
         ),
       ),
     );
