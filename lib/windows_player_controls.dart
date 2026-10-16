@@ -34,6 +34,7 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
   bool _keyboard = false;
   double? _seek;
   bool _lastPlaying = false;
+  bool _lastBoosting = false;
 
   PlayerControls get c => widget.controls;
   bool get _popup => _volumeOverlay.isShowing;
@@ -44,6 +45,7 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
       c.panelOpen ||
       _seek != null ||
       _volumeDragging ||
+      c.interactions.boosting ||
       (_keyboard && _toolbarFocus.hasFocus);
   bool get _shown =>
       c.enabled &&
@@ -93,7 +95,12 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
   }
 
   void _interactionChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    if (_lastBoosting != c.interactions.boosting) {
+      _lastBoosting = c.interactions.boosting;
+      _show();
+    }
+    setState(() {});
   }
 
   void _volumeFocusChanged() {
@@ -105,7 +112,7 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
   }
 
   KeyEventResult _earlyKey(KeyEvent event) {
-    if (_toolbarFocus.hasFocus &&
+    if ((_toolbarFocus.hasFocus || Focus.maybeOf(context)?.hasFocus == true) &&
         (event is KeyDownEvent || event is KeyRepeatEvent)) {
       _keyboard = true;
       _show();
@@ -588,6 +595,26 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
                 if (c.player.state.buffering && c.enabled)
                   const IgnorePointer(
                     child: Center(child: CircularProgressIndicator()),
+                  ),
+                if (c.interactions.feedback.isNotEmpty)
+                  IgnorePointer(
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black87,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          c.interactions.feedback,
+                          key: const ValueKey('windows-player-feedback'),
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                      ),
+                    ),
                   ),
                 IgnorePointer(
                   ignoring: !visible,
