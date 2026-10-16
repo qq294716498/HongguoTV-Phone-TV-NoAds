@@ -1,5 +1,6 @@
 #include <windows.h>
 #include <bcrypt.h>
+#include <tlhelp32.h>
 #include <algorithm>
 #include <array>
 #include <filesystem>
@@ -157,6 +158,28 @@ bool Move(const fs::path& from, const fs::path& to) {
   return false;
 }
 
+bool OtherInstance(const fs::path& executable, DWORD excluded) {
+  const HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+  if (snapshot == INVALID_HANDLE_VALUE) throw std::runtime_error("Cannot verify other application instances");
+  PROCESSENTRY32W entry{};
+  entry.dwSize = sizeof(entry);
+  bool found = false;
+  if (Process32FirstW(snapshot, &entry)) {
+    do {
+      if (entry.th32ProcessID == excluded || _wcsicmp(entry.szExeFile, L"HongguoTV.exe") != 0) continue;
+      const HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, entry.th32ProcessID);
+      if (!process) { found = true; break; }
+      std::array<wchar_t, 32768> image{};
+      DWORD length = static_cast<DWORD>(image.size());
+      found = !QueryFullProcessImageNameW(process, 0, image.data(), &length) || Equal(fs::path(image.data()), executable);
+      CloseHandle(process);
+      if (found) break;
+    } while (Process32NextW(snapshot, &entry));
+  }
+  CloseHandle(snapshot);
+  return found;
+}
+
 int wmain(int argc, wchar_t** argv) {
   if (argc != 2) return 2;
   fs::path plan = fs::absolute(argv[1]).lexically_normal();
@@ -198,6 +221,7 @@ int wmain(int argc, wchar_t** argv) {
     DWORD imageLength = static_cast<DWORD>(image.size());
     if (!parent || !QueryFullProcessImageNameW(parent, 0, image.data(), &imageLength) ||
         !Equal(fs::path(image.data()), root / L"HongguoTV.exe")) throw std::runtime_error("Parent application does not match");
+    if (OtherInstance(root / L"HongguoTV.exe", pid)) throw std::runtime_error("Another application instance is running; close it before updating");
     const DWORD build = std::stoul(fields.at("build"));
     const DWORD oldBuild = std::stoul(fields.at("oldBuild"));
     if (build <= oldBuild) throw std::runtime_error("Update is not newer");
@@ -208,6 +232,7 @@ int wmain(int argc, wchar_t** argv) {
     Write(transaction / L"ready.txt", nonce);
     if (WaitForSingleObject(parent, 30000) != WAIT_OBJECT_0) throw std::runtime_error("Application did not finish saving and exit");
     CloseHandle(parent); parent = nullptr;
+    if (OtherInstance(root / L"HongguoTV.exe", 0)) throw std::runtime_error("Another application instance started; old version preserved");
     CheckTree(stage, transaction / L"new-files.tsv");
     CheckTree(root, transaction / L"old-files.tsv");
     if (!Move(root, backup)) throw std::runtime_error("Application directory is busy; old version preserved");

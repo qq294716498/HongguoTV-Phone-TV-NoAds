@@ -78,6 +78,7 @@ def transaction(base, fixtures, mode, real=False):
     helper = tx / 'HongguoTV-updater.exe'
     shutil.copyfile(root / 'build/windows/x64/runner/Release/HongguoTV-updater.exe', helper)
     parent = subprocess.Popen([str(install / 'HongguoTV.exe'), '--hold', str(tx)], env=environment)
+    second = subprocess.Popen([str(install / 'HongguoTV.exe'), '--hold', str(tx)], env=environment) if mode == 'second-instance' else None
     plan = tx / 'plan.txt'
     fields = {'root': str(install), 'stage': str(stage), 'backup': str(backup),
               'nonce': nonce, 'pid': parent.pid, 'build': build, 'oldBuild': old_build,
@@ -147,6 +148,8 @@ def transaction(base, fixtures, mode, real=False):
         if parent.poll() is None:
             parent.terminate()
             parent.wait(timeout=5)
+        if second:
+            second.wait(timeout=5)
         if process and process.poll() is None:
             process.terminate()
             process.wait(timeout=5)
@@ -172,7 +175,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix='hongguo-update-') as temporary:
         base = Path(temporary)
         compile_fixtures(base)
-        for mode in ['success', 'crash', 'hang', 'busy', 'tamper', 'version', 'semantic', 'architecture', 'unowned', 'junction']:
+        for mode in ['success', 'crash', 'hang', 'busy', 'tamper', 'version', 'semantic', 'architecture', 'unowned', 'junction', 'second-instance']:
             results.append(transaction(base / mode, base, mode))
             print(json.dumps(results[-1]))
         results.append(transaction(base / 'real', base, 'success', real=True))
