@@ -5,6 +5,11 @@ on:
     branches: ['windows/**']
   workflow_dispatch:
     inputs:
+      publish_release:
+        description: Publish the validated Windows x64 release without changing Android Latest
+        required: false
+        type: boolean
+        default: false
       reuse_run_id:
         description: Prior run with the identical application source and Windows package
         required: false
@@ -125,7 +130,7 @@ jobs:
           retention-days: 14
 
   release:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/windows/0.1.15-stable-40'
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_release && github.ref == 'refs/heads/fix/follow-sync-danmaku-ribbon-0.1.17-42'
     needs: [checks, windows]
     runs-on: ubuntu-latest
     timeout-minutes: 20

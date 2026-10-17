@@ -11,6 +11,8 @@ import 'package:duanju_app/player_controls.dart';
 import 'package:duanju_app/saved_library.dart';
 import 'package:duanju_app/series_browser_screen.dart';
 import 'package:duanju_app/series_catalog.dart';
+import 'package:duanju_app/episode_browser.dart';
+import 'package:duanju_app/remote_widgets.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -548,6 +550,69 @@ void main() {
     );
     await tester.tap(find.text('打开全季'));
     await tester.pumpAndSettle();
+  }
+
+  for (final spec in [
+    (const Size(320, 640), false),
+    (const Size(390, 844), false),
+    (const Size(844, 390), false),
+    (const Size(960, 540), true),
+  ]) {
+    testWidgets(
+      'all-season episode numbers stay compact, centered and selectable at ${spec.$1}',
+      (tester) async {
+        viewport(tester, spec.$1);
+        final store = await createStore();
+        await store.saveWatch(watch(secondSeason, 1, 1));
+        final repository = SeasonRepository();
+        SeriesEpisodeSelection? selected;
+        await openBrowser(
+          tester,
+          repository,
+          store,
+          television: spec.$2,
+          onResult: (value) => selected = value,
+        );
+        await tester.tap(find.byKey(ValueKey('all-season-${secondSeason.id}')));
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widget<EpisodeBrowser>(find.byType(EpisodeBrowser))
+              .denseDesktop,
+          true,
+        );
+        final first = find.byKey(const ValueKey('all-season-episode-1'));
+        final rect = tester.getRect(first);
+        expect(rect.width, lessThan(84));
+        expect(rect.height, greaterThanOrEqualTo(44));
+        expect(rect.height, lessThanOrEqualTo(48));
+        expect(tester.widget<RemoteEpisodeButton>(first).current, true);
+        final label = find.descendant(of: first, matching: find.text('1'));
+        expect(tester.getCenter(label).dx, closeTo(rect.center.dx, 1));
+        expect(tester.getCenter(label).dy, closeTo(rect.center.dy, 1));
+        if (spec.$2) {
+          tester.widget<RemoteEpisodeButton>(first).focusNode!.requestFocus();
+          await tester.pumpAndSettle();
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+          await tester.sendKeyEvent(LogicalKeyboardKey.select);
+          await tester.pumpAndSettle();
+          expect(selected!.index, 1);
+        } else {
+          await tester.tap(find.byTooltip('跳转集数'));
+          await tester.pumpAndSettle();
+          await tester.enterText(find.byType(TextField), '100');
+          await tester.tap(find.text('定位'));
+          await tester.pumpAndSettle();
+          final hundred = find.byKey(const ValueKey('all-season-episode-100'));
+          await tester.ensureVisible(hundred);
+          expect(tester.getRect(hundred).width, lessThan(84));
+          await tester.tap(hundred);
+          await tester.pumpAndSettle();
+          expect(selected!.index, 99);
+        }
+        expect(tester.takeException(), isNull);
+      },
+    );
   }
 
   testWidgets(

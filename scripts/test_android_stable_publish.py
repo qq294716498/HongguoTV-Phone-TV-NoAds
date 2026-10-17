@@ -2,12 +2,33 @@ import hashlib
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 from check_android_signing import availability, SIGNING_NAMES
+import publish_android_stable as publish
 from publish_android_stable import certificate, offsets, validate_apks
 
 
 class AndroidStablePublishTests(unittest.TestCase):
+    def test_windows_must_be_finalized_from_the_same_commit_before_android_staging(self):
+        assets = [{'id': n, 'name': name, 'size': 1, 'digest': 'sha256:synthetic'}
+                  for n, name in enumerate(['Windows-update-check.json', 'Windows-update-channel.json',
+                                           'Android-isolation.json', 'SHA256SUMS.txt'])]
+        old = dict(id=1, tag_name='windows-v0.1.15-40', target_commitish='old', draft=False, prerelease=False, assets=[])
+        current = dict(id=2, tag_name=publish.windows_tag, target_commitish='current', draft=False, prerelease=False, assets=assets)
+        def releases(tag):
+            return current if tag == publish.windows_tag else old
+        with mock.patch.object(publish, 'release', side_effect=releases):
+            self.assertEqual(set(publish.validated_windows_snapshots('current')), set(publish.windows_tags))
+            with self.assertRaisesRegex(ValueError, 'before Android staging'):
+                publish.validated_windows_snapshots('different')
+            for field, value in [('assets', assets[:-1]), ('draft', True), ('prerelease', True)]:
+                previous = current[field]
+                current[field] = value
+                with self.subTest(field=field), self.assertRaises(ValueError):
+                    publish.validated_windows_snapshots('current')
+                current[field] = previous
+
     def test_signing_preflight_reports_presence_without_secret_values(self):
         env = {name: 'synthetic-secret-value' for name in SIGNING_NAMES}
         result = availability(env)

@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -20,6 +21,7 @@ import 'app_update_screen.dart';
 import 'watch_reminder_settings.dart';
 import 'app_layout.dart';
 import 'windows_desktop.dart';
+import 'player_menu.dart';
 
 String storageSize(int bytes) {
   if (bytes < 0) return '暂不可用';
@@ -45,6 +47,38 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _busy = false;
   String? _message;
+
+  Future<void> _danmakuSettings() {
+    final television = AppLayout.isTelevision(context);
+    final mobile =
+        !television &&
+        (defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS);
+    return showDialog<void>(
+      context: context,
+      builder: (_) => AppLayout(
+        television: television,
+        child: ListenableBuilder(
+          listenable: widget.store,
+          builder: (_, _) => PlayerMenu(
+            section: PlayerMenuSection.danmaku,
+            episodes: const [],
+            currentIndex: 0,
+            preferences: widget.store.playbackPreferences,
+            qualities: const [],
+            actualQuality: 0,
+            local: false,
+            favorite: false,
+            mobile: mobile,
+            showDanmaku: true,
+            onEpisode: (_) {},
+            onFavorite: () async {},
+            onPreferences: widget.store.setPlaybackPreferences,
+          ),
+        ),
+      ),
+    );
+  }
 
   Future<void> _chooseTheme() async {
     final selected = await showDialog<String>(
@@ -147,6 +181,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
             padding: const EdgeInsets.all(16),
             children: [
               const AppUpdateTile(),
+              ListTile(
+                key: const ValueKey('global-danmaku-settings'),
+                leading: const Icon(Icons.subtitles_rounded),
+                title: const Text('弹幕设置'),
+                subtitle: const Text('红果源的弹幕开关、速度与不透明度'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: _danmakuSettings,
+              ),
               if (WindowsDesktop.current case final desktop?)
                 ListenableBuilder(
                   listenable: desktop,

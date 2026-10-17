@@ -552,6 +552,24 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   void _accessChanged() {
     if (!_closed &&
+        mounted &&
+        !widget.store.locked &&
+        widget.store.profileEpoch == _profileEpoch) {
+      final preferences = widget.store.playbackPreferences;
+      if (preferences.danmaku != _danmakuEnabled ||
+          preferences.danmakuSpeed != _danmakuSpeed ||
+          preferences.danmakuOpacity != _danmakuOpacity) {
+        setState(() {
+          _danmakuEnabled = preferences.danmaku;
+          _danmakuSpeed = preferences.danmakuSpeed;
+          _danmakuOpacity = preferences.danmakuOpacity;
+        });
+        _danmaku.setEnabled(_danmakuEnabled);
+        _syncDanmaku();
+        _menuRevision.value++;
+      }
+    }
+    if (!_closed &&
         (widget.store.profileEpoch != _profileEpoch || widget.store.locked)) {
       _cancelSeasonAdvance();
       _preloader.clear();
@@ -2698,6 +2716,9 @@ class _PlayerScreenState extends State<PlayerScreen>
             onSpeed: () => _openPanel(PlayerMenuSection.speed),
             onQuality: () => _openPanel(PlayerMenuSection.quality),
             onSettings: () => _openPanel(PlayerMenuSection.settings),
+            onDanmakuSettings: _mobile
+                ? () => _openPanel(PlayerMenuSection.danmaku)
+                : null,
             onDanmaku: _detail.drama.source == 'hongguo'
                 ? _toggleDanmaku
                 : null,

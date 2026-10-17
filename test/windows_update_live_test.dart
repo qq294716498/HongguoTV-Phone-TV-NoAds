@@ -38,7 +38,7 @@ void main() {
       expect(metadata['tag_name'], expectedTag);
       final release = AppRelease.parseWindows(
         metadata,
-        const InstalledApp(version: '0.1.12', code: 36, abi: 'windows-x64'),
+        const InstalledApp(version: '0.1.15', code: 40, abi: 'windows-x64'),
       )!;
       final fallback = await GithubUpdateTransport(
         windows: true,
@@ -47,7 +47,7 @@ void main() {
       expect(fallback['tag_name'], expectedTag);
       final fallbackRelease = AppRelease.parseWindows(
         fallback,
-        const InstalledApp(version: '0.1.14', code: 39, abi: 'windows-x64'),
+        const InstalledApp(version: '0.1.15', code: 40, abi: 'windows-x64'),
       )!;
       expect(fallbackRelease.validation, release.validation);
       expect(release.code, int.parse(expectedTag.split('-').last));
@@ -65,8 +65,8 @@ void main() {
       );
       for (final abi in updateAbiOffsets.keys) {
         final installed = InstalledApp(
-          version: '0.1.12',
-          code: updateAbiOffsets[abi]! + 36,
+          version: '0.1.16',
+          code: updateAbiOffsets[abi]! + 41,
           abi: abi,
         );
         expect(
@@ -95,8 +95,8 @@ void main() {
           AppRelease.parse(
             android,
             InstalledApp(
-              version: '0.1.12',
-              code: updateAbiOffsets[abi]! + 36,
+              version: '0.1.16',
+              code: updateAbiOffsets[abi]! + 41,
               abi: abi,
             ),
           ),

@@ -10,6 +10,7 @@ import 'package:duanju_app/player_menu.dart';
 import 'package:duanju_app/player_screen.dart';
 import 'package:duanju_app/playback_preferences.dart';
 import 'package:duanju_app/television_controls.dart';
+import 'package:duanju_app/settings_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -222,7 +223,7 @@ void main() {
 
   for (final landscape in [false, true]) {
     testWidgets(
-      'mobile ${landscape ? 'landscape' : 'portrait'} settings entry saves and applies danmaku controls',
+      'mobile ${landscape ? 'landscape' : 'portrait'} short tap and long press share global danmaku settings',
       (tester) async {
         final repository = DanmakuFixtureRepository();
         final platform = ScriptedPlayer();
@@ -233,14 +234,20 @@ void main() {
         }
         final beforePlaying = platform.state.playing;
         final opened = platform.opened.length;
-        final settings = find.byTooltip('播放设置');
+        final settings = find.byKey(const ValueKey('player-danmaku-toggle'));
+        expect(find.byTooltip('播放设置'), findsNothing);
         expect(settings, findsOneWidget);
         await tester.tap(settings);
         await settle(tester);
+        expect(store.playbackPreferences.danmaku, false);
+        expect(find.byType(PlayerMenu), findsNothing);
+        await tester.longPress(settings);
+        await settle(tester);
+        expect(store.playbackPreferences.danmaku, false);
         expect(find.byType(PlayerMenu), findsOneWidget);
         expect(
           tester.widget<PlayerMenu>(find.byType(PlayerMenu)).section,
-          PlayerMenuSection.settings,
+          PlayerMenuSection.danmaku,
         );
         final speed = find.byKey(const ValueKey('menu-danmaku-speed-1.5'));
         await tester.ensureVisible(speed);
@@ -261,14 +268,53 @@ void main() {
         expect(overlay.opacity, .35);
         expect(platform.opened, hasLength(opened));
         expect(platform.state.playing, beforePlaying);
+        await tester.tap(settings);
+        await settle(tester);
+        expect(store.playbackPreferences.danmaku, true);
+        final context = tester.element(find.byType(PlayerScreen));
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) =>
+                SettingsScreen(repository: repository, store: store),
+          ),
+        );
+        await settle(tester);
+        expect(find.byType(SettingsScreen), findsOneWidget);
+        final global = find.byKey(const ValueKey('global-danmaku-settings'));
+        await tester.ensureVisible(global);
+        await tester.tap(global);
+        await settle(tester);
+        expect(
+          tester.widget<PlayerMenu>(find.byType(PlayerMenu)).section,
+          PlayerMenuSection.danmaku,
+        );
+        final globalOpacity = find.byKey(
+          const ValueKey('menu-danmaku-opacity-0.8'),
+        );
+        await tester.ensureVisible(globalOpacity);
+        await tester.tap(globalOpacity);
+        await settle(tester);
+        Navigator.of(tester.element(find.byType(PlayerMenu))).pop();
+        await settle(tester);
+        Navigator.of(tester.element(find.byType(SettingsScreen))).pop();
+        await settle(tester);
+        expect(
+          tester.widget<DanmakuOverlay>(find.byType(DanmakuOverlay)).opacity,
+          .8,
+        );
+        expect(
+          tester.widget<DanmakuOverlay>(find.byType(DanmakuOverlay)).speed,
+          1.5,
+        );
+        expect(platform.opened, hasLength(opened));
         await store.flushPendingWrites();
         final restored = LocalStore(store.preferences);
         expect(restored.playbackPreferences.danmakuSpeed, 1.5);
-        expect(restored.playbackPreferences.danmakuOpacity, .35);
+        expect(restored.playbackPreferences.danmakuOpacity, .8);
         restored.dispose();
         await tester.tap(find.byTooltip('锁定屏幕'));
         await settle(tester);
-        await tester.tap(settings, warnIfMissed: false);
+        await tester.longPress(settings, warnIfMissed: false);
         await settle(tester);
         expect(find.byType(PlayerMenu), findsNothing);
         expect(platform.state.playing, beforePlaying);

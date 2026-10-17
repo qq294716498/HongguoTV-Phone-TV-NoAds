@@ -12,7 +12,7 @@ import 'video_enhancement.dart';
 import 'video_enhancement_settings.dart';
 import 'diary_service.dart';
 
-enum PlayerMenuSection { episodes, speed, quality, settings }
+enum PlayerMenuSection { episodes, speed, quality, settings, danmaku }
 
 class PlayerMenu extends StatefulWidget {
   const PlayerMenu({
@@ -93,6 +93,7 @@ class _PlayerMenuState extends State<PlayerMenu> {
       PlayerMenuSection.speed => '播放倍速',
       PlayerMenuSection.quality => '清晰度',
       PlayerMenuSection.settings => '播放设置',
+      PlayerMenuSection.danmaku => '弹幕设置',
     };
     return Dialog(
       key: const ValueKey('player-menu'),
@@ -257,7 +258,8 @@ class _PlayerMenuState extends State<PlayerMenu> {
             ),
             onCompare: widget.onCompareEnhancement ?? () {},
           ),
-        if (all && widget.showDanmaku) ...[
+        if ((all || widget.section == PlayerMenuSection.danmaku) &&
+            widget.showDanmaku) ...[
           SwitchListTile.adaptive(
             key: const ValueKey('player-danmaku-enabled'),
             contentPadding: EdgeInsets.zero,
@@ -272,7 +274,8 @@ class _PlayerMenuState extends State<PlayerMenu> {
                     ),
                   ),
           ),
-          if (widget.mobile ||
+          if (widget.section == PlayerMenuSection.danmaku ||
+              widget.mobile ||
               (!AppLayout.isTelevision(context) &&
                   defaultTargetPlatform == TargetPlatform.windows)) ...[
             const Text('弹幕速度（独立于视频倍速）'),

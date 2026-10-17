@@ -11,8 +11,8 @@ root = Path(__file__).resolve().parents[1]
 output = root / 'dist/android'
 repository = 'qq294716498/HongguoTV-Phone-TV-NoAds'
 certificate = '55c3c3395a00e56e99b8bfd580b14c99618da74db19692a2e42606eb05c47ba9'
-windows_tag = 'windows-v0.1.15-40'
-windows_tags = (windows_tag, 'windows-v0.1.14-39', 'windows-v0.1.13-preview.1-37')
+windows_tag = 'windows-v0.1.17-42'
+windows_tags = ('windows-v0.1.15-40', windows_tag)
 offsets = {'arm64-v8a': 2000, 'armeabi-v7a': 1000, 'x86_64': 4000}
 
 
@@ -28,6 +28,15 @@ def snapshot(value):
     return {'id': value['id'], 'tag': value['tag_name'], 'target': value['target_commitish'],
             'prerelease': value['prerelease'], 'assets': sorted([
                 {key: asset[key] for key in ['id', 'name', 'size', 'digest']} for asset in value['assets']], key=lambda a: a['id'])}
+
+
+def validated_windows_snapshots(commit):
+    published = {name: release(name) for name in windows_tags}
+    candidate = published[windows_tag]
+    required = {'Windows-update-check.json', 'Windows-update-channel.json', 'Android-isolation.json', 'SHA256SUMS.txt'}
+    if candidate['draft'] or candidate['prerelease'] or candidate['target_commitish'] != commit or not required.issubset({asset['name'] for asset in candidate['assets']}):
+        raise ValueError('Publish and finalize Windows from this exact source before Android staging')
+    return {name: snapshot(value) for name, value in published.items()}
 
 
 def write(name, value):
@@ -61,12 +70,12 @@ def main():
     os.chdir(root)
     version, raw_build = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(), re.M).group(1).split('+')
     build = int(raw_build)
-    if version != '0.1.16' or build != 41:
-        raise ValueError('This workflow only publishes Android 0.1.16+41')
+    if version != '0.1.17' or build != 42:
+        raise ValueError('This workflow only publishes Android 0.1.17+42')
     tag = f'app-v{version}-{build}'
     phase = sys.argv[1]
     if phase == 'stage':
-        head = json.loads(github('api', f'repos/{repository}/git/ref/heads/android/0.1.16-stable-41'))['object']['sha']
+        head = json.loads(github('api', f'repos/{repository}/git/ref/heads/fix/follow-sync-danmaku-ribbon-0.1.17-42'))['object']['sha']
         if head != os.environ['GITHUB_SHA']:
             raise ValueError('Newer Android source superseded this build')
         validate_apks(read('APK-validation.json'), version, build, output)
@@ -76,21 +85,21 @@ def main():
         if exists.returncode == 0:
             raise ValueError('Release exists; never replace published APK assets')
         latest = json.loads(github('api', f'repos/{repository}/releases/latest'))
-        if latest['tag_name'] != 'app-v0.1.12-36' or int(latest['tag_name'].rsplit('-', 1)[1]) >= build:
+        if latest['tag_name'] != 'app-v0.1.16-41' or int(latest['tag_name'].rsplit('-', 1)[1]) >= build:
             raise ValueError('Android version must increase beyond current stable')
         listed = json.loads(github('api', f'repos/{repository}/releases?per_page=100'))
         for item in listed:
             match = re.fullmatch(r'app-v\d+\.\d+\.\d+-(\d+)', item['tag_name'])
             if match and int(match[1]) >= build:
                 raise ValueError('A newer or reserved Android build already exists')
-        write('Release-before.json', {'android': snapshot(latest), 'windows': {name: snapshot(release(name)) for name in windows_tags}})
-        subprocess.run([sys.executable, 'scripts/finish_task.py', '--message', 'Android 0.1.16 页面计算小优化与来源提示，三ABI正式签名构建回归通过'], check=True)
+        write('Release-before.json', {'android': snapshot(latest), 'windows': validated_windows_snapshots(head)})
+        subprocess.run([sys.executable, 'scripts/finish_task.py', '--message', 'Android 0.1.17 跨季续播同步、下季缓存彩带、长按弹幕设置及紧凑全季选集，三ABI正式签名构建回归通过'], check=True)
         subprocess.run([sys.executable, 'scripts/sync_source.py', '--check'], check=True)
         source = max(root.parent.glob('真果·鉴-*.zip'), key=lambda p: p.stat().st_mtime_ns)
         source_package = output / f'HongguoTV-{version}-source.zip'
         shutil.copy2(source, source_package)
         write('Source-and-checks.json', {'version': version, 'build': build, 'sourceCommit': head,
-              'androidBaseline': 'app-v0.1.12-36', 'sharedBaseline': windows_tag,
+              'androidBaseline': 'app-v0.1.16-41', 'sharedBaseline': windows_tag,
               'workflowRun': f'https://github.com/{repository}/actions/runs/{os.environ["GITHUB_RUN_ID"]}',
               'sourceArchiveSha256': digest(source_package), 'expectedCertificate': certificate,
               'formatAnalysisPythonFlutterAndGoRacePassed': True, 'allThreeSignedApksValidated': True,
@@ -105,7 +114,7 @@ def main():
                         '--title', f'红果TV Android {version} · 发布验证中', '--notes-file', str(notes_file), '--prerelease', '--latest=false'], check=True)
         Path('staged-release.json').write_text(json.dumps(release(tag)), encoding='utf-8')
     elif phase == 'promote':
-        head = json.loads(github('api', f'repos/{repository}/git/ref/heads/android/0.1.16-stable-41'))['object']['sha']
+        head = json.loads(github('api', f'repos/{repository}/git/ref/heads/fix/follow-sync-danmaku-ribbon-0.1.17-42'))['object']['sha']
         if head != os.environ['GITHUB_SHA']:
             raise ValueError('Newer source superseded this candidate; do not promote')
         before = read('Release-before.json')

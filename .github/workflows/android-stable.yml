@@ -4,6 +4,12 @@ on:
   push:
     branches: [android/0.1.16-stable-41]
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: Publish the validated Android release using existing signing
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -125,14 +131,14 @@ jobs:
           retention-days: 14
   release:
     needs: [checks, android]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/android/0.1.16-stable-41'
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_release && github.ref == 'refs/heads/fix/follow-sync-danmaku-ribbon-0.1.17-42'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     permissions:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
-      EXPECTED_UPDATE_TAG: app-v0.1.16-41
+      EXPECTED_UPDATE_TAG: app-v0.1.17-42
       CHECK_LIVE_UPDATE: 'true'
       CHECK_UPDATE_DOWNLOAD: 'true'
     steps:
@@ -184,7 +190,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: android-0.1.16-release-evidence
+          name: android-0.1.17-release-evidence
           path: |
             dist/android/*
             dist/update-check/*-update-check.json

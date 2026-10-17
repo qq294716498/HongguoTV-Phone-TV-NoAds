@@ -108,7 +108,7 @@ def main():
     tag = f'windows-v{version}-{build}'
     package = output / f'HongguoTV-{version}-windows-x64.zip'
     if sys.argv[1] == 'stage':
-        current_head = json.loads(github('api', f'repos/{repository}/git/ref/heads/windows/0.1.15-stable-40'))['object']['sha']
+        current_head = json.loads(github('api', f'repos/{repository}/git/ref/heads/fix/follow-sync-danmaku-ribbon-0.1.17-42'))['object']['sha']
         if current_head != os.environ['GITHUB_SHA']:
             raise ValueError('A newer source commit superseded this release candidate')
         validation = read_json('Windows-validation.json')
@@ -144,15 +144,16 @@ def main():
         exists = subprocess.run(['gh', 'release', 'view', tag], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if exists.returncode == 0:
             raise ValueError('Release exists; never replace published assets')
-        write_json('Windows-previous-release.json', release_identity(json.loads(github('api', f'repos/{repository}/releases/tags/windows-v0.1.14-39'))))
+        write_json('Windows-previous-release.json', release_identity(json.loads(github('api', f'repos/{repository}/releases/tags/windows-v0.1.15-40'))))
         android = metadata()
         if not android['tag'].startswith('app-v'):
             raise ValueError('Android latest is not an Android release')
-        subprocess.run(['git', 'fetch', '--depth=1', 'origin', 'tag', 'app-v0.1.12-36'], check=True)
-        original = subprocess.check_output(['git', 'show', 'app-v0.1.12-36:lib/app_updates.dart'], text=True)
+        subprocess.run(['git', 'fetch', '--depth=1', 'origin', 'tag', 'app-v0.1.16-41'], check=True)
+        original = subprocess.check_output(['git', 'show', 'app-v0.1.16-41:lib/app_updates.dart'], text=True)
         current = (root / 'lib/app_updates.dart').read_text(encoding='utf-8')
         start = '  static AppRelease? parse('
-        old = original[original.index(start):original.index('  Map<String, Object> get validation')].strip()
+        old_end = '  static AppRelease? parseWindows(' if '  static AppRelease? parseWindows(' in original else '  Map<String, Object> get validation'
+        old = original[original.index(start):original.index(old_end)].strip()
         new = current[current.index(start):current.index('  static AppRelease? parseWindows(')].strip()
         if old != new:
             raise ValueError('Android release parser changed')
@@ -168,7 +169,7 @@ def main():
         ci = f'https://github.com/{repository}/actions/runs/{os.environ["GITHUB_RUN_ID"]}'
         write_json('Source-and-checks.json', {
             'version': version, 'build': int(build), 'sourceCommit': commit,
-            'baselineTag': 'app-v0.1.12-36', 'baselineCommit': '48d081cd916d01f41f6e9d0d543b0ae9d3e20026',
+            'baselineTag': 'app-v0.1.16-41', 'baselineCommit': '49e8200bae9d58e6266fa23382ef649d8a44adf2',
             'workflowRun': ci,
             'binaryBuildCommit': os.environ.get('WINDOWS_BINARY_COMMIT', commit),
             'binaryBuildRun': os.environ.get('WINDOWS_BINARY_RUN', os.environ['GITHUB_RUN_ID']),
@@ -203,7 +204,7 @@ def main():
         after = metadata()
         if isolation['before'] != after:
             raise ValueError('Android Latest or original assets changed during Windows release')
-        previous_windows = json.loads(github('api', f'repos/{repository}/releases/tags/windows-v0.1.14-39'))
+        previous_windows = json.loads(github('api', f'repos/{repository}/releases/tags/windows-v0.1.15-40'))
         if release_identity(previous_windows) != read_json('Windows-previous-release.json'):
             raise ValueError('Previously published Windows release changed during patch publication')
         update = read_json('Windows-update-check.json')
@@ -216,7 +217,7 @@ def main():
         if channel.get('ok') is not True or channel.get('tag') != tag or update.get('rateLimitFallbackVerified') is not True:
             raise ValueError('Windows fallback update channel has not been verified')
         isolation.update(after=after, ok=True, windowsPrerelease=False, windowsMarkedLatest=False,
-                         previousWindowsTag='windows-v0.1.14-39', previousWindowsUnchanged=True)
+                         previousWindowsTag='windows-v0.1.15-40', previousWindowsUnchanged=True)
         write_json('Android-isolation.json', isolation)
         files = sorted(file for file in output.iterdir() if file.is_file() and file.name != 'SHA256SUMS.txt')
         (output / 'SHA256SUMS.txt').write_text(''.join(

@@ -42,6 +42,7 @@ class PlayerControls extends StatefulWidget {
     this.onSeek,
     this.onDanmaku,
     this.onSettings,
+    this.onDanmakuSettings,
     this.desktopEpisodesExpanded,
     this.episodesTooltip,
     this.onSidebar,
@@ -86,6 +87,7 @@ class PlayerControls extends StatefulWidget {
   final Future<void> Function(Duration)? onSeek;
   final Future<void> Function()? onDanmaku;
   final Future<void> Function()? onSettings;
+  final Future<void> Function()? onDanmakuSettings;
   final bool? desktopEpisodesExpanded;
   final String? episodesTooltip;
   final Future<void> Function()? onSidebar;
@@ -507,14 +509,6 @@ class _PlayerControlsState extends State<PlayerControls> {
             if (widget.swipeEnabled && widget.fullscreen)
               PlayerDeviceStatus(visible: visible),
             if (widget.swipeEnabled && widget.showDanmaku) _danmakuTool(),
-            if (widget.swipeEnabled && widget.onSettings != null)
-              _overlayIconButton(
-                tooltip: '播放设置',
-                onPressed: widget.enabled
-                    ? () => _panel(widget.onSettings!)
-                    : null,
-                icon: Icons.settings_rounded,
-              ),
             if (widget.swipeEnabled)
               _overlayIconButton(
                 tooltip: '锁定屏幕',
@@ -781,6 +775,7 @@ class _PlayerControlsState extends State<PlayerControls> {
     required VoidCallback? onPressed,
     bool selected = false,
     double visualWidth = 36,
+    VoidCallback? onLongPress,
   }) {
     final scheme = Theme.of(context).colorScheme;
     final enabled = onPressed != null;
@@ -800,10 +795,13 @@ class _PlayerControlsState extends State<PlayerControls> {
         button: true,
         enabled: enabled,
         label: tooltip,
+        hint: onLongPress == null ? null : '长按打开弹幕设置',
+        onLongPress: onLongPress,
         child: GestureDetector(
           key: key,
           behavior: HitTestBehavior.opaque,
           onTap: onPressed,
+          onLongPress: onLongPress,
           child: SizedBox(
             width: targetWidth,
             height: 48,
@@ -895,6 +893,9 @@ class _PlayerControlsState extends State<PlayerControls> {
     selected: widget.danmakuEnabled,
     onPressed: widget.enabled
         ? () => _panel(widget.onRetryDanmaku ?? widget.onDanmaku!)
+        : null,
+    onLongPress: widget.enabled && !_locked && widget.onDanmakuSettings != null
+        ? () => _panel(widget.onDanmakuSettings!)
         : null,
     child: widget.onRetryDanmaku != null
         ? const Icon(Icons.refresh_rounded, size: 21)

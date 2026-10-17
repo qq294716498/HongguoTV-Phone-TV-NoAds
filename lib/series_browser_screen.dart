@@ -327,6 +327,7 @@ class _SeriesBrowserScreenState extends State<SeriesBrowserScreen> {
           child: EpisodeBrowser(
             key: ValueKey('all-season-episodes-${detail.drama.id}'),
             keyPrefix: 'all-season-episode',
+            denseDesktop: true,
             episodes: detail.episodes,
             currentNumber: current,
             onSelected: (index) => _chooseEpisode(index),
