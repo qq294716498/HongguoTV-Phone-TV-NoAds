@@ -20,10 +20,14 @@ class FollowUpdates extends ChangeNotifier {
   bool get _valid =>
       !_disposed && !store.locked && store.profileEpoch == _epoch;
 
-  Future<void> refresh() async {
+  Drama _anchor(Drama drama) =>
+      store.seriesWatch(drama)?.drama ?? store.followedSeries(drama) ?? drama;
+
+  Future<void> refresh({bool force = false}) async {
     if (!_valid || checking) return;
     final dramas = store.trackedSeries
         .where((drama) => drama.source == SourceSite.hongguo.id)
+        .where((drama) => force || !store.hasNextSeason(drama))
         .toList();
     final generation = ++_generation;
     bool current() => _valid && generation == _generation;
@@ -44,17 +48,27 @@ class FollowUpdates extends ChangeNotifier {
     Future<void> worker() async {
       while (current() && cursor < dramas.length) {
         final drama = dramas[cursor++];
-        if (store.followedSeries(drama) == null) continue;
+        if (store.followedSeries(drama) == null ||
+            !force && store.hasNextSeason(drama))
+          continue;
+        final anchor = _anchor(drama);
+        bool stillCurrent() {
+          if (!current() || store.followedSeries(drama) == null) return false;
+          final latest = _anchor(drama);
+          return (latest.source, latest.id, latest.title) ==
+              (anchor.source, anchor.id, anchor.title);
+        }
+
         final catalog = SeriesCatalog(
-          anchor: drama,
+          anchor: anchor,
           repository: repository,
           knownDramas: store.seriesDramasFor(drama),
-          allowed: () => current() && store.followedSeries(drama) != null,
+          allowed: stillCurrent,
         );
         try {
           await catalog.load();
           if (!current()) return;
-          if (store.followedSeries(drama) != null) {
+          if (stillCurrent()) {
             for (final entry in catalog.entries) {
               pending[entry.drama.id] = entry.drama;
             }

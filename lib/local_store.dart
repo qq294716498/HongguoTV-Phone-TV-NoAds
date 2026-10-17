@@ -43,6 +43,7 @@ class LocalStore extends ChangeNotifier {
   final _seriesWatchCache = <(String, String, String), WatchEntry?>{};
   final _seriesFollowCache = <(String, String, String), Drama?>{};
   List<Drama>? _trackedSeriesCache;
+  Map<String, WatchEntry>? _syncedWatchCache;
   bool _seriesIndexReady = false;
   final _favoriteRanks = <String, int>{};
   Future<void> _writes = Future<void>.value();
@@ -129,6 +130,7 @@ class LocalStore extends ChangeNotifier {
     _seriesWatchCache.clear();
     _seriesFollowCache.clear();
     _trackedSeriesCache = null;
+    _syncedWatchCache = null;
   }
 
   void _notify() {
@@ -328,9 +330,25 @@ class LocalStore extends ChangeNotifier {
       .toList();
   WatchEntry? watched(String id) {
     WatchEntry? entry = _history[id];
-    if (entry == null && isFavorite(id)) {
+    if (entry == null) {
       try {
-        entry = lanDocument.records[id]?.watch;
+        if (_syncedWatchCache == null) {
+          final synced = <String, WatchEntry>{};
+          for (final record in lanDocument.records.values) {
+            final watch = record.followed && !record.progress.conflict
+                ? record.watch
+                : null;
+            if (watch != null &&
+                (synced[watch.drama.id] == null ||
+                    watch.updatedAt.isAfter(
+                      synced[watch.drama.id]!.updatedAt,
+                    ))) {
+              synced[watch.drama.id] = watch;
+            }
+          }
+          _syncedWatchCache = synced;
+        }
+        entry = _syncedWatchCache![id];
       } catch (_) {}
     }
     return entry != null && allowsSource(entry.drama.source) ? entry : null;
@@ -652,10 +670,19 @@ class LocalStore extends ChangeNotifier {
   }
 
   WatchEntry? seriesWatch(Drama drama) {
-    if (!allowsSource(drama.source) || _history.isEmpty) return null;
+    if (!allowsSource(drama.source)) return null;
     final key = _anchorKey(drama);
     if (_seriesWatchCache.containsKey(key)) return _seriesWatchCache[key];
     if (_seriesWatchCache.length >= 2048) _seriesWatchCache.clear();
+    final anchor = followedSeries(drama);
+    final record = anchor == null ? null : lanDocument.records[anchor.id];
+    final synced = record?.followed == true && !record!.progress.conflict
+        ? record.watch
+        : null;
+    if (synced != null && lanSameSeries(drama, synced.drama)) {
+      _seriesWatchCache[key] = synced;
+      return synced;
+    }
     WatchEntry? latest;
     for (final id in _seriesIds(drama)) {
       final entry = _history[id];

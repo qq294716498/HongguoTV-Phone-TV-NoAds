@@ -157,6 +157,8 @@ extension LanSynchronization on LanController {
         if (remoteBase.isNotEmpty) 'base': remoteBase,
       }, owner: 'sync');
       _checkSync(ticket, remote);
+      if (summary['schema'] != lanSyncSchema)
+        throw StateError(lanSyncUpgradeMessage);
       final base = lanText(summary['base'], 64);
       if (remoteBase.isNotEmpty && remoteBase != base) {
         throw StateError('对方记录已更新，请重新同步');
@@ -378,7 +380,9 @@ extension LanSynchronization on LanController {
         0,
         (count, record) => count + record.conflicts,
       );
-      syncMessage = conflicts == 0 ? '双方记录已同步' : '记录已同步 · $conflicts 项冲突待处理';
+      syncMessage = conflicts == 0
+          ? '追剧及其续播进度已同步'
+          : '记录已同步 · $conflicts 项冲突待处理';
       error = null;
       unawaited(
         _request('status', {
@@ -418,6 +422,8 @@ extension LanSynchronization on LanController {
     Map<String, dynamic> body,
     LanConnection remote,
   ) async {
+    if (body['schema'] != lanSyncSchema)
+      throw StateError(lanSyncUpgradeMessage);
     final document = store.lanDocument;
     if (path == 'sync/summary') {
       final sources = _receiveScope(body, remote);
@@ -434,6 +440,7 @@ extension LanSynchronization on LanController {
         throw const FormatException('同步分页无效');
       final end = min(offset + 128, records.length);
       return {
+        'schema': lanSyncSchema,
         'base': base,
         'items': {
           for (final record in records.sublist(offset, end))

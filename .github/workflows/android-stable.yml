@@ -53,8 +53,11 @@ jobs:
         working-directory: native
 
   android:
+    needs: [checks]
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    outputs:
+      package_version: ${{ steps.package_identity.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -66,6 +69,16 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      - name: Read candidate package identity
+        id: package_identity
+        run: |
+          python3 - <<'PY'
+          import os, re
+          from pathlib import Path
+          version = re.search(r'^version:\s*(\S+)', Path('pubspec.yaml').read_text(), re.M).group(1)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'version={version}\n')
+          PY
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -106,13 +119,13 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: hongguotv-android-0.1.16
+          name: hongguotv-android-${{ steps.package_identity.outputs.version }}
           path: dist/android/*
           if-no-files-found: warn
           retention-days: 14
   release:
     needs: [checks, android]
-    if: github.ref == 'refs/heads/android/0.1.16-stable-41'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/android/0.1.16-stable-41'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     permissions:
@@ -132,7 +145,7 @@ jobs:
           java-version: '17'
       - uses: actions/download-artifact@v4
         with:
-          name: hongguotv-android-0.1.16
+          name: hongguotv-android-${{ needs.android.outputs.package_version }}
           path: dist/android
       - uses: subosito/flutter-action@v2
         with:

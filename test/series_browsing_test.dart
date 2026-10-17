@@ -292,7 +292,7 @@ void main() {
   });
 
   test(
-    'follow checks are fresh per visit and serialize shared catalog reads',
+    'marked follows skip remote reads while unmarked follows remain fresh',
     () async {
       final store = await createStore();
       await store.toggleSeriesFavorite(firstSeason);
@@ -306,10 +306,119 @@ void main() {
       expect(repository.maximumCatalogs, 1);
       expect(store.hasNextSeason(firstSeason), isTrue);
       await updates.refresh();
-      expect(repository.catalogCalls, hasLength(4));
+      expect(repository.catalogCalls, hasLength(3));
+      expect(repository.catalogCalls.last.$1, '另一个故事');
       expect(updates.failed, 0);
     },
   );
+
+  test('persisted next-season labels skip fresh controller queries', () async {
+    final store = await createStore();
+    await store.toggleSeriesFavorite(firstSeason);
+    await store.refreshDramas([firstSeason, secondSeason]);
+    final restarted = LocalStore(store.preferences);
+    addTearDown(restarted.dispose);
+    final repository = SeasonRepository();
+    final updates = FollowUpdates(repository, restarted);
+    addTearDown(updates.dispose);
+    await updates.refresh();
+    expect(repository.catalogCalls, isEmpty);
+    expect(updates.total, 0);
+    expect(restarted.hasNextSeason(firstSeason), true);
+    await updates.refresh(force: true);
+    expect(repository.catalogCalls, hasLength(1));
+  });
+
+  test(
+    'an unmarked series is queried again after no result or failure',
+    () async {
+      final store = await createStore();
+      await store.toggleSeriesFavorite(firstSeason);
+      final repository = SeasonRepository()
+        ..results[1] = CatalogPage([firstSeason]);
+      final updates = FollowUpdates(repository, store);
+      addTearDown(updates.dispose);
+      await updates.refresh();
+      expect(store.hasNextSeason(firstSeason), false);
+      repository.failingPage = 1;
+      await updates.refresh();
+      expect(updates.failed, 1);
+      repository.failingPage = null;
+      await updates.refresh();
+      expect(repository.catalogCalls, hasLength(3));
+    },
+  );
+
+  test('advancing the watched season checks its new successor', () async {
+    final store = await createStore();
+    await store.toggleSeriesFavorite(firstSeason);
+    await store.refreshDramas([firstSeason, secondSeason]);
+    final repository = SeasonRepository();
+    final updates = FollowUpdates(repository, store);
+    addTearDown(updates.dispose);
+    await updates.refresh();
+    expect(repository.catalogCalls, isEmpty);
+    await store.saveWatch(watch(secondSeason, 3, 2));
+    expect(store.hasNextSeason(firstSeason), false);
+    await updates.refresh();
+    expect(repository.catalogCalls, hasLength(1));
+    expect(store.hasNextSeason(firstSeason), true);
+    await updates.refresh();
+    expect(repository.catalogCalls, hasLength(1));
+    await store.saveWatch(watch(thirdSeason, 2, 3));
+    await updates.refresh();
+    expect(repository.catalogCalls, hasLength(2));
+    expect(store.hasNextSeason(firstSeason), false);
+  });
+
+  test(
+    'an imported current-season change invalidates the old next-season label',
+    () async {
+      final store = await createStore();
+      await store.toggleSeriesFavorite(firstSeason);
+      await store.refreshDramas([firstSeason, secondSeason]);
+      final repository = SeasonRepository();
+      final updates = FollowUpdates(repository, store);
+      addTearDown(updates.dispose);
+      await updates.refresh();
+      expect(repository.catalogCalls, isEmpty);
+      final document = store.lanDocument;
+      final record = document.records[firstSeason.id]!;
+      final moved = record.withField(
+        'progress',
+        document.edit(record.progress, watch(secondSeason, 4, 2).toJson()),
+      );
+      await store.applyLanRecords(
+        operation: 'test-current-season',
+        base: store.lanDocument.hashFor({'hongguo'}),
+        sources: {'hongguo'},
+        records: [moved],
+        epoch: store.profileEpoch,
+      );
+      expect(store.hasNextSeason(firstSeason), false);
+      await updates.refresh();
+      expect(repository.catalogCalls, hasLength(1));
+      expect(store.hasNextSeason(firstSeason), true);
+    },
+  );
+
+  test('a current-season change discards a pending old lookup', () async {
+    final store = await createStore();
+    await store.toggleSeriesFavorite(firstSeason);
+    final repository = SeasonRepository()
+      ..pendingCatalog = Completer<CatalogPage>();
+    final updates = FollowUpdates(repository, store);
+    addTearDown(updates.dispose);
+    final pending = updates.refresh();
+    await store.saveWatch(watch(secondSeason, 4, 2));
+    repository.pendingCatalog!.complete(CatalogPage([thirdSeason]));
+    await pending;
+    expect(store.hasNextSeason(firstSeason), false);
+    repository.pendingCatalog = null;
+    await updates.refresh();
+    expect(repository.catalogCalls, hasLength(2));
+    expect(store.hasNextSeason(firstSeason), true);
+  });
 
   test(
     'follow checks cannot save a late response into another user session',
@@ -649,7 +758,7 @@ void main() {
   });
 
   testWidgets(
-    'follow page resumes the latest season and checks again on reentry',
+    'follow page keeps the current season and only forces marked checks manually',
     (tester) async {
       viewport(tester, const Size(390, 844));
       final store = await createStore();
@@ -674,12 +783,20 @@ void main() {
       expect(find.text('想看'), findsNothing);
       expect(find.text('在看'), findsNothing);
       expect(find.text('已看'), findsNothing);
-      expect(find.text('已有下季'), findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (widget) => widget is Banner && widget.message == '已有下季',
+        ),
+        findsOneWidget,
+      );
       expect(find.textContaining('第 2 季 · 第 51 集'), findsOneWidget);
       final calls = repository.catalogCalls.length;
       await tester.pumpWidget(page(1));
       await tester.pumpAndSettle();
-      expect(repository.catalogCalls.length, greaterThan(calls));
+      expect(repository.catalogCalls.length, calls);
+      await tester.tap(find.byKey(const ValueKey('follow-check-updates')));
+      await tester.pumpAndSettle();
+      expect(repository.catalogCalls.length, calls + 1);
       await tester.tap(find.byKey(ValueKey('saved-${firstSeason.id}')));
       expect(opened, [secondSeason.id]);
       await tester.pumpWidget(const SizedBox.shrink());

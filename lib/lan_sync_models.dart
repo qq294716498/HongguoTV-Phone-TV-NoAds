@@ -4,7 +4,41 @@ import 'dart:math';
 import 'package:crypto/crypto.dart';
 
 import 'follow_state.dart';
+import 'catalog_sort.dart';
+import 'hongguo_series.dart';
 import 'models.dart';
+
+const lanSyncSchema = 2;
+const lanSyncUpgradeMessage = '跨季续播同步需要两端升级到新版，原记录未修改';
+
+bool lanSameSeries(Drama anchor, Drama target) =>
+    anchor.source == target.source &&
+    (anchor.id == target.id ||
+        hongguoSeriesEntries(anchor, [
+          target,
+        ]).any((entry) => entry.drama.id == target.id));
+
+String _lanSeriesKey(Drama drama) => drama.source == SourceSite.hongguo.id
+    ? '${drama.source}\u0000${hongguoSeriesInfo(drama)?.key ?? normalizedSearchText(drama.title)}'
+    : drama.id;
+
+Map<String, List<WatchEntry>> _lanHistoryGroups(
+  Map<String, WatchEntry> history,
+) {
+  final groups = <String, List<WatchEntry>>{};
+  for (final entry in history.values) {
+    (groups[_lanSeriesKey(entry.drama)] ??= []).add(entry);
+  }
+  for (final group in groups.values) {
+    group.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+  }
+  return groups;
+}
+
+WatchEntry? _lanLatest(Drama anchor, Map<String, List<WatchEntry>> groups) =>
+    groups[_lanSeriesKey(anchor)]
+        ?.where((entry) => lanSameSeries(anchor, entry.drama))
+        .firstOrNull;
 
 String lanID() {
   final random = Random.secure();
@@ -239,16 +273,21 @@ Drama lanCompactDrama(Drama drama) {
   return lanDrama(row);
 }
 
-Map<String, dynamic>? lanProgress(WatchEntry? entry) => entry == null
+Map<String, dynamic>? lanProgress(
+  WatchEntry? entry, {
+  Iterable<String> cleared = const [],
+}) => entry == null
     ? null
     : {
         'episode': entry.episode,
         'position': (entry.position * 1000).round() / 1000,
         'duration': (entry.duration * 1000).round() / 1000,
         'updatedAt': entry.updatedAt.toUtc().toIso8601String(),
+        'drama': lanCompactDrama(entry.drama).toJson(),
+        if (cleared.isNotEmpty) 'cleared': cleared.toSet().toList()..sort(),
       };
 
-void _validateCell(String field, LanCell cell) {
+void _validateCell(String field, LanCell cell, {Drama? anchor}) {
   for (final candidate in cell.values) {
     final value = candidate.value;
     if (field == 'member') {
@@ -266,7 +305,17 @@ void _validateCell(String field, LanCell cell) {
       final episode = progress['episode'];
       final position = progress['position'];
       final duration = progress['duration'];
-      if (progress.length != 4 ||
+      if (!{4, 5, 6}.contains(progress.length) ||
+          progress.keys.any(
+            (key) => !{
+              'episode',
+              'position',
+              'duration',
+              'updatedAt',
+              'drama',
+              'cleared',
+            }.contains(key),
+          ) ||
           episode is! int ||
           episode < 1 ||
           episode > 1000000 ||
@@ -282,6 +331,28 @@ void _validateCell(String field, LanCell cell) {
           (progress['updatedAt'] as String).length > 48 ||
           DateTime.tryParse(progress['updatedAt'] as String) == null) {
         throw const FormatException('续播进度无效');
+      }
+      if (progress.containsKey('drama')) {
+        final target = lanDrama(progress['drama']);
+        if (anchor == null || !lanSameSeries(anchor, target)) {
+          throw const FormatException('续播剧目与追剧系列不一致');
+        }
+      }
+      if (progress.containsKey('cleared')) {
+        final cleared = progress['cleared'];
+        if (!progress.containsKey('drama') ||
+            cleared is! List ||
+            cleared.length > 1000 ||
+            cleared.toSet().length != cleared.length ||
+            cleared.any(
+              (id) =>
+                  id is! String ||
+                  id.length > 512 ||
+                  !id.startsWith('${anchor!.source}:'),
+            ) ||
+            cleared.contains(lanMap(progress['drama'])['id'])) {
+          throw const FormatException('已清理续播记录无效');
+        }
       }
     }
   }
@@ -329,8 +400,14 @@ class LanRecord {
       ? null
       : WatchEntry.fromJson({
           ...lanMap(progress.value),
-          'drama': drama.toJson(),
+          'drama': lanMap(progress.value)['drama'] ?? drama.toJson(),
         });
+
+  Set<String> get clearedProgressIds => progress.value == null
+      ? const {}
+      : Set<String>.from(
+          lanMap(progress.value)['cleared'] as List? ?? const [],
+        );
 
   factory LanRecord.fromJson(Object? value) {
     if (utf8.encode(jsonEncode(value)).length > 512 * 1024) {
@@ -343,7 +420,7 @@ class LanRecord {
     final progress = LanCell.fromJson(row['progress']);
     _validateCell('member', member);
     _validateCell('status', status);
-    _validateCell('progress', progress);
+    _validateCell('progress', progress, anchor: drama);
     final known = row['known'];
     final read = row['read'];
     if (known is! int ||
@@ -418,7 +495,7 @@ class LanDocument {
     final replica = lanText(row['replica'], 32);
     final counter = row['counter'];
     final rows = row['records'];
-    if (row['schema'] != 1 ||
+    if (!{1, lanSyncSchema}.contains(row['schema']) ||
         !RegExp(r'^[a-f0-9]{32}$').hasMatch(replica) ||
         counter is! int ||
         counter < 0 ||
@@ -461,12 +538,16 @@ class LanDocument {
     required Map<String, WatchEntry> history,
     required Map<String, WatchEntry> oldHistory,
     Set<String> clearProgress = const {},
+    bool migrate = false,
   }) {
+    final currentGroups = _lanHistoryGroups(history);
+    final previousGroups = _lanHistoryGroups(oldHistory);
     for (final id in {...records.keys, ...favorites.keys}) {
       final old = records[id];
       final drama = favorites[id];
       if (old == null && drama != null) {
-        final state = states[id] ?? FollowState.initial(drama, history[id]);
+        final watch = _lanLatest(drama, currentGroups);
+        final state = states[id] ?? FollowState.initial(drama, watch);
         records[id] = LanRecord(
           drama: lanCompactDrama(drama),
           member: cell(true),
@@ -474,7 +555,7 @@ class LanDocument {
             'status': state.status.name,
             'manual': state.manuallyWatched,
           }),
-          progress: cell(lanProgress(history[id])),
+          progress: cell(lanProgress(watch)),
           known: state.knownEpisodes,
           read: state.readEpisodes,
         );
@@ -509,15 +590,35 @@ class LanDocument {
       if (lanJSON(status) != lanJSON(old.status.value)) {
         next = next.withField('status', edit(old.status, status));
       }
-      if (clearProgress.contains(id)) {
-        next = next.withField('progress', edit(old.progress, null));
-      } else if (history[id] != null &&
-          (!previous.containsKey(id) ||
-              lanJSON(lanProgress(history[id])) !=
-                  lanJSON(lanProgress(oldHistory[id])))) {
+      final watch = _lanLatest(drama, currentGroups);
+      final oldWatch = _lanLatest(drama, previousGroups);
+      final cleared = {...old.clearedProgressIds};
+      final newlyCleared = clearProgress.where(
+        (key) =>
+            key == id ||
+            key == old.watch?.drama.id ||
+            oldHistory[key] != null &&
+                lanSameSeries(drama, oldHistory[key]!.drama),
+      );
+      cleared.addAll(newlyCleared);
+      if (watch != null) cleared.remove(watch.drama.id);
+      if (migrate &&
+          (old.progress.conflict ||
+              old.progress.value != null &&
+                  lanMap(old.progress.value).containsKey('drama'))) {
+        records[id] = next;
+        continue;
+      }
+      if (newlyCleared.isNotEmpty ||
+          migrate && !old.progress.conflict ||
+          watch != null &&
+              (!previous.containsKey(id) ||
+                  lanJSON(lanProgress(watch)) !=
+                      lanJSON(lanProgress(oldWatch)))) {
+        final target = migrate ? watch ?? old.watch : watch;
         next = next.withField(
           'progress',
-          edit(old.progress, lanProgress(history[id])),
+          edit(old.progress, lanProgress(target, cleared: cleared)),
         );
       }
       records[id] = next;
@@ -537,7 +638,7 @@ class LanDocument {
   }
 
   Map<String, dynamic> toJson() => {
-    'schema': 1,
+    'schema': lanSyncSchema,
     'replica': replica,
     'counter': counter,
     'records': records.values.map((record) => record.toJson()).toList(),

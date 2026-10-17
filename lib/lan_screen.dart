@@ -297,7 +297,9 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
                       SwitchListTile.adaptive(
                         key: const ValueKey('lan-auto-sync'),
                         title: const Text('自动同步'),
-                        subtitle: const Text('同步追剧、观看状态和这些剧目的续播进度'),
+                        subtitle: const Text(
+                          '同步追剧、观看状态和这些剧目的续播进度；未加入追剧的观看历史不参与',
+                        ),
                         value: link.autoSync,
                         onChanged: controlsEnabled
                             ? (value) => _perform(() => link.setAutoSync(value))
@@ -938,7 +940,8 @@ class _LanConflicts extends StatelessWidget {
         _ => row['manual'] == true ? '已看 · 手动标记' : '已看',
       };
     }
-    return '第 ' +
+    return (row['drama'] == null ? '' : '${lanDrama(row['drama']).title} · ') +
+        '第 ' +
         row['episode'].toString() +
         ' 集 · ' +
         formatPosition((row['position'] as num).toDouble());

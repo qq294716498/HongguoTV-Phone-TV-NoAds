@@ -507,6 +507,14 @@ class _PlayerControlsState extends State<PlayerControls> {
             if (widget.swipeEnabled && widget.fullscreen)
               PlayerDeviceStatus(visible: visible),
             if (widget.swipeEnabled && widget.showDanmaku) _danmakuTool(),
+            if (widget.swipeEnabled && widget.onSettings != null)
+              _overlayIconButton(
+                tooltip: '播放设置',
+                onPressed: widget.enabled
+                    ? () => _panel(widget.onSettings!)
+                    : null,
+                icon: Icons.settings_rounded,
+              ),
             if (widget.swipeEnabled)
               _overlayIconButton(
                 tooltip: '锁定屏幕',

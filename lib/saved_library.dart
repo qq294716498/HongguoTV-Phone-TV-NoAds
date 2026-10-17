@@ -135,7 +135,8 @@ class _SavedLibraryState extends State<SavedLibrary> {
         : widget.store.seriesWatch(drama);
     final target = watched?.drama ?? drama;
     final followed = widget.store.followedSeries(drama) != null;
-    final badge = !widget.history && widget.store.hasNextSeason(drama)
+    final hasNextSeason = !widget.history && widget.store.hasNextSeason(drama);
+    final badge = hasNextSeason
         ? '已有下季'
         : followed
         ? '已追剧'
@@ -154,6 +155,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
         onPressed: () => _actions(drama),
       ),
       badge: badge,
+      badgeRibbon: hasNextSeason,
       subtitle: watched == null
           ? SourceSite.byId(drama.source).name
           : '${season == null ? '' : '第 ${season.season} ${season.unit} · '}第 ${watched.episode} 集 · ${formatPosition(watched.position)}',
@@ -265,7 +267,9 @@ class _SavedLibraryState extends State<SavedLibrary> {
                   IconButton(
                     key: const ValueKey('follow-check-updates'),
                     tooltip: '检查下季',
-                    onPressed: _updates.checking ? null : _updates.refresh,
+                    onPressed: _updates.checking
+                        ? null
+                        : () => _updates.refresh(force: true),
                     icon: const Icon(Icons.refresh_rounded),
                   ),
                 ],

@@ -57,6 +57,7 @@ jobs:
         working-directory: native
 
   windows:
+    needs: [checks]
     runs-on: windows-2022
     timeout-minutes: 50
     steps:
@@ -124,7 +125,7 @@ jobs:
           retention-days: 14
 
   release:
-    if: github.ref == 'refs/heads/windows/0.1.15-stable-40'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/windows/0.1.15-stable-40'
     needs: [checks, windows]
     runs-on: ubuntu-latest
     timeout-minutes: 20

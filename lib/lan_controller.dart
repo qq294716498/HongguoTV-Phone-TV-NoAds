@@ -789,7 +789,7 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
             lastSync = DateTime.now();
             final conflicts = conflictCount;
             syncMessage = conflicts == 0
-                ? '双方记录已同步'
+                ? '追剧及其续播进度已同步'
                 : '记录已同步 · $conflicts 项冲突待处理';
             _notify();
           }
@@ -860,7 +860,10 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
         'address': remote.address,
         'token': remote.token,
         'path': path,
-        'payload': payload,
+        'payload': {
+          ...payload,
+          if (path.startsWith('sync/')) 'schema': lanSyncSchema,
+        },
         'requestId': request,
       });
       if (_disposed ||
@@ -948,7 +951,7 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
           _lastAutomatic = DateTime.now();
           final conflicts = conflictCount;
           syncMessage = conflicts == 0
-              ? '双方记录已同步'
+              ? '追剧及其续播进度已同步'
               : '记录已同步 · $conflicts 项冲突待处理';
           lastSync ??= DateTime.now();
           _notify();

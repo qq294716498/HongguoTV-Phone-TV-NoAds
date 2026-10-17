@@ -179,7 +179,12 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.byKey(ValueKey('saved-${seasonOne.id}')), findsOneWidget);
-      expect(find.text('已有下季'), findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (widget) => widget is Banner && widget.message == '已有下季',
+        ),
+        findsOneWidget,
+      );
       await tester.pumpWidget(
         MaterialApp(
           home: DetailScreen(

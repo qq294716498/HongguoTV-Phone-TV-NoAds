@@ -25,6 +25,8 @@ class MemoryLanRepository extends FixtureRepository {
   int starts = 0;
   int sequence = 0;
   bool holdSummary = false;
+  bool legacySyncRequests = false;
+  bool legacySyncResponses = false;
   String? holdPath;
   String? holdResponsePath;
   final responsePaths = <String, String>{};
@@ -113,7 +115,8 @@ class MemoryLanRepository extends FixtureRepository {
             'peerId': id,
             'pin': pin,
             'host': '127.0.0.1',
-            'payload': payload['payload'],
+            'payload': {...Map<String, dynamic>.from(payload['payload'] as Map)}
+              ..removeWhere((key, _) => legacySyncRequests && key == 'schema'),
           });
         }
         if (holdSummary && payload['path'] == 'sync/summary' ||
@@ -136,7 +139,9 @@ class MemoryLanRepository extends FixtureRepository {
             pending.completeError(AppFailure(payload['error'] as String));
           } else {
             pending.complete(
-              Map<String, dynamic>.from(payload['payload'] as Map),
+              Map<String, dynamic>.from(payload['payload'] as Map)..removeWhere(
+                (key, _) => legacySyncResponses && key == 'schema',
+              ),
             );
           }
         }
@@ -179,6 +184,274 @@ void main() {
     return (left, right, a, b);
   }
 
+  const season1 = Drama(
+    id: 'hongguo:sync-s1',
+    source: 'hongguo',
+    title: '跨设备合成 第一季',
+    episodes: 10,
+  );
+  const season2 = Drama(
+    id: 'hongguo:sync-s2',
+    source: 'hongguo',
+    title: '跨设备合成 第二季',
+    episodes: 12,
+  );
+  const season3 = Drama(
+    id: 'hongguo:sync-s3',
+    source: 'hongguo',
+    title: '跨设备合成 第三季',
+    episodes: 14,
+  );
+  WatchEntry progress(Drama drama, int episode, double position, int minute) =>
+      WatchEntry(
+        drama: drama,
+        episode: episode,
+        position: position,
+        duration: 120,
+        updatedAt: DateTime.utc(2026, 10, 17, 12, minute),
+      );
+  Future<void> baseline(LanController left, LanController right) async {
+    await left.store.toggleSeriesFavorite(season1);
+    await right.store.toggleSeriesFavorite(season1);
+    await left.synchronize();
+    await left.store.saveWatch(progress(season1, 2, 8, 1));
+    await left.synchronize();
+  }
+
+  void expectProgress(
+    LocalStore store,
+    Drama drama,
+    int episode,
+    double position,
+  ) {
+    expect(store.favorites.map((d) => d.id), [season1.id]);
+    final record = store.lanDocument.records[season1.id]!;
+    expect(record.watch!.drama.id, drama.id);
+    expect(record.watch!.episode, episode);
+    expect(record.watch!.position, position);
+    expect(record.watch!.duration, 120);
+    expect(store.seriesWatch(season1)!.drama.id, drama.id);
+    expect(store.watched(drama.id)!.position, position);
+  }
+
+  for (final mode in ['merge', 'push', 'pull', 'automatic']) {
+    test(
+      'cross-season $mode preserves the favorite anchor and real watched identity after restart',
+      () async {
+        final (left, right, _, _) = await pair();
+        await baseline(left, right);
+        await left.store.saveWatch(progress(season3, 7, 37, 3));
+        expect(
+          right.store.seriesDramasFor(season1).any((d) => d.id == season3.id),
+          false,
+        );
+        if (mode == 'merge') {
+          await left.synchronize();
+        } else if (mode == 'automatic') {
+          await left.setAutoSync(true);
+          await right.setAutoSync(true);
+          left.connection!.autoSync = true;
+          right.connection!.autoSync = true;
+          left.flush();
+          for (
+            var i = 0;
+            i < 100 && right.store.seriesWatch(season1)?.drama.id != season3.id;
+            i++
+          ) {
+            await Future<void>.delayed(const Duration(milliseconds: 10));
+          }
+        } else {
+          final owner = mode == 'push' ? left : right;
+          final preview = await owner.preview(
+            mode == 'push' ? LanSyncMode.push : LanSyncMode.pull,
+          );
+          await owner.applyPreview(preview);
+        }
+        expectProgress(right.store, season3, 7, 37);
+        final restarted = LocalStore(right.store.preferences);
+        addTearDown(restarted.dispose);
+        expectProgress(restarted, season3, 7, 37);
+      },
+    );
+  }
+
+  test(
+    'rewatching season one replaces the later season instead of maximizing season or episode',
+    () async {
+      final (left, right, _, _) = await pair();
+      await baseline(left, right);
+      await left.store.saveWatch(progress(season3, 12, 70, 3));
+      await left.synchronize();
+      await right.store.saveWatch(progress(season1, 1, 3, 5));
+      await right.synchronize();
+      expectProgress(left.store, season1, 1, 3);
+      expect(left.store.history.any((w) => w.drama.id == season3.id), true);
+    },
+  );
+
+  test(
+    'offline cross-season conflict selection retains the entire chosen progress value',
+    () async {
+      final (left, right, _, _) = await pair();
+      await baseline(left, right);
+      await left.store.saveWatch(progress(season3, 7, 37, 3));
+      await right.store.saveWatch(progress(season2, 9, 61, 4));
+      await left.synchronize();
+      final conflict = left.store.lanDocument.records[season1.id]!;
+      expect(conflict.progress.conflict, true);
+      final choice = conflict.progress.values.firstWhere(
+        (v) => lanMap(lanMap(v.value)['drama'])['id'] == season3.id,
+      );
+      await left.store.resolveLanConflict(
+        season1.id,
+        'progress',
+        choice,
+        conflict.hash,
+      );
+      await left.synchronize();
+      expectProgress(right.store, season3, 7, 37);
+      expect(
+        right.store.lanDocument.records[season1.id]!.watch!.updatedAt,
+        progress(season3, 7, 37, 3).updatedAt,
+      );
+      final restarted = LocalStore(right.store.preferences);
+      addTearDown(restarted.dispose);
+      expectProgress(restarted, season3, 7, 37);
+    },
+  );
+
+  test(
+    'deleting one season propagates its tombstone without clearing other seasons',
+    () async {
+      final (left, right, _, _) = await pair();
+      await baseline(left, right);
+      await left.store.saveWatch(progress(season3, 7, 37, 3));
+      await left.synchronize();
+      await left.store.removeHistory(season3.id);
+      await left.synchronize();
+      expectProgress(right.store, season1, 2, 8);
+      expect(right.store.history.any((w) => w.drama.id == season3.id), false);
+      await right.synchronize();
+      expect(
+        left.store.lanDocument.records[season1.id]!.watch!.drama.id,
+        season1.id,
+      );
+      await left.store.saveWatch(progress(season3, 4, 15, 6));
+      await left.synchronize();
+      await left.store.removeHistory(season1.id);
+      await left.synchronize();
+      expectProgress(right.store, season3, 4, 15);
+      expect(right.store.history.any((w) => w.drama.id == season1.id), false);
+    },
+  );
+
+  test(
+    'clear and unfollow do not revive stale synchronized series progress',
+    () async {
+      final (left, right, _, _) = await pair();
+      await baseline(left, right);
+      await left.store.saveWatch(progress(season3, 7, 37, 3));
+      await left.synchronize();
+      await left.store.clearHistory();
+      await left.synchronize();
+      expect(right.store.seriesWatch(season1), isNull);
+      expect(right.store.history, isEmpty);
+      await right.synchronize();
+      expect(left.store.lanDocument.records[season1.id]!.watch, isNull);
+      await left.store.toggleSeriesFavorite(season1);
+      await left.synchronize();
+      await right.store.saveWatch(progress(season3, 8, 40, 5));
+      await right.synchronize();
+      expect(left.store.favorites, isEmpty);
+      expect(right.store.lanDocument.records[season1.id]!.watch, isNull);
+    },
+  );
+
+  for (final mode in [LanSyncMode.push, LanSyncMode.pull]) {
+    test(
+      'authoritative ${mode.name} null progress dominates an offline season change',
+      () async {
+        final (left, right, _, _) = await pair();
+        await baseline(left, right);
+        await left.store.clearHistory();
+        await right.store.saveWatch(progress(season3, 7, 37, 3));
+        final owner = mode == LanSyncMode.push ? left : right;
+        await owner.applyPreview(await owner.preview(mode));
+        expect(right.store.seriesWatch(season1), isNull);
+        expect(left.store.lanDocument.records[season1.id]!.watch, isNull);
+        await right.synchronize();
+        expect(left.store.seriesWatch(season1), isNull);
+      },
+    );
+  }
+
+  test(
+    'history truncation retains a followed cross-season resume cursor',
+    () async {
+      final (left, right, _, _) = await pair();
+      await baseline(left, right);
+      await left.store.saveWatch(progress(season3, 7, 37, 3));
+      for (var i = 0; i < 301; i++) {
+        await left.store.saveWatch(
+          progress(
+            Drama(
+              id: 'hongguo:unfollowed-$i',
+              source: 'hongguo',
+              title: '无关历史$i',
+            ),
+            1,
+            1,
+            i + 10,
+          ),
+        );
+      }
+      expect(left.store.history, hasLength(300));
+      expect(left.store.history.any((w) => w.drama.id == season3.id), false);
+      expect(left.store.watched(season3.id)!.position, 37);
+      await left.synchronize();
+      expectProgress(right.store, season3, 7, 37);
+      expect(right.store.favorites, hasLength(1));
+      expect(
+        right.store.history.any(
+          (w) => w.drama.id.startsWith('hongguo:unfollowed-'),
+        ),
+        false,
+      );
+    },
+  );
+
+  for (final direction in ['request', 'response']) {
+    test('legacy sync $direction fails before writing either device', () async {
+      final (left, right, a, b) = await pair();
+      await baseline(left, right);
+      await left.store.saveWatch(progress(season3, 7, 37, 3));
+      final beforeLeft = left.store.lanDocument.hashFor({'hongguo'});
+      final beforeRight = right.store.lanDocument.hashFor({'hongguo'});
+      a.legacySyncRequests = direction == 'request';
+      b.legacySyncResponses = direction == 'response';
+      await expectLater(
+        left.synchronize(),
+        throwsA(predicate((e) => e.toString().contains('升级'))),
+      );
+      expect(left.store.lanDocument.hashFor({'hongguo'}), beforeLeft);
+      expect(right.store.lanDocument.hashFor({'hongguo'}), beforeRight);
+    });
+  }
+
+  test(
+    'unfollowed history stays local even when synchronization has zero changes',
+    () async {
+      final (left, right, _, _) = await pair();
+      await left.store.saveWatch(progress(season3, 7, 37, 3));
+      await left.synchronize();
+      expect(left.store.history, hasLength(1));
+      expect(right.store.history, isEmpty);
+      expect(right.store.favorites, isEmpty);
+      expect(left.store.lanDocument.records, isEmpty);
+      expect(left.syncMessage, '追剧及其续播进度已同步');
+    },
+  );
+
   test(
     'two devices merge followed records in both directions without duplication',
     () async {
@@ -218,7 +491,7 @@ void main() {
         transport.commands.where((value) => value == 'stop').length,
         stops,
       );
-      expect(left.syncMessage, '双方记录已同步');
+      expect(left.syncMessage, '追剧及其续播进度已同步');
     },
   );
 
@@ -254,7 +527,7 @@ void main() {
         await left.connect(right.local!);
         transport.holdSummary = false;
         await left.synchronize();
-        expect(left.syncMessage, '双方记录已同步');
+        expect(left.syncMessage, '追剧及其续播进度已同步');
       },
     );
   }
@@ -285,7 +558,7 @@ void main() {
       expect(DiaryService.fullText, contains('主动取消'));
       transport.holdSummary = false;
       await left.synchronize();
-      expect(left.syncMessage, '双方记录已同步');
+      expect(left.syncMessage, '追剧及其续播进度已同步');
     },
   );
 

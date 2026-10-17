@@ -220,6 +220,65 @@ void main() {
     expect(tester.takeException(), isNull);
   }
 
+  for (final landscape in [false, true]) {
+    testWidgets(
+      'mobile ${landscape ? 'landscape' : 'portrait'} settings entry saves and applies danmaku controls',
+      (tester) async {
+        final repository = DanmakuFixtureRepository();
+        final platform = ScriptedPlayer();
+        final store = await mount(tester, repository, platform);
+        if (landscape) {
+          tester.view.physicalSize = const Size(880, 420);
+          await settle(tester);
+        }
+        final beforePlaying = platform.state.playing;
+        final opened = platform.opened.length;
+        final settings = find.byTooltip('播放设置');
+        expect(settings, findsOneWidget);
+        await tester.tap(settings);
+        await settle(tester);
+        expect(find.byType(PlayerMenu), findsOneWidget);
+        expect(
+          tester.widget<PlayerMenu>(find.byType(PlayerMenu)).section,
+          PlayerMenuSection.settings,
+        );
+        final speed = find.byKey(const ValueKey('menu-danmaku-speed-1.5'));
+        await tester.ensureVisible(speed);
+        await tester.tap(speed);
+        await settle(tester);
+        final opacity = find.byKey(const ValueKey('menu-danmaku-opacity-0.35'));
+        await tester.ensureVisible(opacity);
+        await tester.tap(opacity);
+        await settle(tester);
+        expect(store.playbackPreferences.danmakuSpeed, 1.5);
+        expect(store.playbackPreferences.danmakuOpacity, .35);
+        Navigator.of(tester.element(find.byType(PlayerMenu))).pop();
+        await settle(tester);
+        final overlay = tester.widget<DanmakuOverlay>(
+          find.byType(DanmakuOverlay),
+        );
+        expect(overlay.speed, 1.5);
+        expect(overlay.opacity, .35);
+        expect(platform.opened, hasLength(opened));
+        expect(platform.state.playing, beforePlaying);
+        await store.flushPendingWrites();
+        final restored = LocalStore(store.preferences);
+        expect(restored.playbackPreferences.danmakuSpeed, 1.5);
+        expect(restored.playbackPreferences.danmakuOpacity, .35);
+        restored.dispose();
+        await tester.tap(find.byTooltip('锁定屏幕'));
+        await settle(tester);
+        await tester.tap(settings, warnIfMissed: false);
+        await settle(tester);
+        expect(find.byType(PlayerMenu), findsNothing);
+        expect(platform.state.playing, beforePlaying);
+        await tester.tap(find.byTooltip('解锁屏幕'));
+        await settle(tester);
+        await unmount(tester, platform);
+      },
+    );
+  }
+
   testWidgets(
     'danmaku uses continuous linear motion and synchronizes pause, buffering, speed and seek',
     (tester) async {
