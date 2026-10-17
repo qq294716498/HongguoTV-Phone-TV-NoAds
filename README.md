@@ -2,7 +2,7 @@
 
 基于 [guoapp](https://github.com/zhoufuweigg/guoapp) 的非官方独立客户端。手机与 Android TV 共用 Android 应用，另提供 Windows x64 独立客户端。支持短剧浏览、搜索、在线播放、追剧和下载。
 
-## 当前版本源码：0.1.17+42
+## 当前版本：0.1.17+42
 
 - 追剧已有与当前观看季匹配的“已有下季”结果时，自动检查跳过重复远端查询；当前剧、源或季变化后重新判断，无标签的追剧保持原检查策略。手动“检查下季”可强制重新查询。
 - “已有下季”改为封面左上角红粉色斜彩带，白色文字；保持卡片高度、点击与 TV 焦点边框。
@@ -10,7 +10,9 @@
 - “查看全季”下方的集编号使用紧凑布局和至少 44px 热区，保留选中态与 TV 焦点；上方季标签及其他页面选集保持原布局。
 - 修复 Issue #11：收藏锚点保持不变，局域网追剧进度原子携带真实观看季、集数、秒数与时间戳；冲突显示具体季名，删除历史保留清理标记，观看历史超过 300 条后仍可续播已追剧的当前季。
 - 同步 schema 2 在读取差异记录和写入前校验；两端均需升级后同步，新旧客户端互联会提示升级并保留数据。旧 schema 1 LAN 缓存可迁移，未解决冲突保留；同步范围仍为已追剧及其进度，不含全部未追剧历史。自动化设备传输使用合成数据，未做真实双机/小米 TV 验收，不声称修复 Issue #10。
-- Android 三 ABI 与 Windows x64 使用同一源码；以下 0.1.17 下载入口在全部回归、平台构建与公开更新核验通过后启用。两端均需升级后才能使用跨季追剧同步。
+- Android 三 ABI 与 Windows x64 已正式发布，可在“设置 → 软件更新 → 检查更新”获取。跨季追剧同步需要两端均升级到本版。
+
+两平台使用同一源码提交 [34ec11d](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/commit/34ec11d73de7b796e444bcf81463e2e9a203650b)；[Windows CI](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/38991254539) 与 [Android CI](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/38992467269) 均已全部成功。
 
 ## Windows 正式版：0.1.17+42
 
@@ -18,7 +20,7 @@
 
 基于已发布 Android `app-v0.1.16-41` 与共享源码 `265906c4b6638d62b8eb0d9b4c0776c8f83f2b7f` 增量修改。远端 `main` 的应用源码可能较旧，请使用发布标签。保留 Android 0.1.16 与 Windows 0.1.15 已有资产。
 
-- [Windows 正式版发布页](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/windows-v0.1.17-42)。仅在必要检查全部通过后发布；结果以 [Windows CI](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/workflows/windows-preview.yml) 和对应资产为准。
+- [Windows 正式版发布页](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/windows-v0.1.17-42)。本版构建、原生启动与更新验证已通过，结果见 [Windows CI](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/38991254539) 和发布资产。
 - [完整 Windows x64 ZIP 下载](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.17-42/HongguoTV-0.1.17-windows-x64.zip) · [SHA-256 校验清单](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.17-42/SHA256SUMS.txt) · [对应纯源码 ZIP](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.17-42/HongguoTV-0.1.17-source.zip)。
 - Windows 10 / 11 x64 完整 ZIP 包含 `HongguoTV.exe`、更新助手、Go 核心、Flutter、mpv、FFmpeg、ANGLE、VC 运行库及资源；不提供 ARM64 / 32 位包。完整解压到可写目录后运行，不要只复制 EXE；不需要安装 Flutter、Go 或 FFmpeg。
 - 未签名，无 Windows 签名证书。独立正式标签 `windows-v0.1.17-42`，`prerelease=false`、`make_latest=false`；Windows 发布不更改 Android Latest；Android 新版另经签名流程发布，已有 Android 资产保留。
@@ -42,7 +44,7 @@
 
 更新先验证路径、CRC、文件清单、逐文件 SHA-256、PE x64 与版本；同卷准备完整目录，保留旧目录并原子替换。新客户端完成初始化、首帧及 nonce 确认后提交；崩溃/超时回滚旧目录和配置并重启旧版。旧目录和配置备份保留；只读、占用、重解析点或含清单外文件时停止，不提权。恢复同一用户的剧集和位置并保持暂停；锁定用户或受限来源不会自动进入播放页。
 
-验证包括默认/全站源回归、Windows x64 编译、版本/DLL/资源/校验和、干净 PATH 与中文空格目录启动、合成 H.264/AAC 首帧/快进/倍速/音量/全屏、原生托盘关闭/恢复/暂停/退出、迷你窗反复切换及调整大小、12 个更新事务场景（含真实客户端重启确认）。发布后继续验证公开下载与 Android Latest/资产隔离；各项实际结论见发布 JSON 报告。
+验证包括默认/全站源回归、Windows x64 编译、版本/DLL/资源/校验和、干净 PATH 与中文空格目录启动、合成 H.264/AAC 首帧/快进/倍速/音量/全屏、原生托盘关闭/恢复/暂停/退出、迷你窗反复切换及调整大小、12 个更新事务场景（含真实客户端重启确认）。本版另已完成公开 ZIP 下载及备用清单验证；完整包共 220 个文件，51 个 EXE/DLL 均为 x64，12 项更新事务通过，逐文件清单与 SHA-256 一致。Android Latest 仅由独立签名流程升级，旧 Android 0.1.16 与 Windows 0.1.15 的 25 个既有资产均保留；实际结论见发布 JSON 报告。
 
 尚未实测真实源站解码、音频设备输出、消费级 Windows 10/11 GPU/旧 CPU 兼容、长时间跨集跨季连播，以及旧预览客户端通过公网完成整个升级事务。自动化结果不等同用户电脑验收，不会在用户电脑自动安装或运行。
 
@@ -91,7 +93,7 @@
 
 支持 Android 8.0 及以上系统。请选择与设备和已安装应用匹配的架构；更新时直接覆盖安装，无需先卸载。
 
-源码及安装包校验文件见 [0.1.17 发布页](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/app-v0.1.17-42)。最新版本源码可从该版本标签查看；其他分支的源码版本以各自的 `pubspec.yaml` 为准。
+三架构 APK 的 [SHA-256 校验清单](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.17-42/SHA256SUMS.txt) 与源码见 [0.1.17 发布页](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/app-v0.1.17-42)。最新版本源码可从该版本标签查看；其他分支的源码版本以各自的 `pubspec.yaml` 为准。
 
 ## 应用内更新
 
@@ -142,7 +144,7 @@
 | Windows | 独立 Windows x64 正式渠道；0.1.17+42 的构建、运行验证结果及下载以正式发布页为准 |
 | iOS | 保留工程与构建支持，尚无本次已签名安装包 |
 
-正式发布前执行自动化检查、安装包校验和更新下载验证；真实手机 / TV 的覆盖安装、实际播放与长时间连播仍待验收。
+本版静态分析无错误和警告，保留 154 条既有 info 提示；Python 44 项测试（3 项条件跳过）、Flutter 默认 550 项与全站源 551 项通过（分别 3 / 2 项条件跳过），Go race 两种构建配置通过。Android 三 ABI 沿用原证书，构建和公网下载均核对包名、版本、ABI、对齐、CRC、资源与 SHA-256；Windows 的完整包、原生 smoke 和更新事务结果见发布报告。真实手机 / TV 的覆盖安装、实际播放与长时间连播仍待验收。
 
 后续优先完成 Android 手机和 Windows 的实际使用验证，其次是 Android TV 遥控与连播验证，最后安排 iOS 构建与设备验证。
 
