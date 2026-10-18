@@ -143,6 +143,10 @@ Future<void> runPackageSmoke(List<String> arguments) async {
       evidence[field] = true;
     }
     desktop.playbackOwner = player;
+    desktop.pausePlayback = () async {
+      await player!.pause();
+      await desktop.updatePlayback(attached: true, playing: false);
+    };
     await desktop.updatePlayback(attached: true, playing: true);
     final originalBounds = await windowManager.getBounds();
     final originalTopmost = await windowManager.isAlwaysOnTop();
@@ -209,13 +213,15 @@ Future<void> runPackageSmoke(List<String> arguments) async {
       if (desktop.quitting) return;
       if (desktop.inTray && !await windowManager.isVisible()) {
         evidence['nativeTrayHidden'] = true;
-        if (toggles == 0 && player!.state.playing)
-          evidence['trayKeepsPlaying'] = true;
+        if (toggles == 0 && !player!.state.playing)
+          evidence['trayPausesOnClose'] = true;
       }
       if (evidence['nativeTrayHidden'] == true &&
           !desktop.inTray &&
-          await windowManager.isVisible())
+          await windowManager.isVisible()) {
         evidence['nativeTrayRestored'] = true;
+        if (!player!.state.playing) evidence['trayRestoreStaysPaused'] = true;
+      }
       evidence['nativeTrayToggles'] = toggles;
       evidence['currentlyInTray'] = desktop.inTray;
       evidence['windowVisible'] = await windowManager.isVisible();
@@ -227,8 +233,9 @@ Future<void> runPackageSmoke(List<String> arguments) async {
       await player!.pause();
       for (final key in [
         'nativeTrayHidden',
-        'trayKeepsPlaying',
+        'trayPausesOnClose',
         'nativeTrayRestored',
+        'trayRestoreStaysPaused',
       ]) {
         if (evidence[key] != true)
           throw StateError('Missing native tray check: $key');

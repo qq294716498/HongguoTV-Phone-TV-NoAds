@@ -48,15 +48,15 @@ def native_desktop(process, report):
         return name.value == 'FLUTTER_RUNNER_WIN32_WINDOW'
     window = next(window for window in windows if is_flutter(window))
     user.PostMessageW(window, 0x0010, 0, 0)
-    wait(lambda data: data.get('trayKeepsPlaying') is True)
+    wait(lambda data: data.get('trayPausesOnClose') is True)
     user.PostMessageW(window, 0x0111, 41002, 0)
-    wait(lambda data: data.get('nativeTrayToggles') == 1 and data.get('playing') is False)
+    wait(lambda data: data.get('nativeTrayToggles') == 1 and data.get('playing') is True)
     user.PostMessageW(window, 0x0111, 41002, 0)
-    wait(lambda data: data.get('nativeTrayToggles') == 2 and data.get('playing') is True)
+    wait(lambda data: data.get('nativeTrayToggles') == 2 and data.get('playing') is False)
     user.PostMessageW(window, 0x0111, 41001, 0)
-    wait(lambda data: data.get('nativeTrayRestored') is True)
+    wait(lambda data: data.get('nativeTrayRestored') is True and data.get('trayRestoreStaysPaused') is True)
     user.PostMessageW(window, 0x0010, 0, 0)
-    wait(lambda data: data.get('currentlyInTray') is True and data.get('windowVisible') is False)
+    wait(lambda data: data.get('currentlyInTray') is True and data.get('windowVisible') is False and data.get('playing') is False)
     user.PostMessageW(window, 0x0111, 41003, 0)
 
 

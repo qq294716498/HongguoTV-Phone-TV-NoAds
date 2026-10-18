@@ -18,6 +18,55 @@ void main() {
   final volume = find.byKey(const ValueKey('windows-volume'));
   final popup = find.byKey(const ValueKey('windows-volume-popup'));
 
+  for (final size in [const Size(960, 540), const Size(480, 300)]) {
+    testWidgets(
+      'hidden Windows controls leave the bottom video pixels unchanged at $size',
+      (tester) async {
+        final fixture = TransportFixture()
+          ..background = const Color(0xFF6BCADE);
+        await fixture.mount(tester, mobile: false, size: size);
+        await fixture.player.playOrPause();
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 2));
+        await tester.pump(const Duration(milliseconds: 200));
+        expect(tester.widget<AnimatedOpacity>(chrome).opacity, 0);
+        final boundary = tester.renderObject<RenderRepaintBoundary>(
+          find.byKey(const ValueKey('transport-capture')),
+        );
+        await tester.runAsync(() async {
+          final image = await boundary.toImage(pixelRatio: 1);
+          final data = (await image.toByteData(
+            format: ui.ImageByteFormat.rawRgba,
+          ))!;
+          for (var y = image.height - 90; y < image.height; y += 7) {
+            for (var x = 0; x < image.width; x += 11) {
+              final index = (y * image.width + x) * 4;
+              expect(data.buffer.asUint8List(index, 4), [
+                107,
+                202,
+                222,
+                255,
+              ], reason: 'bottom pixel $x,$y');
+            }
+          }
+          final directory = Platform.environment['HG_UI_CAPTURE_DIR'];
+          if (directory != null) {
+            final png = (await image.toByteData(
+              format: ui.ImageByteFormat.png,
+            ))!;
+            await File(
+              '$directory/windows-hidden-bottom-${size.width.toInt()}.png',
+            ).writeAsBytes(png.buffer.asUint8List());
+          }
+          image.dispose();
+        });
+        expect(tester.takeException(), isNull);
+        await fixture.unmount(tester);
+      },
+      variant: windows,
+    );
+  }
+
   for (final playing in [false, true]) {
     testWidgets(
       'Windows ${playing ? 'playing' : 'paused'} keeps video bright and playback controls at bottom',

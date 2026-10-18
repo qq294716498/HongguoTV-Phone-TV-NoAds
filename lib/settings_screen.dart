@@ -200,7 +200,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         title: const Text('关闭窗口时进入托盘'),
                         subtitle: Text(
                           desktop.available
-                              ? '保留当前播放状态；托盘右键可恢复、播放/暂停或真正退出。关闭此项则直接退出。'
+                              ? '暂停并保存进度；从托盘恢复后需手动播放。托盘右键可播放/暂停或真正退出。关闭此项则直接退出。'
                               : '系统托盘暂不可用，关闭窗口将直接退出。',
                         ),
                         value: desktop.closeToTray,
