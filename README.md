@@ -2,18 +2,20 @@
 
 基于 [guoapp](https://github.com/zhoufuweigg/guoapp) 的非官方独立客户端。手机与 Android TV 共用 Android 应用，另提供 Windows x64 独立客户端。支持短剧浏览、搜索、在线播放、追剧和下载。
 
-## Android TV 更新：0.1.18+43
+## 当前 Android 版本：0.1.18+43
 
-基于已发布的 `app-v0.1.17-42` / `windows-v0.1.17-42` 共用源码增量修改；下载区仍指向已发布 0.1.17。现已获准仅发布 TV 修复的 Android 手机/TV 共用包，Windows 独立修改不包含在本分支。
+手机/TV 共用 Android 0.1.18+43 已正式发布，本轮只调整 TV 行为，保留既有播放源、弹幕、预加载、连播、全季、追剧/进度、搜索和下载。运行时代码来自已验证 TV 提交 `0cf19ed`；正式源码以 `app-v0.1.18-43` 标签为准。Windows 正式版仍为 0.1.17，本轮未构建或发布 Windows 独立修改。
+
+[Android 0.1.18 正式发布页](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/app-v0.1.18-43) · [构建与发布验证](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/39107356975) · [对应源码提交 7544a05](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/commit/7544a0566b34aff5d853bd1b6f64c6a7cb3a1701)
 
 - TV 弹幕使用真实内容运动时长，避免系统“移除动画”将弹幕加速约 20 倍；速度仍独立于视频倍速，普通界面动画继续遵循系统设置。实体电视选择标准布局时同样保留内容运动时长；手机和 Windows 的原有弹幕行为保持。
 - TV 追剧、历史、下载及标准布局搜索框分开浏览和编辑状态：获焦后方向键浏览，确认进入输入；编辑期间方向键继续交给文字光标、输入法及候选词，返回/提交后恢复浏览。未改动密码、数字或服务器设置输入框。
 - TV 播放控制条合并为单排紧凑操作，选集弹窗采用 48px 卡片、6px 间距及清晰焦点，保留当前集定位、VIP 标识和“查看全季”。窄屏可横向滚动操作按钮。
 - 播放控制条隐藏时，左右沿用 ±15 秒定位，长按第 6 次重复起沿用 30 秒步进与进度预览；上下显示控制条，菜单键直接打开选集。控制条和弹窗显示时方向键只导航；关闭弹窗后返回播放画面，需要时再按上下唤出控制条。
-- 验证：默认 Flutter 回归 579 通过 / 3 跳过，全站源回归 580 通过 / 2 跳过；CI 同范围静态分析无错误和警告（154 条既有提示）；189 个 Dart 文件格式检查通过。脚本测试 44 项完成、3 项跳过。16 组弹幕运动测试覆盖 500 条合成缓存、0.5/1 倍弹幕速度、3 倍视频速度、30/60/120 帧、不同分辨率/DPI及系统移除动画开关；中文控制条预览已检查。
-- 云端测试使用合成数据并禁用站源图片；未做实体电视输入法、遥控器及真实视频播放验收。本分支仅经正式签名、三 ABI 包和客户端公网下载验证后发布 Android 更新；Windows 既有资产保留。
+- 验证：默认 Flutter 回归 579 通过 / 3 跳过，全站源回归 580 通过 / 2 跳过；CI 同范围静态分析无错误和警告（154 条既有提示）；189 个 Dart 文件格式检查通过。脚本测试 45 项通过。16 组弹幕运动测试覆盖 500 条合成缓存、0.5/1 倍弹幕速度、3 倍视频速度、30/60/120 帧、不同分辨率/DPI及系统移除动画开关；中文控制条预览已检查。
+- 云端测试使用合成数据并禁用站源图片；未做实体电视输入法、遥控器及真实视频播放验收。三 ABI 正式包及候选/正式公网更新下载均已复验签名、包名、版本、架构、资源、大小与 SHA-256；云端再次实测更新器下载并核对 59 个原生 ELF、521 个运行时源码文件。4 个既有发布及 50 个资产逐项比对保持不变。
 
-## 当前版本：0.1.17+42
+## 此前发布：0.1.17+42
 
 - 追剧已有与当前观看季匹配的“已有下季”结果时，自动检查跳过重复远端查询；当前剧、源或季变化后重新判断，无标签的追剧保持原检查策略。手动“检查下季”可强制重新查询。
 - “已有下季”改为封面左上角红粉色斜彩带，白色文字；保持卡片高度、点击与 TV 焦点边框。
@@ -66,7 +68,7 @@
 - TV 追剧、历史、下载与标准布局搜索框增加浏览/编辑状态，方向键浏览，确认输入，编辑时保留输入法和候选词，返回/提交后恢复遥控焦点。
 - 播放控制条改为单排紧凑操作，选集采用 48px 卡片和 6px 间距；保留当前集定位、全季入口与遥控焦点。
 - 控制条隐藏时左右按原 ±15 秒快进后退，长按沿用加速及进度预览；上下打开控制条，菜单键打开选集并可查看全季。菜单/弹窗内方向键只导航，返回后回到播放画面。
-- 构建号由 42 递增至 43；ARM64 / 32 位 / x86_64 versionCode 分别为 2043 / 1043 / 4043。正式发布必须验证既有证书、包名、三 ABI、资源、大小、SHA-256 与客户端公网更新下载，再提升为 Latest。
+- 构建号由 42 递增至 43；ARM64 / 32 位 / x86_64 versionCode 分别为 2043 / 1043 / 4043。既有证书、包名、三 ABI、资源、大小、SHA-256 与客户端公网更新下载均已验证后提升为 Latest；同 ABI 满足包名/签名一致且 versionCode 递增的覆盖升级条件，未做实体覆盖安装。
 - 现有 Windows 0.1.17 与所有旧 Android 发布资产保留。本轮未做实体 TV 输入法/遥控器、真实源站解码、覆盖安装或长时间连播验收。
 
 
@@ -91,13 +93,13 @@
 
 | 设备架构 | 下载 |
 | --- | --- |
-| arm64-v8a · 大多数手机及较新的电视 / 盒子 | [HongguoTV 0.1.17 ARM64](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.17-42/HongguoTV-0.1.17-arm64-v8a.apk) |
-| armeabi-v7a · 32 位手机 / 电视 / 盒子 | [HongguoTV 0.1.17 32 位](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.17-42/HongguoTV-0.1.17-armeabi-v7a.apk) |
-| x86_64 · 对应架构模拟器 | [HongguoTV 0.1.17 x86_64](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.17-42/HongguoTV-0.1.17-x86_64.apk) |
+| arm64-v8a · 大多数手机及较新的电视 / 盒子 | [HongguoTV 0.1.18 ARM64](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.18-43/HongguoTV-0.1.18-arm64-v8a.apk) |
+| armeabi-v7a · 32 位手机 / 电视 / 盒子 | [HongguoTV 0.1.18 32 位](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.18-43/HongguoTV-0.1.18-armeabi-v7a.apk) |
+| x86_64 · 对应架构模拟器 | [HongguoTV 0.1.18 x86_64](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.18-43/HongguoTV-0.1.18-x86_64.apk) |
 
 支持 Android 8.0 及以上系统。请选择与设备和已安装应用匹配的架构；更新时直接覆盖安装，无需先卸载。
 
-三架构 APK 的 [SHA-256 校验清单](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.17-42/SHA256SUMS.txt) 与源码见 [0.1.17 发布页](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/app-v0.1.17-42)。最新版本源码可从该版本标签查看；其他分支的源码版本以各自的 `pubspec.yaml` 为准。
+三架构 APK 的 [SHA-256 校验清单](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.18-43/SHA256SUMS.txt) 与源码见 [0.1.18 发布页](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/app-v0.1.18-43)。最新版本源码可从该版本标签查看；其他分支的源码版本以各自的 `pubspec.yaml` 为准。
 
 ## 应用内更新
 
