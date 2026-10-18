@@ -18,7 +18,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'fixtures.dart';
 import 'player_fixtures.dart';
-import 'remote_test_helpers.dart';
 
 void main() {
   setUp(mockPlayerDevice);
@@ -641,7 +640,7 @@ void main() {
       await capture(tester, 'tv-controls');
       await player.pause();
       await tester.pump();
-      focusRemote(tester, find.byKey(const ValueKey('tv-progress')));
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pump();
       await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
       await tester.pump(const Duration(milliseconds: 30));

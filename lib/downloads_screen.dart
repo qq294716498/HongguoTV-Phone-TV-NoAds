@@ -13,6 +13,7 @@ import 'models.dart';
 import 'player_screen.dart';
 import 'settings_screen.dart';
 import 'widgets.dart';
+import 'television_search_field.dart';
 
 class DownloadsScreen extends StatefulWidget {
   const DownloadsScreen({
@@ -647,7 +648,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
           ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-          child: TextField(
+          child: TelevisionSearchField(
             controller: _search,
             onChanged: (_) => setState(() {}),
             decoration: InputDecoration(

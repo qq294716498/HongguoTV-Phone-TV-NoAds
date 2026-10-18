@@ -85,7 +85,6 @@ void main() {
       final history = find.byKey(const ValueKey('tv-nav-2'));
       focusRemote(tester, history);
       await tester.pumpAndSettle();
-      final historyFocus = FocusManager.instance.primaryFocus;
       await tester.sendKeyEvent(LogicalKeyboardKey.select);
       await tester.pumpAndSettle();
       final input = find.byKey(const ValueKey('history-search'));
@@ -95,11 +94,17 @@ void main() {
       await nativeBack(tester);
       expect(tester.testTextInput.isVisible, isFalse);
       expect(find.byKey(const ValueKey('history-search')), findsOneWidget);
-      expect(FocusManager.instance.primaryFocus, same(historyFocus));
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'tv-search-navigation',
+      );
       expect(exits, 0);
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.pumpAndSettle();
-      expect(FocusManager.instance.primaryFocus, isNot(same(historyFocus)));
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        isNot('tv-search-navigation'),
+      );
       await nativeBack(tester);
       expect(find.byKey(const ValueKey('history-search')), findsNothing);
       expect(find.text('退出红果TV？'), findsNothing);

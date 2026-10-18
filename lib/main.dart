@@ -437,6 +437,7 @@ class _DuanjuAppState extends State<DuanjuApp> {
             television: tv,
             child: AppLayout(
               television: tv,
+              deviceTelevision: television,
               version: version,
               mobileReminders:
                   !television && (Platform.isAndroid || Platform.isIOS),
@@ -457,7 +458,7 @@ class _DuanjuAppState extends State<DuanjuApp> {
                           const DismissIntent(),
                   },
                   child: TelevisionNavigation(
-                    enabled: tv,
+                    enabled: tv || television,
                     navigatorKey: navigatorKey,
                     child: FocusTraversalGroup(child: child!),
                   ),

@@ -6,8 +6,8 @@ import 'package:flutter/services.dart';
 
 export 'app_build.dart';
 
-const appVersion = '0.1.17';
-const windowsBuildNumber = 42;
+const appVersion = '0.1.18';
+const windowsBuildNumber = 43;
 
 ThemeData televisionTheme(ThemeData theme) {
   final colors = theme.colorScheme;
@@ -137,11 +137,13 @@ class AppLayout extends InheritedWidget {
   const AppLayout({
     super.key,
     required this.television,
+    this.deviceTelevision,
     this.version = appVersion,
     this.mobileReminders = true,
     required super.child,
   });
   final bool television;
+  final bool? deviceTelevision;
   final String version;
   final bool mobileReminders;
 
@@ -152,9 +154,15 @@ class AppLayout extends InheritedWidget {
       context.dependOnInheritedWidgetOfExactType<AppLayout>()?.version ??
       appVersion;
 
+  static bool isTelevisionDevice(BuildContext context) {
+    final layout = context.dependOnInheritedWidgetOfExactType<AppLayout>();
+    return layout?.deviceTelevision ?? layout?.television ?? false;
+  }
+
   @override
   bool updateShouldNotify(AppLayout oldWidget) =>
       television != oldWidget.television ||
+      deviceTelevision != oldWidget.deviceTelevision ||
       version != oldWidget.version ||
       mobileReminders != oldWidget.mobileReminders;
 }

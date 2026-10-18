@@ -278,10 +278,7 @@ class TelevisionControlsState extends State<TelevisionControls> {
     _scheduleHide();
   }
 
-  Future<void> _openPanel(
-    Future<void> Function() action,
-    FocusNode returnFocus,
-  ) async {
+  Future<void> _openPanel(Future<void> Function() action) async {
     if (_panelOpen) return;
     _commitSeek();
     _panelOpen = true;
@@ -292,10 +289,7 @@ class TelevisionControlsState extends State<TelevisionControls> {
       if (mounted) {
         _panelOpen = false;
         if (widget.enabled) {
-          setState(() => _visible = true);
-          _reportVisibility();
-          _focus(returnFocus);
-          _scheduleHide();
+          _hide();
         }
       }
     }
@@ -337,7 +331,9 @@ class TelevisionControlsState extends State<TelevisionControls> {
       if (event is KeyDownEvent) widget.onNext?.call();
     } else if (key == LogicalKeyboardKey.mediaTrackPrevious) {
       if (event is KeyDownEvent) widget.onPrevious?.call();
-    } else if (((!_visible || _progress.hasFocus || _surface.hasPrimaryFocus) &&
+    } else if (key == LogicalKeyboardKey.contextMenu) {
+      if (event is KeyDownEvent) unawaited(_openPanel(widget.onEpisodes));
+    } else if (((!_visible) &&
             (key == LogicalKeyboardKey.arrowLeft ||
                 key == LogicalKeyboardKey.arrowRight)) ||
         key == LogicalKeyboardKey.mediaRewind ||
@@ -409,20 +405,20 @@ class TelevisionControlsState extends State<TelevisionControls> {
     label: label,
     focusNode: focus,
     onPressed: action,
-    radius: 18,
-    padding: const EdgeInsets.all(5),
+    radius: 12,
+    padding: const EdgeInsets.all(4),
     child: SizedBox(
-      width: primary ? 90 : 76,
-      height: primary ? 76 : 66,
+      width: primary ? 72 : 76,
+      height: 50,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
             icon,
-            size: primary ? 34 : 27,
+            size: primary ? 26 : 22,
             color: action == null ? Colors.white30 : Colors.white,
           ),
-          const SizedBox(height: 5),
+          const SizedBox(height: 2),
           Text(
             label,
             style: TextStyle(
@@ -430,6 +426,33 @@ class TelevisionControlsState extends State<TelevisionControls> {
               color: action == null ? Colors.white30 : Colors.white,
             ),
           ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _action({
+    required Key key,
+    required String label,
+    required IconData icon,
+    required VoidCallback onPressed,
+    FocusNode? focus,
+    bool selected = false,
+  }) => RemoteTarget(
+    key: key,
+    label: label,
+    focusNode: focus,
+    selected: selected,
+    onPressed: onPressed,
+    radius: 12,
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+    child: SizedBox(
+      height: 42,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 22),
+          Text(label, style: const TextStyle(fontSize: 14)),
         ],
       ),
     ),
@@ -513,7 +536,8 @@ class TelevisionControlsState extends State<TelevisionControls> {
                   right: 28,
                   bottom: 18,
                   child: Container(
-                    padding: const EdgeInsets.fromLTRB(18, 12, 18, 10),
+                    key: const ValueKey('tv-control-panel'),
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
                     decoration: BoxDecoration(
                       color: const Color(0xD9161821),
                       borderRadius: BorderRadius.circular(24),
@@ -524,7 +548,7 @@ class TelevisionControlsState extends State<TelevisionControls> {
                       children: [
                         RemoteTarget(
                           key: const ValueKey('tv-progress'),
-                          label: '播放进度，左右快进后退15秒，长按连续定位',
+                          label: '播放进度，按确认暂停或播放',
                           focusNode: _progress,
                           onPressed: _togglePlayback,
                           child: Padding(
@@ -573,7 +597,7 @@ class TelevisionControlsState extends State<TelevisionControls> {
                                     ),
                                     const Spacer(),
                                     const Text(
-                                      '左右 ±15秒 · 长按连续定位',
+                                      '返回播放后，左右 ±15秒',
                                       style: TextStyle(
                                         fontSize: 14,
                                         color: Colors.white60,
@@ -586,84 +610,77 @@ class TelevisionControlsState extends State<TelevisionControls> {
                           ),
                         ),
                         const SizedBox(height: 4),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            _transport(
-                              key: const ValueKey('tv-previous'),
-                              label: '上一集',
-                              icon: Icons.skip_previous_rounded,
-                              focus: _previous,
-                              action: widget.onPrevious,
-                            ),
-                            const SizedBox(width: 8),
-                            _transport(
-                              key: const ValueKey('tv-rewind'),
-                              label: '后退15秒',
-                              icon: Icons.replay_rounded,
-                              focus: _rewind,
-                              action: () => _seek(-15),
-                            ),
-                            const SizedBox(width: 8),
-                            _transport(
-                              key: const ValueKey('tv-play-pause'),
-                              label: state.playing ? '暂停' : '播放',
-                              icon: state.playing
-                                  ? Icons.pause_rounded
-                                  : Icons.play_arrow_rounded,
-                              focus: _play,
-                              action: _togglePlayback,
-                              primary: true,
-                            ),
-                            const SizedBox(width: 8),
-                            _transport(
-                              key: const ValueKey('tv-forward'),
-                              label: '快进15秒',
-                              icon: Icons.forward_rounded,
-                              focus: _forward,
-                              action: () => _seek(15),
-                            ),
-                            const SizedBox(width: 8),
-                            _transport(
-                              key: const ValueKey('tv-next'),
-                              label: '下一集',
-                              icon: Icons.skip_next_rounded,
-                              focus: _next,
-                              action: widget.onNext,
-                            ),
-                          ],
-                        ),
-                        const Divider(height: 14, color: Colors.white12),
                         SingleChildScrollView(
                           scrollDirection: Axis.horizontal,
                           child: Row(
                             children: [
-                              RemoteButton(
+                              _transport(
+                                key: const ValueKey('tv-previous'),
+                                label: '上一集',
+                                icon: Icons.skip_previous_rounded,
+                                focus: _previous,
+                                action: widget.onPrevious,
+                              ),
+                              const SizedBox(width: 8),
+                              _transport(
+                                key: const ValueKey('tv-rewind'),
+                                label: '后退15秒',
+                                icon: Icons.replay_rounded,
+                                focus: _rewind,
+                                action: () => _seek(-15),
+                              ),
+                              const SizedBox(width: 8),
+                              _transport(
+                                key: const ValueKey('tv-play-pause'),
+                                label: state.playing ? '暂停' : '播放',
+                                icon: state.playing
+                                    ? Icons.pause_rounded
+                                    : Icons.play_arrow_rounded,
+                                focus: _play,
+                                action: _togglePlayback,
+                                primary: true,
+                              ),
+                              const SizedBox(width: 8),
+                              _transport(
+                                key: const ValueKey('tv-forward'),
+                                label: '快进15秒',
+                                icon: Icons.forward_rounded,
+                                focus: _forward,
+                                action: () => _seek(15),
+                              ),
+                              const SizedBox(width: 8),
+                              _transport(
+                                key: const ValueKey('tv-next'),
+                                label: '下一集',
+                                icon: Icons.skip_next_rounded,
+                                focus: _next,
+                                action: widget.onNext,
+                              ),
+                              const SizedBox(width: 8),
+                              _action(
                                 key: const ValueKey('tv-episodes'),
                                 label: '选集',
                                 icon: Icons.grid_view_rounded,
-                                focusNode: _episodes,
-                                onPressed: () =>
-                                    _openPanel(widget.onEpisodes, _episodes),
+                                focus: _episodes,
+                                onPressed: () => _openPanel(widget.onEpisodes),
                               ),
                               if (widget.showDanmaku &&
                                   widget.onDanmaku != null)
-                                RemoteButton(
+                                _action(
                                   key: const ValueKey('tv-danmaku'),
                                   label: widget.danmakuEnabled ? '弹幕开' : '弹幕关',
                                   icon: Icons.subtitles_rounded,
-                                  focusNode: _danmaku,
+                                  focus: _danmaku,
                                   selected: widget.danmakuEnabled,
                                   onPressed: () =>
-                                      _openPanel(widget.onDanmaku!, _danmaku),
+                                      _openPanel(widget.onDanmaku!),
                                 ),
-                              RemoteButton(
+                              _action(
                                 key: const ValueKey('tv-settings'),
                                 label: '倍速 / 画质',
                                 icon: Icons.tune_rounded,
-                                focusNode: _settings,
-                                onPressed: () =>
-                                    _openPanel(widget.onSettings, _settings),
+                                focus: _settings,
+                                onPressed: () => _openPanel(widget.onSettings),
                               ),
                               if (widget.enhancement != null)
                                 AnimatedBuilder(
@@ -673,7 +690,7 @@ class TelevisionControlsState extends State<TelevisionControls> {
                                     if (!enhancement.canCompare) {
                                       return const SizedBox.shrink();
                                     }
-                                    return RemoteButton(
+                                    return _action(
                                       key: const ValueKey(
                                         'tv-enhancement-compare',
                                       ),
@@ -689,16 +706,15 @@ class TelevisionControlsState extends State<TelevisionControls> {
                                     );
                                   },
                                 ),
-                              RemoteButton(
+                              _action(
                                 key: const ValueKey('tv-diary'),
                                 label: '播放日记',
                                 icon: Icons.receipt_long_rounded,
-                                focusNode: _diary,
+                                focus: _diary,
                                 onPressed: () => _openPanel(
                                   widget.onDiary ??
                                       () =>
                                           DiaryService.showDiaryDialog(context),
-                                  _diary,
                                 ),
                               ),
                             ],
@@ -706,7 +722,7 @@ class TelevisionControlsState extends State<TelevisionControls> {
                         ),
                         const SizedBox(height: 4),
                         const Text(
-                          '确认暂停 / 播放 · 上下显示控制条 · 返回隐藏',
+                          '左右快进后退 · 上下控制条 · 菜单键选集 · 返回播放',
                           style: TextStyle(fontSize: 13, color: Colors.white54),
                         ),
                       ],
@@ -773,18 +789,22 @@ class TelevisionEpisodeDialog extends StatelessWidget {
   Widget build(BuildContext context) => AlertDialog(
     title: Text('选集 · 共 ${episodes.length} 集'),
     content: SizedBox(
-      width: 700,
+      width: 900,
       height: MediaQuery.sizeOf(context).height * .55,
       child: LayoutBuilder(
         builder: (context, constraints) => RemoteGrid(
           itemKeys: episodes.map((episode) => '${episode.number}').toList(),
-          columns: ((constraints.maxWidth - 12) / 96).floor().clamp(1, 8),
-          itemExtent: 64,
+          columns: ((constraints.maxWidth - 6) / 72).floor().clamp(1, 14),
+          itemExtent: 48,
+          spacing: 6,
           initialIndex: currentIndex,
           autofocus: true,
           padding: const EdgeInsets.all(6),
           itemBuilder: (_, index, node, onFocus) => RemoteEpisodeButton(
             key: ValueKey('tv-select-episode-${episodes[index].number}'),
+            compact: true,
+            fontSize: 17,
+            borderWidth: 2,
             number: episodes[index].number,
             vip: episodes[index].vip,
             current: index == currentIndex,

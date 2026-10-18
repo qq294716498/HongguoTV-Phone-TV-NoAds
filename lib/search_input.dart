@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'television_search_field.dart';
 
 class SearchInput extends StatefulWidget {
   const SearchInput({
@@ -133,46 +134,47 @@ class _SearchInputState extends State<SearchInput> {
         _selected = true;
         _submit(value);
       },
-      fieldViewBuilder: (context, controller, focus, submitted) => TextField(
-        controller: controller,
-        focusNode: focus,
-        autofocus: widget.autofocus,
-        textInputAction: TextInputAction.search,
-        onChanged: (value) {
-          widget.onChanged?.call(value);
-          setState(() {});
-        },
-        onSubmitted: (value) {
-          _selected = false;
-          submitted();
-          if (!_selected) _submit(value);
-        },
-        decoration: InputDecoration(
-          hintText: widget.hint,
-          prefixIcon: const Icon(Icons.search_rounded),
-          suffixIcon: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (controller.text.isNotEmpty)
-                IconButton(
-                  tooltip: '清空搜索',
-                  icon: const Icon(Icons.close_rounded),
-                  onPressed: () {
-                    _cancel();
-                    controller.clear();
-                    widget.onChanged?.call('');
-                    setState(() {});
-                  },
-                ),
-              IconButton(
-                tooltip: '搜索',
-                icon: const Icon(Icons.arrow_forward_rounded),
-                onPressed: () => _submit(controller.text),
+      fieldViewBuilder: (context, controller, focus, submitted) =>
+          TelevisionSearchField(
+            controller: controller,
+            focusNode: focus,
+            autofocus: widget.autofocus,
+            textInputAction: TextInputAction.search,
+            onChanged: (value) {
+              widget.onChanged?.call(value);
+              setState(() {});
+            },
+            onSubmitted: (value) {
+              _selected = false;
+              submitted();
+              if (!_selected) _submit(value);
+            },
+            decoration: InputDecoration(
+              hintText: widget.hint,
+              prefixIcon: const Icon(Icons.search_rounded),
+              suffixIcon: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (controller.text.isNotEmpty)
+                    IconButton(
+                      tooltip: '清空搜索',
+                      icon: const Icon(Icons.close_rounded),
+                      onPressed: () {
+                        _cancel();
+                        controller.clear();
+                        widget.onChanged?.call('');
+                        setState(() {});
+                      },
+                    ),
+                  IconButton(
+                    tooltip: '搜索',
+                    icon: const Icon(Icons.arrow_forward_rounded),
+                    onPressed: () => _submit(controller.text),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
       optionsViewBuilder: (context, selected, options) {
         final values = options.toList();
         final available =

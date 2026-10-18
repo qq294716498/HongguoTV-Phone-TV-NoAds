@@ -12,6 +12,7 @@ import 'local_store.dart';
 import 'models.dart';
 import 'remote_widgets.dart';
 import 'widgets.dart';
+import 'television_search_field.dart';
 
 class SavedLibrary extends StatefulWidget {
   const SavedLibrary({
@@ -227,7 +228,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-          child: TextField(
+          child: TelevisionSearchField(
             key: ValueKey(
               widget.history ? 'history-search' : 'favorites-search',
             ),

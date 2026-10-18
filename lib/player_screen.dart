@@ -2772,6 +2772,9 @@ class _PlayerScreenState extends State<PlayerScreen>
         if (!hideOverlayForPictureInPicture && !_hasRetainedFrame)
           DanmakuOverlay(
             controller: _danmaku,
+            animationBehavior: AppLayout.isTelevisionDevice(context)
+                ? AnimationBehavior.preserve
+                : AnimationBehavior.normal,
             desktop: _windowsDesktop,
             speed: _preferences.effectiveDanmakuSpeed(mobile: _mobile),
             opacity: _preferences.effectiveDanmakuOpacity(

@@ -88,6 +88,7 @@ class DanmakuOverlay extends StatefulWidget {
     this.speed,
     this.opacity,
     this.desktop = false,
+    this.animationBehavior,
   });
   final DanmakuController controller;
   final double aspectRatio;
@@ -96,6 +97,7 @@ class DanmakuOverlay extends StatefulWidget {
   final double? speed;
   final double? opacity;
   final bool desktop;
+  final AnimationBehavior? animationBehavior;
 
   @override
   State<DanmakuOverlay> createState() => _DanmakuOverlayState();
@@ -415,6 +417,11 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
                                 width: flight.width,
                                 height: rowHeight,
                                 child: _DanmakuMotion(
+                                  animationBehavior:
+                                      widget.animationBehavior ??
+                                      (widget.television
+                                          ? AnimationBehavior.preserve
+                                          : AnimationBehavior.normal),
                                   flight: flight,
                                   lifetimeMs: _realtime
                                       ? flight.lifetimeMs
@@ -454,6 +461,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
 
 class _DanmakuMotion extends StatefulWidget {
   const _DanmakuMotion({
+    required this.animationBehavior,
     required this.flight,
     required this.lifetimeMs,
     required this.width,
@@ -475,14 +483,18 @@ class _DanmakuMotion extends StatefulWidget {
   final TextStyle style;
   final TextScaler scaler;
   final DanmakuEmojiCache emojiCache;
+  final AnimationBehavior animationBehavior;
 
   @override
   State<_DanmakuMotion> createState() => _DanmakuMotionState();
 }
 
 class _DanmakuMotionState extends State<_DanmakuMotion>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _motion = AnimationController(vsync: this);
+    with TickerProviderStateMixin {
+  late AnimationController _motion = AnimationController(
+    vsync: this,
+    animationBehavior: widget.animationBehavior,
+  );
 
   @override
   void initState() {
@@ -493,6 +505,15 @@ class _DanmakuMotionState extends State<_DanmakuMotion>
   @override
   void didUpdateWidget(_DanmakuMotion oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.animationBehavior != widget.animationBehavior) {
+      _motion.dispose();
+      _motion = AnimationController(
+        vsync: this,
+        animationBehavior: widget.animationBehavior,
+      );
+      _sync();
+      return;
+    }
     if (oldWidget.moving != widget.moving ||
         oldWidget.rate != widget.rate ||
         oldWidget.lifetimeMs != widget.lifetimeMs ||

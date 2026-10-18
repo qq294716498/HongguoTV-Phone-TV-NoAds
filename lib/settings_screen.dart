@@ -50,6 +50,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _danmakuSettings() {
     final television = AppLayout.isTelevision(context);
+    final deviceTelevision = AppLayout.isTelevisionDevice(context);
     final mobile =
         !television &&
         (defaultTargetPlatform == TargetPlatform.android ||
@@ -58,6 +59,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       builder: (_) => AppLayout(
         television: television,
+        deviceTelevision: deviceTelevision,
         child: ListenableBuilder(
           listenable: widget.store,
           builder: (_, _) => PlayerMenu(
