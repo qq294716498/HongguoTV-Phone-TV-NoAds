@@ -10,7 +10,7 @@ from publish_android_stable import certificate, offsets, validate_apks
 
 
 class AndroidStablePublishTests(unittest.TestCase):
-    def test_windows_must_be_finalized_from_the_same_commit_before_android_staging(self):
+    def test_published_windows_baseline_is_verified_and_preserved_without_republishing(self):
         assets = [{'id': n, 'name': name, 'size': 1, 'digest': 'sha256:synthetic'}
                   for n, name in enumerate(['Windows-update-check.json', 'Windows-update-channel.json',
                                            'Android-isolation.json', 'SHA256SUMS.txt'])]
@@ -20,7 +20,7 @@ class AndroidStablePublishTests(unittest.TestCase):
             return current if tag == publish.windows_tag else old
         with mock.patch.object(publish, 'release', side_effect=releases):
             self.assertEqual(set(publish.validated_windows_snapshots('current')), set(publish.windows_tags))
-            with self.assertRaisesRegex(ValueError, 'before Android staging'):
+            with self.assertRaisesRegex(ValueError, 'Windows baseline'):
                 publish.validated_windows_snapshots('different')
             for field, value in [('assets', assets[:-1]), ('draft', True), ('prerelease', True)]:
                 previous = current[field]
@@ -28,6 +28,15 @@ class AndroidStablePublishTests(unittest.TestCase):
                 with self.subTest(field=field), self.assertRaises(ValueError):
                     publish.validated_windows_snapshots('current')
                 current[field] = previous
+
+    def test_release_scope_rejects_windows_runtime_and_other_unapproved_changes(self):
+        with mock.patch.object(publish.subprocess, 'check_output', side_effect=[publish.tv_source, 'README.md\n.github/workflows/android-stable.yml\n']):
+            publish.validate_release_source('candidate')
+        for changed in ['lib/windows_desktop.dart', 'lib/player_screen.dart', 'pubspec.yaml']:
+            with mock.patch.object(publish.subprocess, 'check_output', side_effect=[publish.tv_source, changed]), self.subTest(changed=changed), self.assertRaisesRegex(ValueError, 'Runtime source changed'):
+                publish.validate_release_source('candidate')
+        with mock.patch.object(publish.subprocess, 'check_output', return_value='other'), self.assertRaisesRegex(ValueError, 'approved TV source'):
+            publish.validate_release_source('candidate')
 
     def test_signing_preflight_reports_presence_without_secret_values(self):
         env = {name: 'synthetic-secret-value' for name in SIGNING_NAMES}

@@ -30,6 +30,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Confirm existing signing before running release checks
+        run: python3 scripts/check_android_signing.py
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -131,20 +138,21 @@ jobs:
           retention-days: 14
   release:
     needs: [checks, android]
-    if: github.event_name == 'workflow_dispatch' && inputs.publish_release && github.ref == 'refs/heads/fix/follow-sync-danmaku-ribbon-0.1.17-42'
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_release && github.ref == 'refs/heads/release/tv-0.1.18-43'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     permissions:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
-      EXPECTED_UPDATE_TAG: app-v0.1.17-42
+      EXPECTED_UPDATE_TAG: app-v0.1.18-43
       CHECK_LIVE_UPDATE: 'true'
       CHECK_UPDATE_DOWNLOAD: 'true'
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -190,7 +198,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: android-0.1.17-release-evidence
+          name: android-0.1.18-release-evidence
           path: |
             dist/android/*
             dist/update-check/*-update-check.json

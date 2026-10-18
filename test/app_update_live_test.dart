@@ -35,8 +35,8 @@ void main() {
       final results = <Map<String, Object>>[];
       for (final entry in updateAbiOffsets.entries) {
         final installed = InstalledApp(
-          version: '0.1.16',
-          code: entry.value + 41,
+          version: '0.1.17',
+          code: entry.value + 42,
           abi: entry.key,
         );
         final release = AppRelease.parse(stableData, installed);
