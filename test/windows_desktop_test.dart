@@ -121,13 +121,16 @@ void main() {
     },
   );
   test(
-    'close hides only, native menu restores, toggles and saves before actual destruction',
+    'close pauses before hiding, restore stays paused, native menu toggles and quits',
     () async {
       final harness = DesktopHarness();
       await harness.initialize();
       addTearDown(harness.dispose);
       var playing = true, saved = false, flushed = false;
       harness.desktop.togglePlayback = () => playing = !playing;
+      harness.desktop.pausePlayback = () async {
+        playing = false;
+      };
       harness.desktop.savePlayback = () async {
         saved = true;
       };
@@ -137,12 +140,15 @@ void main() {
       };
       await harness.desktop.requestClose();
       expect(harness.visible, false);
-      expect(playing, true);
+      expect(playing, false);
       expect(harness.desktop.keepPlayback, true);
       expect(harness.calls.where((call) => call.method == 'destroy'), isEmpty);
+      await harness.action('restore');
+      expect(playing, false);
+      await harness.action('toggle');
+      expect(playing, true);
       await harness.action('toggle');
       expect(playing, false);
-      await harness.action('restore');
       expect(harness.visible, true);
       expect(harness.desktop.inTray, false);
       await harness.action('quit');
@@ -206,6 +212,28 @@ void main() {
       expect(harness.topmost, false);
     },
   );
+  test(
+    'close waits for pause and keeps the window visible if pausing fails',
+    () async {
+      final harness = DesktopHarness();
+      await harness.initialize();
+      addTearDown(harness.dispose);
+      final paused = Completer<void>();
+      harness.desktop.pausePlayback = () => paused.future;
+      final close = harness.desktop.requestClose();
+      await Future<void>.delayed(Duration.zero);
+      expect(harness.visible, true);
+      expect(harness.desktop.inTray, false);
+      paused.completeError(StateError('synthetic pause failure'));
+      await expectLater(close, throwsStateError);
+      expect(harness.visible, true);
+      expect(harness.desktop.inTray, false);
+      harness.desktop.pausePlayback = () async {};
+      await harness.desktop.requestClose();
+      expect(harness.visible, false);
+    },
+  );
+
   test('update bypasses close-to-tray and queued window actions', () async {
     final harness = DesktopHarness();
     await harness.initialize();

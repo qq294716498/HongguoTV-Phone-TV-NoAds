@@ -23,7 +23,7 @@ class WindowsStablePublishTests(unittest.TestCase):
         self.smoke = {name: True for name in [
             'ok', 'nativeCore', 'preferences', 'bundledAssets', 'ffprobe', 'remux',
             'flutterWindow', 'videoFrameRendered', 'seekRateVolume', 'playbackPower',
-            'fullscreen', 'miniReuseResizeRestore', 'miniNativeCaptionHidden', 'miniNativeResizeBorder', 'normalNativeCaptionRestored', 'nativeTrayHidden', 'trayKeepsPlaying',
+            'fullscreen', 'miniReuseResizeRestore', 'miniNativeCaptionHidden', 'miniNativeResizeBorder', 'normalNativeCaptionRestored', 'nativeTrayHidden', 'trayPausesOnClose', 'trayRestoreStaysPaused',
             'nativeTrayRestored', 'nativeTrayQuit', 'playerUiDetached', 'playerDisposedBeforeExit', 'windowBrandIcon', 'trayBrandIcon', 'firstLaunchNoticeVisible', 'mediaKitPlayback', 'cleanPath',
             'nonAsciiPath', 'differentWorkingDirectory', 'javaEnvironmentRemoved', 'normalAppStartup', 'remoteImagesDisabled']}
         self.smoke.update(processExitCode=0, version='0.1.14', build=39, nativeTrayToggles=2)
@@ -51,7 +51,7 @@ class WindowsStablePublishTests(unittest.TestCase):
 
     def test_native_tray_mini_or_transaction_failure_blocks_all_release_actions(self):
         with mock.patch.object(publish.subprocess, 'run') as github:
-            for name in ['miniReuseResizeRestore', 'miniNativeCaptionHidden', 'miniNativeResizeBorder', 'normalNativeCaptionRestored', 'trayKeepsPlaying', 'nativeTrayRestored', 'nativeTrayQuit']:
+            for name in ['miniReuseResizeRestore', 'miniNativeCaptionHidden', 'miniNativeResizeBorder', 'normalNativeCaptionRestored', 'trayPausesOnClose', 'trayRestoreStaysPaused', 'nativeTrayRestored', 'nativeTrayQuit']:
                 self.write('Windows-smoke.json', {**self.smoke, name: False})
                 with self.subTest(name=name), self.assertRaises(ValueError):
                     self.stage()

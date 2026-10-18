@@ -30,6 +30,7 @@ class WindowsDesktop extends ChangeNotifier
   String? error;
   Object? playbackOwner;
   VoidCallback? togglePlayback;
+  Future<void> Function()? pausePlayback;
   Future<void> Function()? savePlayback;
   Future<void> Function()? flushStore;
   Future<void> Function()? detachUI;
@@ -104,6 +105,7 @@ class WindowsDesktop extends ChangeNotifier
       await _quit();
       return;
     }
+    await pausePlayback?.call();
     inTray = true;
     notifyListeners();
     try {
@@ -190,6 +192,7 @@ class WindowsDesktop extends ChangeNotifier
     if (!identical(playbackOwner, owner)) return;
     playbackOwner = null;
     togglePlayback = null;
+    pausePlayback = null;
     savePlayback = null;
     await _run(() async {
       await _leaveMini(restoreFullscreen: false);

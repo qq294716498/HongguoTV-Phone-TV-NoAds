@@ -383,6 +383,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         if (completed &&
             !_loading &&
             !_closed &&
+            (!_windowsDesktop || _playIntent) &&
             _acceptErrors &&
             _error == null) {
           final duration = _player.state.duration;
@@ -502,13 +503,19 @@ class _PlayerScreenState extends State<PlayerScreen>
           _togglePlayback();
         }
       };
-      desktop?.savePlayback = () async {
+      Future<void> pauseAndSave() async {
+        _cancelSeasonAdvance();
+        _interactions.cancel();
         _playIntent = false;
+        _syncScreenOn();
         await _player.pause();
         await _saveWindowsVolume();
         await _saveProgress(flush: true);
         await widget.store.flushPendingWrites();
-      };
+      }
+
+      desktop?.pausePlayback = pauseAndSave;
+      desktop?.savePlayback = pauseAndSave;
       _syncDesktopPlayback();
     }
     if (Platform.isWindows) {
@@ -1739,6 +1746,10 @@ class _PlayerScreenState extends State<PlayerScreen>
         }
         if (_closed || ticket != _generation) {
           return;
+        }
+        if (_windowsDesktop && !_playIntent && _player.state.playing) {
+          await _player.pause();
+          if (_closed || ticket != _generation) return;
         }
         _openedIndex = index;
         _openedDetail = detail;

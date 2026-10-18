@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -73,6 +74,20 @@ Future<void> captureSidebar(WidgetTester tester, String state) async {
   });
 }
 
+class DelayedDesktopOpen extends ScriptedPlayer {
+  final started = Completer<void>();
+  final finishOpen = Completer<void>();
+
+  @override
+  Future<void> open(Playable playable, {bool play = true}) async {
+    if (!started.isCompleted) {
+      started.complete();
+      await finishOpen.future;
+    }
+    await super.open(playable, play: play);
+  }
+}
+
 void main() {
   setUp(mockPlayerDevice);
   final windows = TargetPlatformVariant.only(TargetPlatform.windows);
@@ -94,6 +109,60 @@ void main() {
         'currentEpisode': index + 1,
       }, index + 1),
     ),
+  );
+
+  testWidgets(
+    'close during an unfinished open stays paused after readiness, restore and stale completion',
+    (tester) async {
+      final harness = DesktopHarness();
+      await harness.initialize();
+      WindowsDesktop.current = harness.desktop;
+      addTearDown(() {
+        WindowsDesktop.current = null;
+        harness.dispose();
+      });
+      final store = LocalStore(await SharedPreferences.getInstance());
+      final platform = DelayedDesktopOpen();
+      final repository = PreloadingRouteRepository();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: PlayerScreen(
+            detail: detail,
+            initialIndex: 0,
+            initialPosition: 30,
+            repository: repository,
+            store: store,
+            playerFactory: () => Player(platformPlayer: platform),
+            videoBuilder: (controls) =>
+                ColoredBox(color: Colors.cyan, child: controls),
+          ),
+        ),
+      );
+      await frames(tester);
+      expect(platform.started.isCompleted, true);
+      await harness.desktop.requestClose();
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      platform.finishOpen.complete();
+      await frames(tester);
+      expect(platform.state.playing, false);
+      expect(platform.opened, hasLength(1));
+      expect(platform.state.position.inSeconds, 30);
+      platform.finishEpisode();
+      await frames(tester);
+      expect(repository.requestedEpisodes, [1]);
+      expect(platform.state.playing, false);
+      await harness.action('restore');
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await frames(tester);
+      expect(platform.state.playing, false);
+      expect(platform.opened, hasLength(1));
+      await tester.pumpWidget(const SizedBox.shrink());
+      await frames(tester);
+      await store.flushPendingWrites();
+      store.dispose();
+      expect(tester.takeException(), isNull);
+    },
+    variant: windows,
   );
 
   testWidgets(
@@ -345,21 +414,33 @@ void main() {
       await harness.desktop.requestClose();
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
       await frames(tester);
-      expect(platform.state.playing, true);
+      expect(platform.state.playing, false);
       expect(repository.active, containsAll(active));
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
       await frames(tester);
-      expect(platform.state.playing, true);
+      expect(platform.state.playing, false);
       expect(repository.active, containsAll(active));
       await harness.action('toggle');
+      await frames(tester);
+      expect(platform.state.playing, true);
+      await harness.action('toggle');
+      await frames(tester);
+      expect(platform.state.playing, false);
+      await harness.action('restore');
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       await frames(tester);
       expect(platform.state.playing, false);
       await harness.action('toggle');
       await frames(tester);
-      expect(platform.state.playing, true);
-      await harness.action('restore');
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      await frames(tester);
+      expect(platform.state.playing, false);
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       await frames(tester);
+      expect(platform.state.playing, false);
+      await harness.action('toggle');
+      await frames(tester);
+      final prefetchedBeforeMini = List.of(repository.preloadedEpisodes);
       for (var repeat = 0; repeat < 3; repeat++) {
         await harness.desktop.enterMini();
         tester.view.physicalSize = const Size(480, 300);
@@ -393,7 +474,7 @@ void main() {
           same(danmakuState),
         );
         expect(creations, 1);
-        expect(repository.preloadedEpisodes, [2]);
+        expect(repository.preloadedEpisodes, prefetchedBeforeMini);
       }
       await harness.desktop.requestClose();
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
