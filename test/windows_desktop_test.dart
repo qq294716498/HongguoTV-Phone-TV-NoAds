@@ -93,6 +93,62 @@ class DesktopHarness {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   test(
+    'fullscreen normalizes the native frame after entry and restores the caption after exit while preserving maximization',
+    () async {
+      final harness = DesktopHarness();
+      await harness.initialize();
+      addTearDown(harness.dispose);
+      harness.maximized = true;
+      harness.calls.clear();
+      await harness.desktop.setFullscreen(true);
+      final entering = harness.calls.map((call) => call.method).toList();
+      expect(entering, containsAllInOrder(['setFullScreen', 'setAsFrameless']));
+      expect(entering, isNot(contains('unmaximize')));
+      expect(harness.desktop.fullscreen, isTrue);
+      harness.calls.clear();
+      await harness.desktop.setFullscreen(false);
+      expect(
+        harness.calls.map((call) => call.method),
+        containsAllInOrder(['setFullScreen', 'setTitleBarStyle']),
+      );
+      expect(harness.maximized, isTrue);
+      expect(harness.titleBar, 'normal');
+      expect(harness.desktop.fullscreen, isFalse);
+    },
+  );
+  test(
+    'mini restore re-enters frameless fullscreen and playback detach restores the normal frame',
+    () async {
+      final harness = DesktopHarness();
+      await harness.initialize();
+      addTearDown(harness.dispose);
+      final owner = Object();
+      harness.desktop.playbackOwner = owner;
+      await harness.desktop.setFullscreen(true);
+      await harness.desktop.enterMini();
+      expect(harness.titleBar, 'hidden');
+      harness.calls.clear();
+      await harness.desktop.leaveMini();
+      expect(
+        harness.calls.map((call) => call.method),
+        containsAllInOrder([
+          'setTitleBarStyle',
+          'setFullScreen',
+          'setAsFrameless',
+        ]),
+      );
+      expect(harness.desktop.fullscreen, isTrue);
+      harness.calls.clear();
+      await harness.desktop.detachPlayback(owner);
+      expect(
+        harness.calls.map((call) => call.method),
+        containsAllInOrder(['setFullScreen', 'setTitleBarStyle']),
+      );
+      expect(harness.desktop.fullscreen, isFalse);
+      expect(harness.titleBar, 'normal');
+    },
+  );
+  test(
     'actual process exit waits for saved state, detached UI and released player',
     () async {
       final order = <String>[];

@@ -242,6 +242,13 @@ void main() {
       failures.addAll(
         geometryChainFailures(sample).map((failure) => '$name $failure'),
       );
+      if (name.contains('-restored-maximized-')) {
+        if (native!['maximized'] != true)
+          failures.add('$name maximized state not restored');
+        if (native['captionButtons'] != true ||
+            (native['captionInset'] as num) <= 0)
+          failures.add('$name normal native caption not restored');
+      }
       if (hidden) {
         final shown = samples.last;
         for (final field in [
@@ -346,6 +353,7 @@ void main() {
             'fullscreen-maximized',
             'mini',
             'restored-fullscreen',
+            'restored-maximized',
           ]) {
             if (mode == 'maximized') {
               await desktop.setFullscreen(false);
@@ -357,6 +365,8 @@ void main() {
               await desktop.enterMini(aspectRatio: fixture.value.aspectRatio);
             }
             if (mode == 'restored-fullscreen') await desktop.leaveMini();
+            if (mode == 'restored-maximized')
+              await desktop.setFullscreen(false);
             await tester.pump(const Duration(seconds: 1));
             final mouse = await tester.createGesture(
               kind: PointerDeviceKind.mouse,

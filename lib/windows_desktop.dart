@@ -130,10 +130,19 @@ class WindowsDesktop extends ChangeNotifier
     notifyListeners();
   });
 
+  Future<void> _setNativeFullscreen(bool value) async {
+    await manager.setFullScreen(value);
+    if (value) {
+      await manager.setAsFrameless();
+    } else {
+      await manager.setTitleBarStyle(TitleBarStyle.normal);
+    }
+  }
+
   Future<void> enterMini({double aspectRatio = 16 / 9}) => _run(() async {
     if (mini || playbackOwner == null) return;
     _previousFullscreen = await manager.isFullScreen();
-    if (_previousFullscreen) await manager.setFullScreen(false);
+    if (_previousFullscreen) await _setNativeFullscreen(false);
     _maximized = await manager.isMaximized();
     if (_maximized) await manager.unmaximize();
     _bounds = await manager.getBounds();
@@ -166,14 +175,13 @@ class WindowsDesktop extends ChangeNotifier
 
   Future<void> _leaveMini({bool restoreFullscreen = true}) async {
     if (!mini) return;
-    await manager.setFullScreen(false);
-    await manager.setTitleBarStyle(TitleBarStyle.normal);
+    await _setNativeFullscreen(false);
     await manager.setAlwaysOnTop(_topmost);
     await manager.setMinimumSize(const Size(800, 600));
     if (_bounds != null) await manager.setBounds(_bounds!);
     if (_maximized) await manager.maximize();
     if (_previousFullscreen && restoreFullscreen)
-      await manager.setFullScreen(true);
+      await _setNativeFullscreen(true);
     fullscreen = _previousFullscreen && restoreFullscreen;
     mini = false;
     notifyListeners();
@@ -183,7 +191,7 @@ class WindowsDesktop extends ChangeNotifier
 
   Future<void> setFullscreen(bool value) => _run(() async {
     await _leaveMini(restoreFullscreen: false);
-    await manager.setFullScreen(value);
+    await _setNativeFullscreen(value);
     fullscreen = value;
     notifyListeners();
   });
@@ -196,7 +204,7 @@ class WindowsDesktop extends ChangeNotifier
     savePlayback = null;
     await _run(() async {
       await _leaveMini(restoreFullscreen: false);
-      await manager.setFullScreen(false);
+      await _setNativeFullscreen(false);
       fullscreen = false;
       notifyListeners();
     });
