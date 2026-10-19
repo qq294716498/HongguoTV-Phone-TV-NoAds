@@ -47,6 +47,14 @@ jobs:
           (Split-Path $compiler) | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - run: flutter pub get --enforce-lockfile
       - run: python scripts/build_native.py --platform windows --all-sources
+      - name: Request the user's screenshot resolution when supported by the runner
+        shell: pwsh
+        run: |
+          try {
+            Set-DisplayResolution -Width 1920 -Height 1080 -Force -ErrorAction Stop
+          } catch {
+            Write-Host "Display resolution unchanged: $($_.Exception.Message)"
+          }
       - name: Capture real PlayerScreen video texture geometry and pixels
         run: flutter test -d windows integration_test/windows_video_layout_test.dart --no-pub --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true --reporter=expanded
       - uses: actions/upload-artifact@v4
