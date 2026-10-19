@@ -540,7 +540,10 @@ class AppUpdates extends ChangeNotifier {
            ((windows ?? Platform.isWindows)
                ? WindowsUpdatePlatform()
                : AndroidUpdatePlatform()),
-       now = now ?? DateTime.now;
+       now = now ?? DateTime.now {
+    final skipped = preferences.get(_skippedKey);
+    _skippedRelease = skipped is String ? skipped : null;
+  }
   static AppUpdates? current;
   final SharedPreferences preferences;
   final bool supportedEdition;
@@ -561,6 +564,8 @@ class AppUpdates extends ChangeNotifier {
   DateTime? _lastAttempt;
   bool _permissionOpened = false;
   bool _startupCleaned = false;
+  String? _skippedRelease;
+  bool _savingSkip = false;
   String get _cacheKey => windows
       ? 'app_update_windows_stable_cache_v1'
       : 'app_update_stable_cache_v1';
@@ -568,15 +573,66 @@ class AppUpdates extends ChangeNotifier {
       ? 'app_update_windows_stable_checked_at_v1'
       : 'app_update_checked_at_v1';
   String get _pendingName => windows ? 'pending.zip' : 'pending.apk';
-  bool get busy => [
-    UpdateStage.checking,
-    UpdateStage.downloading,
-    UpdateStage.validating,
-    UpdateStage.installValidating,
-    UpdateStage.installing,
-  ].contains(stage);
+  bool get busy =>
+      _savingSkip ||
+      [
+        UpdateStage.checking,
+        UpdateStage.downloading,
+        UpdateStage.validating,
+        UpdateStage.installValidating,
+        UpdateStage.installing,
+      ].contains(stage);
   bool get automatic => preferences.getBool('app_update_automatic') ?? true;
   bool get hasUpdate => release != null;
+  String get _skippedKey => windows
+      ? 'app_update_windows_stable_skipped_release_v1'
+      : 'app_update_android_stable_skipped_release_v1';
+  String _releaseIdentity(AppRelease candidate) {
+    final offset = windows ? 0 : updateAbiOffsets[candidate.abi]!;
+    return '${windows ? 'windows' : 'android'}:${candidate.version}+${candidate.code - offset}';
+  }
+
+  bool get currentVersionSkipped =>
+      release != null && _skippedRelease == _releaseIdentity(release!);
+  bool get showAutomaticPrompt => hasUpdate && !currentVersionSkipped;
+
+  Future<void> skipCurrentVersion() async {
+    final candidate = release;
+    if (!supportedEdition ||
+        _disposed ||
+        busy ||
+        candidate == null ||
+        currentVersionSkipped ||
+        stage == UpdateStage.permission) {
+      return;
+    }
+    final previous = _skippedRelease;
+    final identity = _releaseIdentity(candidate);
+    _savingSkip = true;
+    message = '正在保存 ${candidate.version} 的跳过记录…';
+    _notify();
+    try {
+      if (!await preferences.setString(_skippedKey, identity)) {
+        throw StateError('跳过记录未保存');
+      }
+      if (_disposed) return;
+      _skippedRelease = identity;
+      message = '已跳过 ${candidate.version} 的自动提示，仍可在设置中下载或安装';
+    } catch (error) {
+      try {
+        if (previous == null) {
+          await preferences.remove(_skippedKey);
+        } else {
+          await preferences.setString(_skippedKey, previous);
+        }
+      } catch (_) {}
+      if (_disposed) return;
+      message = '无法保存跳过记录：${_error(error)}';
+    } finally {
+      _savingSkip = false;
+      _notify();
+    }
+  }
 
   void _notify() {
     if (!_disposed) notifyListeners();
@@ -605,7 +661,7 @@ class AppUpdates extends ChangeNotifier {
         (!manual && !automatic)) {
       return;
     }
-    if (!manual && stage == UpdateStage.ready) return;
+    if (!manual && stage == UpdateStage.ready && !currentVersionSkipped) return;
     final attemptAge = _lastAttempt == null
         ? null
         : now().difference(_lastAttempt!);
@@ -616,6 +672,7 @@ class AppUpdates extends ChangeNotifier {
       return;
     }
     _lastAttempt = now();
+    final prepared = stage == UpdateStage.ready ? release : null;
     stage = UpdateStage.checking;
     message = windows ? '正在检查 Windows 正式版本…' : '正在检查稳定版本…';
     _notify();
@@ -651,16 +708,33 @@ class AppUpdates extends ChangeNotifier {
       }
       if (_disposed) return;
       release = candidate;
-      stage = candidate == null ? UpdateStage.idle : UpdateStage.available;
+      final keepPrepared =
+          candidate != null &&
+          prepared != null &&
+          mapEquals(candidate.validation, prepared.validation);
+      stage = candidate == null
+          ? UpdateStage.idle
+          : keepPrepared
+          ? UpdateStage.ready
+          : UpdateStage.available;
       final channel = windows ? 'Windows 正式版本' : '稳定版本';
       message = candidate == null
           ? '已是最新$channel'
+          : keepPrepared
+          ? '该版本已下载校验，可从设置安装'
           : '发现$channel ${candidate.version}';
+      if (currentVersionSkipped) message += '；已跳过自动提示，仍可手动更新';
     } catch (error) {
       if (_disposed) return;
-      release = null;
-      stage = UpdateStage.failed;
+      final keepPrepared =
+          prepared != null &&
+          installedApp != null &&
+          prepared.abi == installedApp!.abi &&
+          prepared.code > installedApp!.code;
+      release = keepPrepared ? prepared : null;
+      stage = keepPrepared ? UpdateStage.ready : UpdateStage.failed;
       message = '暂时无法检查更新：${_error(error)}';
+      if (keepPrepared) message += '；已校验的安装包保留，可从设置安装';
     }
     _notify();
   }
@@ -756,6 +830,7 @@ class AppUpdates extends ChangeNotifier {
     final candidate = release;
     if (!supportedEdition ||
         _disposed ||
+        busy ||
         stage != UpdateStage.ready ||
         candidate == null) {
       return;

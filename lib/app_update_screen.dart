@@ -54,7 +54,7 @@ class AppUpdateIndicator extends StatelessWidget {
               onPressed: () => openAppUpdates(context),
               icon: const Icon(Icons.warning_amber_rounded),
             )
-          : controller.hasUpdate
+          : controller.showAutomaticPrompt
           ? IconButton(
               tooltip: '发现新版本 ${controller.release!.version}',
               onPressed: () => openAppUpdates(context),
@@ -109,7 +109,7 @@ class AppUpdateScreen extends StatelessWidget {
                         Padding(
                           padding: EdgeInsets.all(16),
                           child: Text(
-                            'Windows 0.1.19：关闭到托盘前暂停并保存进度，恢复窗口后保持暂停；更新超时先取消助手并确认退出，启动失败先确认新程序退出再回滚，无法确认时保留恢复文件；更新失败显示具体阶段和系统错误。完整包清除两个无用的上游调试 DLL，保留所需运行库和资源。保留追剧下季复用、跨季进度同步、全局弹幕设置、全季选集、迷你窗、托盘操作和静态正式更新清单。0.1.17 自带的旧更新助手不会自动获得这些修复，首次升级建议彻底退出旧程序，下载完整 ZIP 并解压到独立可写的新目录，不要混放旧 DLL 或只复制 EXE；同一 Windows 账户继续使用原应用数据。未签名；真实站源、长时间连播及旧版本原地替换仍未实测。',
+                            'Windows 0.1.20 开发版（未发布）：新增侧栏剧情简介、当前集与本季播放列表数量；跳过此版本只隐藏自动提示，仍可手动检查、下载及安装。补充弹幕表情并保留加载失败时的原始文本。原生合成视频验证未复现异常黑边，保留等比居中显示，新增播放日记几何信息便于继续排查。0.1.19 已有保护继续保留：关闭到托盘前暂停并保存进度，恢复窗口后保持暂停；更新超时先取消助手并确认退出，启动失败先确认新程序退出再回滚，无法确认时保留恢复文件；更新失败显示具体阶段和系统错误。完整包清除两个无用的上游调试 DLL，保留所需运行库和资源。保留追剧下季复用、跨季进度同步、全局弹幕设置、全季选集、迷你窗、托盘操作和静态正式更新清单。0.1.17 自带的旧更新助手不会自动获得这些修复，首次升级建议彻底退出旧程序，下载完整 ZIP 并解压到独立可写的新目录，不要混放旧 DLL 或只复制 EXE；同一 Windows 账户继续使用原应用数据。未签名；真实站源、长时间连播及旧版本原地替换仍未实测。',
                           ),
                         ),
                       ],
@@ -167,6 +167,23 @@ class AppUpdateScreen extends StatelessWidget {
                           key: const ValueKey('cancel-app-update'),
                           onPressed: controller.cancelDownload,
                           child: const Text('取消下载'),
+                        ),
+                      if (controller.supportedEdition &&
+                          release != null &&
+                          !controller.busy &&
+                          stage != UpdateStage.permission)
+                        OutlinedButton.icon(
+                          key: const ValueKey('skip-app-update'),
+                          onPressed: controller.currentVersionSkipped
+                              ? null
+                              : () =>
+                                    unawaited(controller.skipCurrentVersion()),
+                          icon: const Icon(Icons.notifications_off_outlined),
+                          label: Text(
+                            controller.currentVersionSkipped
+                                ? '已跳过此版本自动提示'
+                                : '跳过此版本',
+                          ),
                         ),
                       if (controller.supportedEdition &&
                           stage == UpdateStage.ready)
