@@ -670,18 +670,48 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
                                         padding: const EdgeInsets.symmetric(
                                           vertical: 10,
                                         ),
-                                        child: Text(
-                                          '${c.title} · ${c.episodeLabel}',
-                                          key: const ValueKey(
-                                            'windows-player-title',
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 15,
-                                          ),
-                                        ),
+                                        child: c.desktopMini
+                                            ? Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    c.title,
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    style: const TextStyle(
+                                                      color: Colors.white,
+                                                      fontSize: 13,
+                                                    ),
+                                                  ),
+                                                  Text(
+                                                    c.episodeLabel,
+                                                    key: const ValueKey(
+                                                      'windows-player-episode',
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    style: const TextStyle(
+                                                      color: Colors.white,
+                                                      fontSize: 12,
+                                                    ),
+                                                  ),
+                                                ],
+                                              )
+                                            : Text(
+                                                '${c.title} · ${c.episodeLabel}',
+                                                key: const ValueKey(
+                                                  'windows-player-title',
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 15,
+                                                ),
+                                              ),
                                       ),
                                     ),
                                   ),

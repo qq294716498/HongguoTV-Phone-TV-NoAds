@@ -236,6 +236,8 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     final detail = DramaDetail(
       job.drama,
       completed.map((entry) => entry.episode).toList(),
+      hasMoreEpisodes:
+          job.drama.episodes == 0 || completed.length < job.drama.episodes,
     );
     final watch = widget.store.watched(job.drama.id);
     final position = watch?.episode == job.episode.number && !watch!.finished

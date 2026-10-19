@@ -197,6 +197,9 @@ extension LanPlayback on LanController {
               selected.drama,
               jobs.map((job) => job.episode).toList(),
               warning: '当前仅列出接收设备已下载的分集',
+              hasMoreEpisodes:
+                  selected.drama.episodes == 0 ||
+                  jobs.length < selected.drama.episodes,
             );
           }
         }

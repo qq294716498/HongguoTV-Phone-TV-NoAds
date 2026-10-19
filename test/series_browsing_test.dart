@@ -794,7 +794,12 @@ void main() {
     for (var index = 0; index < 12; index++) {
       await tester.pump(const Duration(milliseconds: 20));
     }
-    expect(find.text('${firstSeason.title} · 第 1 集'), findsOneWidget);
+    expect(
+      find.text(
+        '第 1 集 / 共 ${repository.makeDetail(firstSeason).episodes.length} 集',
+      ),
+      findsOneWidget,
+    );
     await tester.tap(find.byKey(const ValueKey('player-all-seasons')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(ValueKey('all-season-${thirdSeason.id}')));
@@ -804,18 +809,33 @@ void main() {
       await tester.pump(const Duration(milliseconds: 20));
     }
     expect(repository.resolutions.last, (thirdSeason.id, 2));
-    expect(find.text('${thirdSeason.title} · 第 2 集'), findsOneWidget);
+    expect(
+      find.text(
+        '第 2 集 / 共 ${repository.makeDetail(thirdSeason).episodes.length} 集',
+      ),
+      findsOneWidget,
+    );
     expect(platform.opened.last.uri, contains('synthetic-2'));
     tester.widget<PlayerControls>(find.byType(PlayerControls)).onNext!();
     for (var index = 0; index < 20; index++) {
       await tester.pump(const Duration(milliseconds: 20));
     }
-    expect(find.text('${thirdSeason.title} · 第 3 集'), findsOneWidget);
+    expect(
+      find.text(
+        '第 3 集 / 共 ${repository.makeDetail(thirdSeason).episodes.length} 集',
+      ),
+      findsOneWidget,
+    );
     tester.widget<PlayerControls>(find.byType(PlayerControls)).onPrevious!();
     for (var index = 0; index < 20; index++) {
       await tester.pump(const Duration(milliseconds: 20));
     }
-    expect(find.text('${thirdSeason.title} · 第 2 集'), findsOneWidget);
+    expect(
+      find.text(
+        '第 2 集 / 共 ${repository.makeDetail(thirdSeason).episodes.length} 集',
+      ),
+      findsOneWidget,
+    );
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 100));
     debugDefaultTargetPlatformOverride = null;

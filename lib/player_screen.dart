@@ -42,6 +42,8 @@ import 'video_enhancement.dart';
 import 'video_output_size.dart';
 import 'windows_update_runtime.dart';
 import 'windows_desktop.dart';
+import 'windows_drama_description.dart';
+import 'episode_label.dart';
 
 class PlayerScreen extends StatefulWidget {
   const PlayerScreen({
@@ -101,6 +103,8 @@ class _PlayerScreenState extends State<PlayerScreen>
   final _playerFocus = FocusNode(debugLabel: 'player-surface');
   final _televisionControls = GlobalKey<TelevisionControlsState>();
   final _videoPaneKey = GlobalKey();
+  Object? _windowsVideoGeometry;
+  bool _windowsDescription = false;
   final _menuRevision = ValueNotifier<int>(0);
   final List<StreamSubscription<dynamic>> _subscriptions = [];
   final _recovery = PlaybackRecovery();
@@ -859,6 +863,57 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
     if (right <= left || bottom <= top) return null;
     return {'left': left, 'top': top, 'right': right, 'bottom': bottom};
+  }
+
+  void _recordWindowsVideoGeometry() {
+    if (!_windowsDesktop || !mounted || _closed) return;
+    final context = _videoPaneKey.currentContext;
+    final pane = context?.findRenderObject();
+    if (context == null ||
+        pane is! RenderBox ||
+        !pane.attached ||
+        !pane.hasSize) {
+      return;
+    }
+    Rect? texture;
+    void visit(Element element) {
+      if (element.widget is Texture) {
+        final object = element.findRenderObject();
+        if (object is RenderBox && object.attached && object.hasSize) {
+          texture = MatrixUtils.transformRect(
+            object.getTransformTo(pane),
+            Offset.zero & object.size,
+          );
+        }
+        return;
+      }
+      if (texture == null) element.visitChildElements(visit);
+    }
+
+    context.visitChildElements(visit);
+    final media = MediaQuery.of(context);
+    final source = videoDisplaySize(_player.state.videoParams);
+    final contained = source == null
+        ? null
+        : applyBoxFit(BoxFit.contain, source, pane.size).destination;
+    final expected = contained == null
+        ? null
+        : Alignment.center.inscribe(contained, Offset.zero & pane.size);
+    final geometry = (
+      source,
+      pane.size,
+      texture,
+      media.devicePixelRatio,
+      media.padding,
+      media.viewInsets,
+      _showFullscreen,
+      _windowsMini,
+    );
+    if (_windowsVideoGeometry == geometry) return;
+    _windowsVideoGeometry = geometry;
+    DiaryService.add(
+      '[WindowsVideo] source=$source viewport=${pane.size} dpr=${media.devicePixelRatio} padding=${media.padding} insets=${media.viewInsets} texture=$texture expectedContain=$expected fullscreen=$_showFullscreen mini=$_windowsMini',
+    );
   }
 
   void _attachLanPlayback() {
@@ -2522,7 +2577,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   Widget _buildPlayer(BuildContext context) {
     final theme = Theme.of(context);
     final title = _windowsDesktop
-        ? '${_detail.drama.title} · 第 ${_detail.episodes[_index].number} 集'
+        ? '${_detail.drama.title} · ${episodeProgressLabel(_detail, _index)}'
         : _detail.drama.title;
     final fullscreen = _showFullscreen;
     final pictureInPicture = _pictureInPictureVisible;
@@ -2587,14 +2642,42 @@ class _PlayerScreenState extends State<PlayerScreen>
             appBar: pictureInPicture || fullscreen || _windowsMini || _mobile
                 ? null
                 : AppBar(
-                    title: Text(
-                      title,
-                      key: _windowsDesktop
-                          ? const ValueKey('windows-player-title')
-                          : null,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    title: _windowsDesktop
+                        ? Semantics(
+                            label: title,
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    _detail.drama.title,
+                                    key: const ValueKey('windows-player-title'),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Flexible(
+                                  child: Text(
+                                    episodeProgressLabel(_detail, _index),
+                                    key: const ValueKey(
+                                      'windows-player-episode',
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(fontSize: 16),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : Text(
+                            title,
+                            key: _windowsDesktop
+                                ? const ValueKey('windows-player-title')
+                                : null,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                     actions: [
                       if (_windowsDesktop && WindowsDesktop.current != null)
                         IconButton(
@@ -2638,9 +2721,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                                     'windows-episode-sidebar',
                                   ),
                                   width: desktop ? 312 : 210,
-                                  child: _episodePanel(
-                                    preserveScrollOnResize: true,
-                                  ),
+                                  child: _windowsSidebar(),
                                 ),
                               ),
                             ],
@@ -2708,7 +2789,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         ? televisionTheme(AppTheme.dark)
         : AppTheme.dark;
     final title =
-        '${_detail.drama.title} · 第 ${_detail.episodes[_index].number} 集${_plan?.local == true ? ' · 本地' : ''}${_detail.episodes[_index].vip ? ' · VIP 试看' : ''}${(_plan?.routeIndex ?? 0) > 0 ? ' · 线路 ${_plan!.routeIndex + 1}' : ''}';
+        '${_detail.drama.title} · ${episodeProgressLabel(_detail, _index)}${_plan?.local == true ? ' · 本地' : ''}${_detail.episodes[_index].vip ? ' · VIP 试看' : ''}${(_plan?.routeIndex ?? 0) > 0 ? ' · 线路 ${_plan!.routeIndex + 1}' : ''}';
     final hideOverlayForPictureInPicture = _pictureInPictureVisible;
     final Widget controls = hideOverlayForPictureInPicture
         ? const SizedBox.shrink()
@@ -2762,7 +2843,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             showOnPlaybackReady: _showControlsOnPlaybackReady,
             quietEpisodeChange: () => _quietEpisodeChange,
             title: _detail.drama.title,
-            episodeLabel: '第 ${_detail.episodes[_index].number} 集',
+            episodeLabel: episodeProgressLabel(_detail, _index),
             portraitFooter: _portraitWatching ? _mobilePortraitFooter() : null,
             onTogglePlayback: _togglePlayback,
             onForward: () => _seek(15, resumeAfterSeek: true),
@@ -2911,6 +2992,7 @@ class _PlayerScreenState extends State<PlayerScreen>
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted && !_closed) {
               _enhancement.setViewport(pixels, television: _television);
+              _recordWindowsVideoGeometry();
             }
           });
           return Stack(
@@ -3083,7 +3165,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       enabled: _mobile && !_showFullscreen,
       contentReady: !_loading && _error == null,
       currentLabel:
-          '${_detail.drama.title}\n第 ${_detail.episodes[_index].number} 集',
+          '${_detail.drama.title}\n${episodeProgressLabel(_detail, _index)}',
       previousLabel: _index > 0
           ? '${_detail.drama.title}\n第 ${_detail.episodes[_index - 1].number} 集'
           : '已经是第一集',
@@ -3136,9 +3218,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             label: Row(
               children: [
                 Expanded(
-                  child: Text(
-                    '选集 · 第 ${_detail.episodes[_index].number} 集 / 共 ${_detail.episodes.length} 集',
-                  ),
+                  child: Text('选集 · ${episodeProgressLabel(_detail, _index)}'),
                 ),
                 const Icon(Icons.chevron_right_rounded, size: 18),
               ],
@@ -3398,7 +3478,11 @@ class _PlayerScreenState extends State<PlayerScreen>
             ),
           ],
           const SizedBox(height: 12),
-          Text(body, style: const TextStyle(height: 1.55)),
+          Text(
+            body,
+            key: const ValueKey('player-description-text'),
+            style: TextStyle(color: colors.onSurface, height: 1.55),
+          ),
           if (_detail.warning.isNotEmpty) ...[
             const SizedBox(height: 12),
             Text(_detail.warning, style: TextStyle(color: colors.error)),
@@ -3443,6 +3527,58 @@ class _PlayerScreenState extends State<PlayerScreen>
       preferences: widget.store.downloadPreferences,
       embedded: true,
       onSubmit: _submitDownloadSelection,
+    );
+  }
+
+  Widget _windowsSidebar() {
+    final colors = Theme.of(context).colorScheme;
+    Widget tab(bool description, String label) => Expanded(
+      child: Semantics(
+        selected: _windowsDescription == description,
+        child: TextButton(
+          key: ValueKey(
+            description
+                ? 'windows-sidebar-description'
+                : 'windows-sidebar-episodes',
+          ),
+          style: TextButton.styleFrom(
+            foregroundColor: _windowsDescription == description
+                ? colors.onPrimaryContainer
+                : colors.onSurface,
+            backgroundColor: _windowsDescription == description
+                ? colors.primaryContainer
+                : null,
+          ),
+          onPressed: () => setState(() => _windowsDescription = description),
+          child: Text(label),
+        ),
+      ),
+    );
+    return Column(
+      children: [
+        SizedBox(
+          height: 48,
+          child: Padding(
+            padding: const EdgeInsets.all(4),
+            child: Row(children: [tab(false, '选集'), tab(true, '简介')]),
+          ),
+        ),
+        Expanded(
+          child: IndexedStack(
+            index: _windowsDescription ? 1 : 0,
+            children: [
+              ExcludeFocus(
+                excluding: _windowsDescription,
+                child: _episodePanel(preserveScrollOnResize: true),
+              ),
+              ExcludeFocus(
+                excluding: !_windowsDescription,
+                child: WindowsDramaDescription(drama: _detail.drama),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 

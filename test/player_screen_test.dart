@@ -342,7 +342,12 @@ void main() {
         await tester.tap(find.byKey(const ValueKey('player-mobile-next')));
         await settleOperations(tester);
         expect(player.opened.length, 2);
-        expect(find.text('第 2 集'), findsOneWidget);
+        expect(
+          tester
+              .widget<PlayerControls>(find.byType(PlayerControls))
+              .episodeLabel,
+          '第 2 集 / 共 2 集',
+        );
         expect(player.state.position, Duration.zero);
         expect(player.state.playing, isTrue);
         await unmount(tester, player);

@@ -488,6 +488,7 @@ class _PlayerControlsState extends State<PlayerControls> {
                         widget.episodeLabel,
                         key: const ValueKey('player-header-episode'),
                         maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: compact ? 14 : 17,

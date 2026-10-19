@@ -80,7 +80,12 @@ class NextSeasonResolver {
     final merged = repository.catalogUpdates
         .current(candidate)
         .merge(detail.drama);
-    return DramaDetail(merged, detail.episodes, warning: detail.warning);
+    return DramaDetail(
+      merged,
+      detail.episodes,
+      warning: detail.warning,
+      hasMoreEpisodes: detail.hasMoreEpisodes,
+    );
   }
 
   List<Drama> _matches(Drama anchor, Iterable<Drama> candidates) {

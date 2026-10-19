@@ -271,7 +271,7 @@ void main() {
       final pane = tester.getRect(find.byType(PlayerControls));
       expect(tester.getRect(toggle).right, pane.right);
       expect(tester.getCenter(toggle).dy, pane.center.dy);
-      expect(find.text('合成选集 · 第 59 集'), findsOneWidget);
+      expect(find.text('第 59 集 / 共 120 集'), findsOneWidget);
       await tester.tap(toggle);
       await frames(tester);
       expect(sidebar, findsNothing);
@@ -457,7 +457,7 @@ void main() {
           harness.calls.any((call) => call.method == 'startDragging'),
           true,
         );
-        expect(find.text('合成选集 · 第 1 集'), findsOneWidget);
+        expect(find.text('第 1 集 / 共 120 集'), findsOneWidget);
         expect(sidebar, findsNothing);
         await harness.desktop.setFullscreen(true);
         tester.view.physicalSize = const Size(1280, 720);

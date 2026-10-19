@@ -106,7 +106,12 @@ class _DetailScreenState extends State<DetailScreen> {
           .current(widget.drama)
           .merge(detail.drama);
       setState(() {
-        _detail = DramaDetail(merged, detail.episodes, warning: detail.warning);
+        _detail = DramaDetail(
+          merged,
+          detail.episodes,
+          warning: detail.warning,
+          hasMoreEpisodes: detail.hasMoreEpisodes,
+        );
         _loading = false;
         _episodePage =
             resumeEpisodeIndex(
@@ -168,6 +173,7 @@ class _DetailScreenState extends State<DetailScreen> {
           updated,
           _detail!.episodes,
           warning: _detail!.warning,
+          hasMoreEpisodes: _detail!.hasMoreEpisodes,
         );
       });
       widget.repository.catalogUpdates.publish(updated);

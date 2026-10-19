@@ -136,6 +136,7 @@ class BatchDownloads extends ChangeNotifier {
             drama,
             detail.episodes,
             warning: detail.warning,
+            hasMoreEpisodes: detail.hasMoreEpisodes,
           );
           repository.catalogUpdates.publish(drama);
         } catch (error) {

@@ -99,6 +99,7 @@ Future<void> openPlaybackDirectly(
       mergedDrama,
       detail.episodes,
       warning: detail.warning,
+      hasMoreEpisodes: detail.hasMoreEpisodes,
     );
     repository.catalogUpdates.publish(mergedDrama, retryCover: true);
     await saveUserChange(context, () => store.refreshDrama(mergedDrama));
@@ -219,6 +220,7 @@ class _PlaybackLaunchScreenState extends State<PlaybackLaunchScreen> {
         drama,
         detail.episodes,
         warning: detail.warning,
+        hasMoreEpisodes: detail.hasMoreEpisodes,
       );
       widget.repository.catalogUpdates.publish(drama, retryCover: true);
       await saveUserChange(context, () => widget.store.refreshDrama(drama));

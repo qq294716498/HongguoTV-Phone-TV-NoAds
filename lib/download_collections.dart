@@ -129,7 +129,12 @@ class DownloadCollectionUpdater extends ChangeNotifier {
       if (fresh.drama.id != drama.id || fresh.drama.source != drama.source) {
         throw AppFailure('剧集信息不匹配，请重试');
       }
-      final detail = DramaDetail(drama.merge(fresh.drama), fresh.episodes);
+      final detail = DramaDetail(
+        drama.merge(fresh.drama),
+        fresh.episodes,
+        warning: fresh.warning,
+        hasMoreEpisodes: fresh.hasMoreEpisodes,
+      );
       if (detail.episodes.isEmpty) throw AppFailure('暂未取得分集，请更新资料后重试');
       repository.catalogUpdates.publish(detail.drama);
       await store.refreshDrama(detail.drama);
