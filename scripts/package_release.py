@@ -51,6 +51,8 @@ else:
         raise SystemExit('Windows 安装包缺少文件：' + ', '.join(missing))
     if (bundle / 'dartjni.dll').exists():
         raise SystemExit('Windows 不使用 JNI；请运行 flutter clean 后重新构建，避免残留 Java 依赖。')
+    if any((bundle / name).exists() for name in ['libc++.dll', 'zlib.dll']):
+        raise SystemExit('构建目录含未使用的 ANGLE 调试 DLL；请运行 flutter clean 后重新构建。')
     manifest = {'schema': 1, 'version': version.split('+')[0],
                 'build': int(version.split('+')[1]), 'architecture': 'x64', 'files': {}}
     for source in sorted(bundle.rglob('*')):

@@ -81,8 +81,8 @@ duanju_native_archive(
   "cc5911bb15d596fd5a2b362613ad35b7093b427117269a7359054a65746a5f9a"
   "${ANGLE_SRC}"
   "include/EGL/egl.h" "lib/libEGL.dll.lib" "lib/libGLESv2.dll.lib"
-  "d3dcompiler_47.dll" "libc++.dll" "libEGL.dll" "libGLESv2.dll"
-  "vk_swiftshader.dll" "vulkan-1.dll" "zlib.dll"
+  "d3dcompiler_47.dll" "libEGL.dll" "libGLESv2.dll"
+  "vk_swiftshader.dll" "vulkan-1.dll"
 )
 
 set(PLUGIN_NAME "media_kit_libs_windows_video_plugin")
@@ -99,11 +99,9 @@ target_link_libraries(${PLUGIN_NAME} PRIVATE flutter flutter_wrapper_plugin)
 set(media_kit_libs_windows_video_bundled_libraries
   "${LIBMPV_SRC}/libmpv-2.dll"
   "${ANGLE_SRC}/d3dcompiler_47.dll"
-  "${ANGLE_SRC}/libc++.dll"
   "${ANGLE_SRC}/libEGL.dll"
   "${ANGLE_SRC}/libGLESv2.dll"
   "${ANGLE_SRC}/vk_swiftshader.dll"
   "${ANGLE_SRC}/vulkan-1.dll"
-  "${ANGLE_SRC}/zlib.dll"
   PARENT_SCOPE
 )

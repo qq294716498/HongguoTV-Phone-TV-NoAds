@@ -54,6 +54,13 @@ def validate_aot_elf(header):
     return {'format': 'ELF64 AOT snapshot', 'machine': 'AMD64'}
 
 
+def validate_release_imports(imports):
+    debug = sorted(name for name in imports if re.fullmatch(
+        r'(?:ucrtbased|(?:vcruntime|msvcp|concrt)\d+(?:_[\w]+)?d)\.dll', name.lower()))
+    if debug:
+        raise ValueError('Release package imports debug runtime DLLs: ' + ', '.join(debug))
+
+
 def main():
     import pefile
     if platform.system() != 'Windows':
@@ -114,6 +121,7 @@ def main():
                     imports = set()
                     for attribute in ['DIRECTORY_ENTRY_IMPORT', 'DIRECTORY_ENTRY_DELAY_IMPORT']:
                         imports.update(entry.dll.decode('ascii').lower() for entry in getattr(binary, attribute, []))
+                    validate_release_imports(imports)
                     missing_imports = [name for name in imports if name not in bundled
                                        and not name.startswith(('api-ms-win-', 'ext-ms-win-'))
                                        and not (system / name).is_file()]
