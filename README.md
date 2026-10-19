@@ -2,9 +2,9 @@
 
 基于 [guoapp](https://github.com/zhoufuweigg/guoapp) 的非官方独立客户端。手机与 Android TV 共用 Android 应用，另提供 Windows x64 独立客户端。支持短剧浏览、搜索、在线播放、追剧和下载。
 
-## 0.1.19+44 发布准备
+## 当前版本：0.1.19+44（Android / TV / Windows 已发布）
 
-本轮从已发布 Android `app-v0.1.18-43` 与 Windows 维护源码增量修改。源码修复及验证已完成，现已获准将 Windows 与 Android/TV 一起正式打包发布；发布状态以独立标签及公网验证报告为准，已有发布资产保留。
+Windows 与 Android/TV 0.1.19+44 均已正式发布，Android 标签 `app-v0.1.19-44` 为 Latest，Windows 使用独立标签 `windows-v0.1.19-44`。两平台发布源码均为 [`b72bb29`](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/commit/b72bb2987b1b98deadeaecdbf0255dbee59f4506)，基于已发布 Android 0.1.18+43 与 Windows 维护源码增量修改；请以发布标签或随附源码 ZIP 为准，远端 main 可能较旧。
 
 - Windows 纳入 `ebbf44c` 的关闭到托盘前暂停并保存进度、恢复后保持暂停行为。更新助手增加带事务 nonce 的取消与交接许可：就绪超时或退出准备失败时先取消并等待助手退出，确认退出后才能删除暂存目录；无法确认退出则保留现场及恢复文件。新客户端启动失败时同样确认其实际退出后再回滚，不能确认则保留新目录、旧目录备份和配置。
 - Windows 更新诊断保留阶段、原始 Win32 错误、源/目标路径、助手及子进程 PID、等待/终止/退出结果；不再把所有重命名失败归为文件占用。启动失败及回滚结果通过更新界面提示。此前用户机器快照未留下失败现场，不能确定原故障由 DLL、360 或多开导致。旧客户端安装新版时仍执行旧客户端所带助手，这些保护在运行包含本修改的客户端后用于后续更新。
@@ -14,11 +14,17 @@
 - [Issue #12](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/issues/12) 无评论、附件或完整日志，仅提到索尼及 `hvc1`、`NO_EXCEEDS_CAPABILITIES`；无法确认具体型号、Android 版本、HEVC profile/level/位深或是否发生原生进程崩溃。需要原电视型号、完整播放日记与崩溃附近 logcat 才能定位。系统软解只使用设备自带软件解码器，并未引入通用 FFmpeg 视频软解，缺少相应 HEVC 解码器或性能不足仍可能失败；请尝试不同线路/较低规格视频。未降低 Android 最低版本。
 - Windows 底部黑条仍未在合成回归中复现，未新增裁剪、拉伸或遮挡视频的改动。云端自动化使用合成数据并禁用站源图片，不等同索尼电视实机 HEVC、遥控操作、真实播放或长时间连播验收。
 
-- 云端验证：默认 Flutter 596 通过 / 3 跳过，全站源 597 通过 / 2 跳过；192 个 Dart 文件格式检查通过，静态分析无错误和警告（152 条提示）；Python 48 项通过，两种 Go 配置的竞态测试和模块校验通过。
+- 云端验证：默认 Flutter 596 通过 / 3 跳过，全站源 597 通过 / 2 跳过；192 个 Dart 文件格式检查通过，静态分析无错误和警告（152 条提示）；发布门禁 Python 53 项通过，两种 Go 配置的竞态测试和模块校验通过。
 - [Android 无签名源码验证](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/39220472932)通过：插件/应用 Kotlin 与 Java 编译、19 组共 145 项原生测试均通过；插件与应用 Lint 门禁通过（应用仍有 22 条既有警告，插件 1 条基线清理提示）。任务图已核对无 APK 打包和签名任务，没有生成安装包用于发布。
 - [Windows 打包清理后的完整复验](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/39221734603)通过：0.1.19+44 x64 完整包的版本、架构、DLL 导入、资源和校验和检查通过；合成 H264/AAC 媒体实际启动 smoke、关闭到托盘暂停/恢复仍暂停、16 项更新事务及真实客户端重启 ack 均通过。未使用的两个 ANGLE 调试 DLL 不再入包，客户端仍未签名。该次发布步骤明确跳过，产物只用于验证。发布准备时另修正程序内旧版更新日志，因此正式发布重新编译 Windows，并重跑完整门禁。
 
+- [Windows 正式构建与发布](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/39225465466)和 [Android 正式签名构建与发布](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/39225469487)全部成功。候选与 Latest 三 ABI 更新下载及签名复验、Windows 公网 ZIP 下载与静态清单回退验证通过；Android Latest 正确指向本版，Windows 不占用 Latest。
+- 云端独立匿名下载复核两个发布的全部 25 个新资产，大小、GitHub 摘要和 SHA256SUMS 均一致；两个纯源码 ZIP 各有 709 个文件，与发布提交逐文件一致。Windows 完整包 218 个文件（217 个受管文件），49 个 PE 均为 x64 且无调试 CRT 导入；三 APK 共 59 个原生 ELF 的架构、正式证书及递增版本号验证通过。发布前已有的 5 个 Release、63 个资产逐项保持不变。
+- Android 提升 Latest 后，云端再次通过实际 Windows 更新器下载本版 ZIP；模拟 API 限流后从真实静态清单读取同一版本，两个平台均选择 0.1.19+44 的各自资产，同版本忽略和跨平台标签拒绝检查通过。此验证不包含在用户机器上运行旧助手完成原地安装。
+
 ## Windows 正式版：0.1.19+44
+
+[Windows 发布页](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/windows-v0.1.19-44) · [完整 x64 ZIP](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.19-44/HongguoTV-0.1.19-windows-x64.zip) · [SHA-256](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.19-44/SHA256SUMS.txt) · [源码 ZIP](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.19-44/HongguoTV-0.1.19-source.zip)
 
 - 更新就绪超时或交接失败时取消本次助手，确认它实际退出后才清理暂存目录；无法确认退出则保留恢复文件。新客户端启动失败时确认其退出后再回滚，无法确认时保留新目录、旧目录备份与配置备份。
 - 更新错误显示实际阶段、Win32 错误和路径，并记录助手/子进程 PID、等待及退出结果。原用户故障缺少现场日志，尚不能确定由占用、权限、安全软件或其他原因造成。
@@ -26,9 +32,11 @@
 - 移除未使用且依赖调试 CRT 的两个上游 ANGLE DLL；完整 ZIP 保留所需 Flutter、Go 核心、mpv、FFmpeg、ANGLE、VC++ 发布运行库和资源。仅支持 Windows 10/11 x64，仍未签名。
 - 运行逻辑沿用已验证的 `8c999359160d7127d9358cf605b86a1b1cd81cbf`，发布准备仅在 `8ff55a1fe9f559b823a6b19be3a4a51dfbf4d429` 修正程序内旧版更新日志；重新编译并执行静态回归、包校验、合成 H264/AAC 启动 smoke、托盘/迷你窗及 16 项更新事务。真实站源、长时间连播、用户旧版本原地替换及消费级 GPU/音频设备仍未验收。
 - 独立发布标签 `windows-v0.1.19-44`，不会作为仓库 Latest；Windows 静态正式更新清单在公网 ZIP 下载和 SHA-256 验证后更新。Android/TV 通过独立签名流程发布。
-- 0.1.17 自带的是旧更新助手，不能保证首次自动升级成功。首次升级建议：先保存进度并从托盘彻底退出所有红果TV进程；下载本版完整 ZIP，解压到独立、可写的新目录；不要覆盖混放旧 DLL 或只复制 EXE。用同一 Windows 账户从新目录启动 `HongguoTV.exe`，确认“软件更新”显示 0.1.19+44；原目录先保留，勿卸载或清除应用数据。新助手的保护用于运行本版之后的后续更新。
+- 0.1.17 自带的是旧更新助手，不能保证首次自动升级成功。首次升级建议：先保存进度并从托盘彻底退出所有红果TV进程；下载本版完整 ZIP，解压到独立、可写的新目录；不要覆盖混放旧 DLL 或只复制 EXE。用同一 Windows 账户从新目录启动 `HongguoTV.exe`，确认“软件更新”显示版本 0.1.19、编号 44，并将快捷方式改指新目录；原目录先保留，勿卸载或清除应用数据。新助手的保护用于运行本版之后的后续更新。
 
 ## Android 最近更新：0.1.19+44
+
+[Android/TV 发布页（Latest）](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/app-v0.1.19-44) · [三 ABI 与证书校验](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.19-44/latest-apk-validation.json) · [源码 ZIP](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.19-44/HongguoTV-0.1.19-source.zip)
 
 - 手机 / TV 继续共用 `com.hongguo.tv`，沿用既有正式证书；Android 8.0 最低版本保持不变。ARM64 / 32 位 / x86_64 versionCode 分别由 2043 / 1043 / 4043 递增至 2044 / 1044 / 4044。
 - TV 的“设置与备份 → TV 解码模式”增加持久的自动、仅硬件解码和系统软件解码；实体电视选择标准布局时同样可改。播放页设置共用该偏好，修改后重开当前集并保留位置；全局修改在下一次打开视频时生效。
@@ -39,7 +47,7 @@
 
 ## 此前发布：Android 0.1.18+43
 
-手机/TV 共用 Android 0.1.18+43 已正式发布，该版本只调整 TV 行为，保留既有播放源、弹幕、预加载、连播、全季、追剧/进度、搜索和下载。运行时代码来自已验证 TV 提交 `0cf19ed`；正式源码以 `app-v0.1.18-43` 标签为准。Windows 正式版仍为 0.1.17；0.1.18+43 发布阶段未构建或发布 Windows 独立修改，本次 Windows 源码验证见上方 0.1.19+44 开发记录。
+手机/TV 共用 Android 0.1.18+43 已正式发布，该版本只调整 TV 行为，保留既有播放源、弹幕、预加载、连播、全季、追剧/进度、搜索和下载。运行时代码来自已验证 TV 提交 `0cf19ed`；正式源码以 `app-v0.1.18-43` 标签为准。该阶段 Windows 正式版为 0.1.17；0.1.18+43 发布阶段未构建或发布 Windows 独立修改，本次 Windows 源码验证见上方 0.1.19+44 发布记录。
 
 [Android 0.1.18 正式发布页](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/app-v0.1.18-43) · [构建与发布验证](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/39107356975) · [对应源码提交 7544a05](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/commit/7544a0566b34aff5d853bd1b6f64c6a7cb3a1701)
 
@@ -128,17 +136,18 @@
 
 ## 下载安装
 
-[查看最新正式版](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/latest)
+[Android 最新正式版](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/latest) · [Windows 正式版](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/windows-v0.1.19-44)
 
 | 设备架构 | 下载 |
 | --- | --- |
-| arm64-v8a · 大多数手机及较新的电视 / 盒子 | [HongguoTV 0.1.18 ARM64](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.18-43/HongguoTV-0.1.18-arm64-v8a.apk) |
-| armeabi-v7a · 32 位手机 / 电视 / 盒子 | [HongguoTV 0.1.18 32 位](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.18-43/HongguoTV-0.1.18-armeabi-v7a.apk) |
-| x86_64 · 对应架构模拟器 | [HongguoTV 0.1.18 x86_64](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.18-43/HongguoTV-0.1.18-x86_64.apk) |
+| Windows 10/11 x64 · 完整 ZIP、未签名 | [HongguoTV 0.1.19 Windows x64](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.19-44/HongguoTV-0.1.19-windows-x64.zip) |
+| Android arm64-v8a · 大多数手机及较新的电视 / 盒子 | [HongguoTV 0.1.19 ARM64](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.19-44/HongguoTV-0.1.19-arm64-v8a.apk) |
+| Android armeabi-v7a · 32 位手机 / 电视 / 盒子 | [HongguoTV 0.1.19 32 位](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.19-44/HongguoTV-0.1.19-armeabi-v7a.apk) |
+| Android x86_64 · 对应架构模拟器 | [HongguoTV 0.1.19 x86_64](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.19-44/HongguoTV-0.1.19-x86_64.apk) |
 
 支持 Android 8.0 及以上系统。请选择与设备和已安装应用匹配的架构；更新时直接覆盖安装，无需先卸载。
 
-三架构 APK 的 [SHA-256 校验清单](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.18-43/SHA256SUMS.txt) 与源码见 [0.1.18 发布页](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/app-v0.1.18-43)。最新版本源码可从该版本标签查看；其他分支的源码版本以各自的 `pubspec.yaml` 为准。
+三架构 APK 的 [SHA-256 校验清单](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.19-44/SHA256SUMS.txt) 与源码见 [0.1.19 发布页](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/app-v0.1.19-44)。Windows 的校验清单及源码见上方 Windows 正式版入口。最新版本源码可从对应发布标签查看；其他分支的源码版本以各自的 `pubspec.yaml` 为准。
 
 ## 应用内更新
 
@@ -185,11 +194,11 @@
 
 | 平台 | 状态 |
 | --- | --- |
-| Android 手机 / Android TV | 0.1.17 三架构安装包、现有证书签名及公开更新验证结果见正式发布页 |
-| Windows | 独立 Windows x64 正式渠道；0.1.17+42 的构建、运行验证结果及下载以正式发布页为准 |
+| Android 手机 / Android TV | 0.1.19+44 三 ABI 正式证书签名包已发布并成为 Latest，公开更新下载与签名复验通过 |
+| Windows | 0.1.19+44 x64 未签名完整包已发布；原生构建、smoke、16 项更新事务与公网下载/清单回退验证通过 |
 | iOS | 保留工程与构建支持，尚无本次已签名安装包 |
 
-本版静态分析无错误和警告，保留 154 条既有 info 提示；Python 44 项测试（3 项条件跳过）、Flutter 默认 550 项与全站源 551 项通过（分别 3 / 2 项条件跳过），Go race 两种构建配置通过。Android 三 ABI 沿用原证书，构建和公网下载均核对包名、版本、ABI、对齐、CRC、资源与 SHA-256；Windows 的完整包、原生 smoke 和更新事务结果见发布报告。真实手机 / TV 的覆盖安装、实际播放与长时间连播仍待验收。
+本版 Dart 静态分析无错误和警告，保留 152 条 info 提示；192 个 Dart 文件格式检查、Python 53 项、Flutter 默认 596 项与全站源 597 项（分别 3 / 2 项条件跳过）及两种 Go race 配置通过。Android 原生源码验证 145 项测试通过，Lint 门禁通过但应用仍有 22 条既有警告、插件 1 条基线清理提示。三 ABI 沿用原证书，构建和公网下载均核对包名、版本、ABI、对齐、CRC、资源与 SHA-256；Windows 完整包、原生 smoke、16 项更新事务及公网更新下载通过。真实手机 / TV 覆盖安装、索尼 HEVC、实际播放、长时间连播及现有 Windows 0.1.17 原地替换仍未实测。
 
 后续优先完成 Android 手机和 Windows 的实际使用验证，其次是 Android TV 遥控与连播验证，最后安排 iOS 构建与设备验证。
 
