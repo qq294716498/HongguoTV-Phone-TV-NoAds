@@ -90,9 +90,11 @@ class _WindowsDanmakuOverlayState extends State<WindowsDanmakuOverlay>
       _seen.clear();
       _flights.clear();
     }
-    final metrics = (style.fontSize, scaler.scale(1));
+    final metrics = (style.fontSize, scaler.scale(1), _emoji.imageCount);
     double measure(String text) =>
-        DanmakuEmojiContent.parse(text).measure(style, scaler).ceilToDouble() +
+        DanmakuEmojiContent.parse(
+          text,
+        ).measure(style, scaler, cache: _emoji).ceilToDouble() +
         8;
     final items = {for (final item in controller.items) item.id: item};
     for (final flight in _flights) {

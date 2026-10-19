@@ -1446,6 +1446,16 @@
       "bytes": 22481,
       "width": 256,
       "height": 256
+    },
+    {
+      "glyph": "🫡",
+      "file": "1fae1.png",
+      "upstream_path": "assets/Saluting face/3D/saluting_face_3d.png",
+      "upstream_blob_sha1": "2852fd1a3f208a83d34247c9da5364823601d7ef",
+      "sha256": "3a18f67e9cb6edaa18e9331451f9b93527aca574c52f9e6d896cce691e737b5a",
+      "bytes": 40146,
+      "width": 256,
+      "height": 256
     }
   ]
 }

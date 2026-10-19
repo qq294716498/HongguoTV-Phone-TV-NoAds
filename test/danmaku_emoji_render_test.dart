@@ -1,10 +1,14 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:duanju_app/danmaku_emoji_assets.dart';
 import 'package:duanju_app/danmaku_emoji_render.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'player_description_test.dart' show capture;
+import 'windows_episode_sidebar_test.dart' show sidebarTheme;
 
 class HoldingEmojiBundle extends CachingAssetBundle {
   final pending = Completer<ByteData>();
@@ -61,15 +65,118 @@ void main() {
   );
 
   testWidgets(
-    'all image decodes are bounded to 64px and the 144-asset inventory',
+    'named aliases and compound expressions retain originals until every image is ready',
+    (tester) async {
+      final cache = DanmakuEmojiCache();
+      addTearDown(cache.dispose);
+      const text = '中文EN[笑][敬礼][什么][哭][戳手手][未收录][马上有福]end';
+      final content = DanmakuEmojiContent.parse(text);
+      if (Platform.environment['HG_UI_CAPTURE_DIR'] != null) {
+        tester.view.physicalSize = const Size(1100, 240);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(
+          RepaintBoundary(
+            key: const ValueKey('description-capture'),
+            child: MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: await sidebarTheme(tester),
+              home: Scaffold(
+                body: Center(
+                  child: AnimatedBuilder(
+                    animation: cache,
+                    builder: (context, _) => Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        DanmakuEmojiText(
+                          text: text,
+                          style: Theme.of(context).textTheme.titleLarge!
+                              .copyWith(fontSize: 24, color: Colors.white),
+                          scaler: scaler,
+                          cache: cache,
+                        ),
+                        const SizedBox(height: 20),
+                        DanmakuEmojiText(
+                          text: '力拔山兮气盖世\uFFFC',
+                          style: Theme.of(context).textTheme.titleLarge!
+                              .copyWith(fontSize: 24, color: Colors.white),
+                          scaler: scaler,
+                          cache: cache,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await capture(tester, 'danmaku-loading-fallback');
+      }
+      expect(content.parts.map((part) => part.text).join(), text);
+      expect(content.span(style, scaler, cache).toPlainText(), text);
+      expect(
+        content.span(style, scaler, cache).children!.whereType<WidgetSpan>(),
+        isEmpty,
+      );
+      cache.ensureLoaded([text]);
+      await finishDecoding(tester, cache);
+      expect(
+        content.span(style, scaler, cache).children!.whereType<WidgetSpan>(),
+        hasLength(6),
+      );
+      expect(
+        content.span(style, scaler, cache).toPlainText(),
+        contains('[未收录][马上有福]end'),
+      );
+      expect(
+        content.parts.firstWhere((p) => p.text == '[戳手手]').glyphs,
+        hasLength(2),
+      );
+      if (Platform.environment['HG_UI_CAPTURE_DIR'] != null) {
+        await tester.pump();
+        await capture(tester, 'danmaku-bundled-images');
+        await tester.pumpWidget(const SizedBox.shrink());
+      }
+    },
+  );
+
+  testWidgets(
+    'failed named assets keep the full mixed comment and explicit raw object fallback',
+    (tester) async {
+      final bundle = FailingEmojiBundle();
+      final cache = DanmakuEmojiCache(bundle: bundle);
+      addTearDown(cache.dispose);
+      const text = '力拔EN[笑][敬礼][什么][哭][戳手手][未知][马上有福]\uFFFC';
+      cache.ensureLoaded([text]);
+      await finishDecoding(tester, cache);
+      final content = DanmakuEmojiContent.parse(text);
+      expect(content.parts.map((p) => p.text).join(), text);
+      expect(
+        content.span(style, scaler, cache).toPlainText(),
+        '力拔EN[笑][敬礼][什么][哭][戳手手][未知][马上有福][OBJ]',
+      );
+      expect(
+        content.span(style, scaler, cache).children!.whereType<WidgetSpan>(),
+        isEmpty,
+      );
+      final calls = bundle.calls;
+      cache.ensureLoaded([text]);
+      expect(bundle.calls, calls);
+      expect(cache.loading, isFalse);
+    },
+  );
+
+  testWidgets(
+    'all image decodes are bounded to 64px and the 145-asset inventory',
     (tester) async {
       final cache = DanmakuEmojiCache();
       addTearDown(cache.dispose);
       final text = DanmakuEmojiAssets.paths.keys.join();
       cache.ensureLoaded([text, text, '[未知]']);
       await finishDecoding(tester, cache);
-      expect(cache.imageCount, 144);
-      expect(cache.decodedBytes, lessThanOrEqualTo(144 * 64 * 64 * 4));
+      expect(cache.imageCount, 145);
+      expect(cache.decodedBytes, lessThanOrEqualTo(145 * 64 * 64 * 4));
       for (final glyph in DanmakuEmojiAssets.paths.keys) {
         final image = cache.imageFor(glyph)!;
         expect(image.width, lessThanOrEqualTo(64));
@@ -77,12 +184,12 @@ void main() {
       }
       cache.ensureLoaded([text]);
       expect(cache.loading, isFalse);
-      expect(cache.imageCount, 144);
+      expect(cache.imageCount, 145);
     },
   );
 
   testWidgets(
-    'first frame has a visible text fallback, then bundled inline images with stable width',
+    'first frame has a visible text fallback, then bundled inline images with cache-aware width',
     (tester) async {
       final bundle = HoldingEmojiBundle();
       final cache = DanmakuEmojiCache(bundle: bundle);
@@ -106,9 +213,11 @@ void main() {
         ),
       );
       await tester.pumpWidget(render());
-      expect(find.text('😆'), findsOneWidget);
-      expect(find.text('😠'), findsOneWidget);
-      expect(find.text('😒'), findsOneWidget);
+      final fallback = tester.widget<Text>(
+        find.byWidgetPredicate((w) => w is Text && w.semanticsLabel == text),
+      );
+      expect(fallback.textSpan!.toPlainText(), contains('[大笑]'));
+      expect(fallback.textSpan!.toPlainText(), isNot(contains('\uFFFC')));
       expect(find.byType(RawImage), findsNothing);
       await tester.runAsync(() async {
         bundle.pending.complete(
@@ -118,10 +227,14 @@ void main() {
       await finishDecoding(tester, cache);
       await tester.pump();
       expect(find.byType(RawImage), findsNWidgets(3));
-      expect(DanmakuEmojiContent.parse(text).measure(style, scaler), before);
+      final after = DanmakuEmojiContent.parse(
+        text,
+      ).measure(style, scaler, cache: cache);
+      expect(before, greaterThan(0));
+      expect(after, greaterThan(0));
       expect(
         tester.getSize(find.byType(DanmakuEmojiText)).width,
-        closeTo(before, .1),
+        closeTo(after, .1),
       );
       final richText = tester.widget<Text>(
         find.byWidgetPredicate(
@@ -157,7 +270,16 @@ void main() {
           ),
         ),
       );
-      expect(find.text('😆'), findsOneWidget);
+      final fallback = tester.widget<Text>(
+        find.byWidgetPredicate(
+          (w) => w is Text && w.semanticsLabel == '😆 [未知] 爽',
+        ),
+      );
+      expect(fallback.textSpan!.toPlainText(), '[大笑] [未知] 爽');
+      expect(
+        (fallback.textSpan! as TextSpan).children!.whereType<WidgetSpan>(),
+        isEmpty,
+      );
       expect(find.byType(RawImage), findsNothing);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());

@@ -10,9 +10,22 @@ import 'danmaku_text.dart';
 import 'windows_danmaku_overlay.dart';
 
 String danmakuFlightText(DanmakuItem item) {
-  final characters = danmakuDisplayText(item.text).characters;
-  final text =
-      characters.take(100).toString() + (characters.length > 100 ? '…' : '');
+  final buffer = StringBuffer();
+  var remaining = 100;
+  var clipped = false;
+  for (final part in danmakuExpressionParts(item.text)) {
+    final count = (part.glyphs ?? part.original).characters.length;
+    if (count <= remaining) {
+      buffer.write(part.original);
+      remaining -= count;
+    } else {
+      if (!part.expression)
+        buffer.write(part.original.characters.take(remaining));
+      clipped = true;
+      break;
+    }
+  }
+  final text = '$buffer${clipped ? '…' : ''}';
   return item.repeatCount > 1 ? '$text  ♥ ${item.repeatCount}' : text;
 }
 
@@ -116,6 +129,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
   Object? _realtimeLayout;
   final _emojiCache = DanmakuEmojiCache();
   Object? _emojiWarmRevision;
+  int _realtimeEmojiRevision = 0;
   int? _mobileTimelineRevision;
 
   bool get _mobile => widget.mobile && !widget.television;
@@ -170,10 +184,13 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
       (flight) => now - flight.item.timeMs >= flight.lifetimeMs,
     );
     final currentItems = {for (final item in controller.items) item.id: item};
+    final emojiChanged = _realtimeEmojiRevision != _emojiCache.imageCount;
+    _realtimeEmojiRevision = _emojiCache.imageCount;
     for (var index = 0; index < _realtimeFlights.length; index++) {
       final flight = _realtimeFlights[index];
       final current = currentItems[flight.item.id];
-      if (current == null || current.repeatCount == flight.item.repeatCount) {
+      if (current == null ||
+          !emojiChanged && current.repeatCount == flight.item.repeatCount) {
         continue;
       }
       final text = danmakuFlightText(current);
@@ -347,7 +364,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
                       double measure(String text) {
                         return DanmakuEmojiContent.parse(
                           text,
-                        ).measure(style, scaler);
+                        ).measure(style, scaler, cache: _emojiCache);
                       }
 
                       final emojiRevision = (
@@ -369,6 +386,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
                         lifetimeMs,
                         fontSize,
                         scaler,
+                        _emojiCache.imageCount,
                       );
                       if (_realtime) {
                         _updateRealtime(controller, width, rows, (
@@ -521,24 +539,42 @@ class _DanmakuMotionState extends State<_DanmakuMotion>
         oldWidget.width != widget.width ||
         oldWidget.flight.width != widget.flight.width ||
         oldWidget.flight.item.timeMs != widget.flight.item.timeMs) {
-      _sync();
+      final retainPosition =
+          oldWidget.moving == widget.moving &&
+          oldWidget.rate == widget.rate &&
+          oldWidget.revision == widget.revision &&
+          oldWidget.width == widget.width &&
+          oldWidget.flight.item.timeMs == widget.flight.item.timeMs;
+      final x =
+          oldWidget.width -
+          (oldWidget.width + oldWidget.flight.width) * _motion.value;
+      _sync(
+        progress: retainPosition
+            ? ((widget.width - x) / (widget.width + widget.flight.width)).clamp(
+                0.0,
+                1.0,
+              )
+            : null,
+      );
     }
   }
 
-  void _sync() {
+  void _sync({double? progress}) {
     _motion.stop();
     final elapsed = (widget.positionMs - widget.flight.item.timeMs).clamp(
       0,
       widget.lifetimeMs,
     );
-    _motion.value = elapsed / widget.lifetimeMs;
-    if (widget.moving && elapsed < widget.lifetimeMs) {
+    _motion.value = progress ?? elapsed / widget.lifetimeMs;
+    final remaining = widget.lifetimeMs * (1 - _motion.value);
+    if (widget.moving && remaining > 0) {
       _motion.animateTo(
         1,
         duration: Duration(
-          microseconds: ((widget.lifetimeMs - elapsed) * 1000 / widget.rate)
-              .round()
-              .clamp(1, 86400000000),
+          microseconds: (remaining * 1000 / widget.rate).round().clamp(
+            1,
+            86400000000,
+          ),
         ),
         curve: Curves.linear,
       );

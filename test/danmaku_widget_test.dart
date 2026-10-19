@@ -57,7 +57,7 @@ void main() {
       expect(
         find.byWidgetPredicate(
           (widget) =>
-              widget is DanmakuEmojiText && widget.text == '合成弹幕🤭  ♥ 3',
+              widget is DanmakuEmojiText && widget.text == '合成弹幕[偷笑]  ♥ 3',
         ),
         findsOneWidget,
       );

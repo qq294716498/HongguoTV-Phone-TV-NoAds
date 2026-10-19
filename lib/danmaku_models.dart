@@ -29,9 +29,8 @@ List<DanmakuItem> mergeDanmaku(Iterable<DanmakuItem> items) {
   final merged = <DanmakuItem>[];
   for (final item in sorted) {
     if (item.id.isEmpty || item.timeMs < 0 || !seen.add(item.id)) continue;
-    final text = danmakuDisplayText(
-      item.text,
-    ).replaceAll(RegExp(r'\s+'), ' ').trim();
+    final original = item.text.replaceAll(RegExp(r'\s+'), ' ').trim();
+    final text = danmakuDisplayText(original);
     if (text.isEmpty) continue;
     final index = latest[text];
     if (index != null &&
@@ -48,7 +47,7 @@ List<DanmakuItem> mergeDanmaku(Iterable<DanmakuItem> items) {
       merged.add(
         DanmakuItem(
           id: item.id,
-          text: text,
+          text: original,
           timeMs: item.timeMs,
           repeatCount: item.repeatCount,
         ),

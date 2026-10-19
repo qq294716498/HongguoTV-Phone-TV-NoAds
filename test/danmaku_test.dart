@@ -59,7 +59,7 @@ void main() {
     ]);
     expect(merged.map((item) => item.id), ['a', 'e', 'd']);
     expect(merged.map((item) => item.repeatCount), [3, 1, 1]);
-    expect(danmakuFlightText(merged.first), '好看 🤭  ♥ 3');
+    expect(danmakuFlightText(merged.first), '好看 [偷笑]  ♥ 3');
     expect(danmakuFlightText(merged.last), '好看 🤭');
   });
 

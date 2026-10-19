@@ -148,6 +148,7 @@ class DanmakuEmojiAssets {
     '🧢': '1f9e2.png',
     '🧧': '1f9e7.png',
     '🧨': '1f9e8.png',
+    '🫡': '1fae1.png',
   };
   static bool _licensesRegistered = false;
 
