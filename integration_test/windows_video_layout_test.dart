@@ -11,6 +11,7 @@ import 'package:duanju_app/video_enhancement_preferences.dart';
 import 'package:duanju_app/windows_desktop.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -39,6 +40,58 @@ List<double> rectangle(Rect rect) => [
   rect.width,
   rect.height,
 ];
+
+List<String> geometryChainFailures(Map<String, Object?> sample) {
+  final failures = <String>[];
+  final native = sample['native'] as Map;
+  if (native['geometryAvailable'] != true)
+    return ['native geometry unavailable'];
+  Rect rect(Object? value) {
+    final values = (value as List).cast<num>();
+    return Rect.fromLTWH(
+      values[0].toDouble(),
+      values[1].toDouble(),
+      values[2].toDouble(),
+      values[3].toDouble(),
+    );
+  }
+
+  void same(Rect actual, Rect expected, String stage) {
+    if ([
+      actual.left - expected.left,
+      actual.top - expected.top,
+      actual.right - expected.right,
+      actual.bottom - expected.bottom,
+    ].any((delta) => delta.abs() > 2)) {
+      failures.add('$stage actual=$actual expected=$expected');
+    }
+  }
+
+  final client = rect(native['clientBounds']);
+  same(
+    rect(native['flutterChildClientBounds']),
+    client,
+    'Flutter child client',
+  );
+  final physical = (sample['viewPhysicalSize'] as List).cast<num>();
+  same(
+    Rect.fromLTWH(0, 0, physical[0].toDouble(), physical[1].toDouble()),
+    Offset.zero & client.size,
+    'Flutter physical view',
+  );
+  final dpr = (sample['devicePixelRatio'] as num).toDouble();
+  final dpi = native['dpi'] as num;
+  if (dpi > 0 && (dpi / 96 - dpr).abs() > .01)
+    failures.add('native DPI / Flutter DPR mismatch');
+  final logical = Rect.fromLTWH(0, 0, physical[0] / dpr, physical[1] / dpr);
+  same(rect(sample['page']), logical, 'Flutter page');
+  same(rect(sample['scaffold']), logical, 'Scaffold');
+  if (sample['fullscreen'] == true) {
+    same(client, rect(native['monitorBounds']), 'fullscreen client / monitor');
+    same(rect(sample['pane']), logical, 'fullscreen video viewport');
+  }
+  return failures;
+}
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -82,6 +135,10 @@ void main() {
       bool bakedBottom = false,
     }) async {
       final videoFinder = find.byType(Video);
+      final native = await desktop.channel.invokeMapMethod<String, dynamic>(
+        'windowGeometry',
+      );
+      expect(native, isNotNull);
       final video = tester.widget<Video>(videoFinder);
       final pane = tester.getRect(videoFinder);
       final fitted = applyBoxFit(BoxFit.contain, source, pane.size);
@@ -152,7 +209,8 @@ void main() {
         }
       }
       final query = MediaQuery.of(tester.element(videoFinder));
-      samples.add({
+      final view = View.of(tester.element(videoFinder));
+      final sample = <String, Object?>{
         'name': name,
         'source': [source.width, source.height],
         'pane': rectangle(pane),
@@ -163,11 +221,41 @@ void main() {
         'padding': query.padding.toString(),
         'viewInsets': query.viewInsets.toString(),
         'devicePixelRatio': query.devicePixelRatio,
+        'viewPhysicalSize': [view.physicalSize.width, view.physicalSize.height],
+        'viewPadding': [
+          view.padding.left,
+          view.padding.top,
+          view.padding.right,
+          view.padding.bottom,
+        ],
+        'page': rectangle(tester.getRect(find.byKey(boundaryKey))),
+        'scaffold': rectangle(tester.getRect(find.byType(Scaffold))),
+        'controlsRect': rectangle(
+          tester.getRect(find.byKey(const ValueKey('player-chrome'))),
+        ),
+        'native': native,
         'fullscreen': desktop.fullscreen,
         'mini': desktop.mini,
         'controlsHidden': hidden,
         'sourceContainsBottomBlack': bakedBottom,
-      });
+      };
+      failures.addAll(
+        geometryChainFailures(sample).map((failure) => '$name $failure'),
+      );
+      if (hidden) {
+        final shown = samples.last;
+        for (final field in [
+          'pane',
+          'page',
+          'scaffold',
+          'controlsRect',
+          'viewPhysicalSize',
+        ]) {
+          if (!listEquals(sample[field] as List, shown[field] as List))
+            failures.add('$name controls visibility changed $field');
+        }
+      }
+      samples.add(sample);
       image.dispose();
       await File(
         '${directory.path}/layout.json',
@@ -251,10 +339,24 @@ void main() {
                 find.byType(Texture).evaluate().isNotEmpty,
             'video ready ${fixture.key}',
           );
-          for (final mode in ['window', 'fullscreen', 'mini']) {
-            if (mode == 'fullscreen') await desktop.setFullscreen(true);
-            if (mode == 'mini')
+          for (final mode in [
+            'window',
+            'fullscreen-window',
+            'maximized',
+            'fullscreen-maximized',
+            'mini',
+            'restored-fullscreen',
+          ]) {
+            if (mode == 'maximized') {
+              await desktop.setFullscreen(false);
+              await windowManager.maximize();
+            }
+            if (mode == 'fullscreen-window' || mode == 'fullscreen-maximized')
+              await desktop.setFullscreen(true);
+            if (mode == 'mini') {
               await desktop.enterMini(aspectRatio: fixture.value.aspectRatio);
+            }
+            if (mode == 'restored-fullscreen') await desktop.leaveMini();
             await tester.pump(const Duration(seconds: 1));
             final mouse = await tester.createGesture(
               kind: PointerDeviceKind.mouse,
@@ -288,6 +390,8 @@ void main() {
           }
           await desktop.leaveMini();
           await desktop.setFullscreen(false);
+          await windowManager.unmaximize();
+          await windowManager.setSize(const Size(1200, 800));
           await tester.pumpWidget(const SizedBox.shrink());
           await tester.pump(const Duration(milliseconds: 300));
           await desktop.playbackDisposal;
@@ -302,5 +406,5 @@ void main() {
       desktop.dispose();
       await windowManager.setPreventClose(false);
     }
-  }, timeout: const Timeout(Duration(minutes: 10)));
+  }, timeout: const Timeout(Duration(minutes: 15)));
 }

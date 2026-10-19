@@ -2,7 +2,7 @@ name: Windows video layout diagnostics
 
 on:
   push:
-    branches: [fix/windows-layout-description-skip-0.1.20-45]
+    branches: [fix/windows-layout-description-skip-0.1.20-45, fix/windows-client-viewport-0.1.21-46]
     paths:
       - integration_test/windows_video_layout_test.dart
       - .github/workflows/windows-video-layout.yml
@@ -18,7 +18,7 @@ concurrency:
 jobs:
   windows-layout:
     runs-on: windows-2022
-    timeout-minutes: 35
+    timeout-minutes: 40
     env:
       GOPROXY: https://proxy.golang.org,direct
       GOSUMDB: sum.golang.org

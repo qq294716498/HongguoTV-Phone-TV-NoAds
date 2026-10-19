@@ -102,10 +102,30 @@ bool FlutterWindow::OnCreate() {
       values[flutter::EncodableValue("trayBrandIcon")] = flutter::EncodableValue(tray_active_ && tray_icon_ == brand && brand != nullptr);
       result->Success(flutter::EncodableValue(values));
     } else if (call.method_name() == "windowGeometry") {
-      RECT bounds;
+      RECT bounds{};
       POINT origin = {0, 0};
-      GetWindowRect(GetHandle(), &bounds);
-      ClientToScreen(GetHandle(), &origin);
+      RECT client{}, child_bounds{}, child_client{};
+      POINT child_origin = {0, 0};
+      const HWND child = flutter_controller_->view()->GetNativeWindow();
+      MONITORINFO monitor{};
+      monitor.cbSize = sizeof(monitor);
+      const bool measured = GetWindowRect(GetHandle(), &bounds) &&
+        GetClientRect(GetHandle(), &client) && ClientToScreen(GetHandle(), &origin) &&
+        GetWindowRect(child, &child_bounds) && GetClientRect(child, &child_client) &&
+        ClientToScreen(child, &child_origin) &&
+        GetMonitorInfoW(MonitorFromWindow(GetHandle(), MONITOR_DEFAULTTONEAREST), &monitor);
+      OffsetRect(&client, origin.x, origin.y);
+      OffsetRect(&child_client, child_origin.x, child_origin.y);
+      auto rectangle = [](const RECT& rect) {
+        return flutter::EncodableValue(flutter::EncodableList{
+          flutter::EncodableValue(static_cast<int>(rect.left)),
+          flutter::EncodableValue(static_cast<int>(rect.top)),
+          flutter::EncodableValue(static_cast<int>(rect.right - rect.left)),
+          flutter::EncodableValue(static_cast<int>(rect.bottom - rect.top))});
+      };
+      using WindowDpi = UINT(WINAPI*)(HWND);
+      const auto window_dpi = reinterpret_cast<WindowDpi>(GetProcAddress(
+        GetModuleHandleW(L"user32.dll"), "GetDpiForWindow"));
       const auto edge = SendMessageW(GetHandle(), WM_NCHITTEST, 0,
         MAKELPARAM(bounds.right - 2, bounds.bottom - 2));
       bool caption_buttons = false;
@@ -118,6 +138,17 @@ bool FlutterWindow::OnCreate() {
       values[flutter::EncodableValue("captionInset")] = flutter::EncodableValue(static_cast<int>(origin.y - bounds.top));
       values[flutter::EncodableValue("resizeBorder")] = flutter::EncodableValue(edge == HTBOTTOMRIGHT);
       values[flutter::EncodableValue("captionButtons")] = flutter::EncodableValue(caption_buttons);
+      values[flutter::EncodableValue("geometryAvailable")] = flutter::EncodableValue(measured);
+      values[flutter::EncodableValue("coordinateSpace")] = flutter::EncodableValue("screen device pixels; PerMonitorV2");
+      values[flutter::EncodableValue("windowBounds")] = rectangle(bounds);
+      values[flutter::EncodableValue("clientBounds")] = rectangle(client);
+      values[flutter::EncodableValue("flutterChildBounds")] = rectangle(child_bounds);
+      values[flutter::EncodableValue("flutterChildClientBounds")] = rectangle(child_client);
+      values[flutter::EncodableValue("monitorBounds")] = rectangle(monitor.rcMonitor);
+      values[flutter::EncodableValue("workAreaBounds")] = rectangle(monitor.rcWork);
+      values[flutter::EncodableValue("dpi")] = flutter::EncodableValue(static_cast<int>(window_dpi ? window_dpi(GetHandle()) : 0));
+      values[flutter::EncodableValue("maximized")] = flutter::EncodableValue(IsZoomed(GetHandle()) != FALSE);
+      values[flutter::EncodableValue("minimized")] = flutter::EncodableValue(IsIconic(GetHandle()) != FALSE);
       result->Success(flutter::EncodableValue(values));
     } else if (call.method_name() == "dispose") {
       RemoveTray();

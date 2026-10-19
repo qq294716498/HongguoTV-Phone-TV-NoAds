@@ -902,8 +902,10 @@ class _PlayerScreenState extends State<PlayerScreen>
     final geometry = (
       source,
       pane.size,
+      pane.localToGlobal(Offset.zero),
       texture,
       media.devicePixelRatio,
+      View.of(context).physicalSize,
       media.padding,
       media.viewInsets,
       _showFullscreen,
@@ -914,6 +916,28 @@ class _PlayerScreenState extends State<PlayerScreen>
     DiaryService.add(
       '[WindowsVideo] source=$source viewport=${pane.size} dpr=${media.devicePixelRatio} padding=${media.padding} insets=${media.viewInsets} texture=$texture expectedContain=$expected fullscreen=$_showFullscreen mini=$_windowsMini',
     );
+    final channel = WindowsDesktop.current?.channel;
+    if (channel != null) {
+      unawaited(() async {
+        try {
+          final native = await channel
+              .invokeMapMethod<String, dynamic>('windowGeometry')
+              .timeout(const Duration(seconds: 2));
+          if (mounted &&
+              !_closed &&
+              _windowsVideoGeometry == geometry &&
+              native != null) {
+            DiaryService.add(
+              '[WindowsVideoNative] flutter=$geometry native=$native',
+            );
+          }
+        } catch (error) {
+          if (mounted && !_closed && _windowsVideoGeometry == geometry) {
+            DiaryService.add('[WindowsVideoNative] unavailable=$error');
+          }
+        }
+      }());
+    }
   }
 
   void _attachLanPlayback() {
