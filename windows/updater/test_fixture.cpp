@@ -30,6 +30,13 @@ int wmain(int argc, wchar_t** argv) {
     config << "failed-new-config";
     return 3;
   }
+  if (TEST_BUILD == 39 && mode == "stop-unconfirmed") {
+    std::ofstream config(transaction.parent_path().parent_path() / L"shared_preferences.json");
+    config << "new-config-awaiting-ack";
+    config.close();
+    Sleep(120000);
+    return 5;
+  }
   if (TEST_BUILD == 39 && mode == "hang") {
     Sleep(90000);
     return 4;

@@ -552,6 +552,7 @@ class AppUpdates extends ChangeNotifier {
   AppRelease? release;
   UpdateStage stage = UpdateStage.idle;
   String message = '启动后自动检查，也可手动检查更新';
+  String? installationFailure;
   int downloaded = 0;
   bool _disposed = false;
   bool _cancelled = false;
@@ -579,6 +580,12 @@ class AppUpdates extends ChangeNotifier {
 
   void _notify() {
     if (!_disposed) notifyListeners();
+  }
+
+  void reportWindowsStartupFailure(String failure) {
+    if (!windows || _disposed) return;
+    installationFailure = failure;
+    _notify();
   }
 
   Future<void> setAutomatic(bool value) async {

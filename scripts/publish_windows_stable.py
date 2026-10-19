@@ -116,7 +116,7 @@ def main():
         signature = read_json('Windows-signature.json')
         transactions = read_json('Windows-update-transaction.json')
         cases = transactions.get('cases', [])
-        expected_cases = {'success', 'crash', 'hang', 'busy', 'tamper', 'version', 'semantic', 'architecture', 'unowned', 'junction', 'second-instance', 'real-client-startup-ack'}
+        expected_cases = {'success', 'crash', 'hang', 'busy', 'tamper', 'version', 'semantic', 'architecture', 'unowned', 'junction', 'second-instance', 'cancel-before-ready', 'cancel-after-ready', 'no-handoff', 'stop-unconfirmed', 'real-client-startup-ack'}
         if transactions.get('ok') is not True or transactions.get('build') != int(build) or transactions.get('version') != version or len(cases) != len(expected_cases) or {item.get('case') for item in cases} != expected_cases or not all(item.get('ok') is True for item in cases):
             raise ValueError('Native update transactions not validated')
         real = next(item for item in cases if item['case'] == 'real-client-startup-ack')

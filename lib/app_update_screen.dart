@@ -29,7 +29,7 @@ class AppUpdateTile extends StatelessWidget {
               : '软件更新',
         ),
         subtitle: Text(
-          controller.message,
+          controller.installationFailure ?? controller.message,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
         ),
@@ -48,7 +48,13 @@ class AppUpdateIndicator extends StatelessWidget {
     if (controller == null) return const SizedBox.shrink();
     return ListenableBuilder(
       listenable: controller,
-      builder: (context, _) => controller.hasUpdate
+      builder: (context, _) => controller.installationFailure != null
+          ? IconButton(
+              tooltip: '上次 Windows 更新未完成，查看恢复记录',
+              onPressed: () => openAppUpdates(context),
+              icon: const Icon(Icons.warning_amber_rounded),
+            )
+          : controller.hasUpdate
           ? IconButton(
               tooltip: '发现新版本 ${controller.release!.version}',
               onPressed: () => openAppUpdates(context),
@@ -113,6 +119,19 @@ class AppUpdateScreen extends StatelessWidget {
                     controller.message,
                     key: const ValueKey('app-update-status'),
                   ),
+                  if (controller.installationFailure case final failure?) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      '上次 Windows 更新未完成',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                    SelectableText(
+                      failure,
+                      key: const ValueKey('app-update-installation-failure'),
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   Wrap(
                     spacing: 12,

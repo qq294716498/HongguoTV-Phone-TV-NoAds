@@ -33,7 +33,7 @@ class WindowsStablePublishTests(unittest.TestCase):
         self.write('Windows-signature.json', {'status': 'NotSigned', 'signed': False})
         self.transactions = {'ok': True, 'version': '0.1.14', 'build': 39, 'cases': [{'case': name, 'ok': True, 'build': 39, 'oldBuild': 38, 'startupAcknowledged': True} for name in [
             'success', 'crash', 'hang', 'busy', 'tamper', 'version', 'semantic', 'architecture',
-            'unowned', 'junction', 'second-instance', 'real-client-startup-ack']]}
+            'unowned', 'junction', 'second-instance', 'cancel-before-ready', 'cancel-after-ready', 'no-handoff', 'stop-unconfirmed', 'real-client-startup-ack']]}
         self.write('Windows-update-transaction.json', self.transactions)
         for patch in [mock.patch.object(publish, 'root', self.root), mock.patch.object(publish, 'output', self.output),
                       mock.patch.object(publish, 'github', return_value=json.dumps({'object': {'sha': 'current'}})),

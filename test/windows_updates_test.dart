@@ -300,6 +300,18 @@ void main() {
     expect(find.text('安装更新'), findsNothing);
     expect(platform.installs, 0);
     expect(tester.takeException(), isNull);
+    const failure =
+        'failed: phase=backup-current-directory; Win32=5; '
+        'from=I:\\红果TV; to=I:\\.hongguo-backup';
+    updates.reportWindowsStartupFailure(failure);
+    await tester.runAsync(() => updates.check(manual: true));
+    await tester.pumpAndSettle();
+    expect(updates.installationFailure, failure);
+    expect(
+      find.byKey(const ValueKey('app-update-installation-failure')),
+      findsOneWidget,
+    );
+    expect(find.text(failure), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
   test(

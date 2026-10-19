@@ -13,6 +13,111 @@ import 'app_layout.dart' show appVersion, windowsBuildNumber;
 import 'windows_update_package.dart';
 import 'windows_desktop.dart';
 
+class WindowsUpdateHelper {
+  WindowsUpdateHelper({
+    required this.process,
+    required this.transaction,
+    required this.nonce,
+    this.readyTimeout = const Duration(seconds: 15),
+    this.exitTimeout = const Duration(seconds: 5),
+    this.pollInterval = const Duration(milliseconds: 100),
+  }) {
+    process.stdout.listen((_) {}, onError: (_) {});
+    process.stderr.listen((_) {}, onError: (_) {});
+    exited = process.exitCode.then((code) {
+      exitCode = code;
+      return code;
+    });
+  }
+
+  final Process process;
+  final Directory transaction;
+  final String nonce;
+  final Duration readyTimeout;
+  final Duration exitTimeout;
+  final Duration pollInterval;
+  late final Future<int> exited;
+  int? exitCode;
+
+  Future<void> log(String phase, {Object? error}) async {
+    await File(
+      p.join(transaction.path, 'client-diagnostics.jsonl'),
+    ).writeAsString(
+      '${jsonEncode({'time': DateTime.now().toUtc().toIso8601String(), 'phase': phase, 'helperPid': process.pid, 'helperExitCode': exitCode, if (error != null) 'error': error.toString()})}\n',
+      mode: FileMode.append,
+      flush: true,
+    );
+  }
+
+  Future<void> waitReady() async {
+    await log('waiting-helper-ready');
+    final ready = File(p.join(transaction.path, 'ready.txt'));
+    final status = File(p.join(transaction.path, 'status.txt'));
+    final deadline = DateTime.now().add(readyTimeout);
+    while (DateTime.now().isBefore(deadline)) {
+      if (await status.exists()) {
+        throw StateError(await status.readAsString());
+      }
+      if (exitCode != null) {
+        throw StateError('更新助手 PID ${process.pid} 已退出，退出码 $exitCode');
+      }
+      if (await ready.exists() && await ready.readAsString() == nonce) {
+        await log('helper-ready');
+        return;
+      }
+      await Future<void>.delayed(pollInterval);
+    }
+    throw StateError('更新助手未在就绪时限内完成验证，应用保持运行，旧版未替换');
+  }
+
+  Future<void> authorizeHandoff() async {
+    if (exitCode != null ||
+        await File(p.join(transaction.path, 'cancel.txt')).exists()) {
+      throw StateError('更新助手已退出或事务已取消，旧版未替换');
+    }
+    await File(
+      p.join(transaction.path, 'commit.txt'),
+    ).writeAsString(nonce, flush: true);
+    await log('handoff-authorized');
+  }
+
+  Future<bool> cancelAndWait() async {
+    try {
+      await File(
+        p.join(transaction.path, 'cancel.txt'),
+      ).writeAsString(nonce, flush: true);
+      await log('cancelling-helper');
+    } catch (error) {
+      await _tryLog('cancel-write-failed', error);
+    }
+    if (await _waitExit()) return true;
+    try {
+      final requested = process.kill();
+      await _tryLog('helper-termination-requested', 'requested=$requested');
+    } catch (error) {
+      await _tryLog('helper-termination-failed', error);
+    }
+    return _waitExit();
+  }
+
+  Future<bool> _waitExit() async {
+    try {
+      await exited.timeout(exitTimeout);
+      await _tryLog('helper-exit-confirmed', 'exitCode=$exitCode');
+      return true;
+    } catch (error) {
+      await _tryLog('helper-exit-unconfirmed', error);
+      return false;
+    }
+  }
+
+  Future<void> _tryLog(String phase, Object error) async {
+    try {
+      await log(phase, error: error);
+    } catch (_) {}
+  }
+}
+
 class WindowsUpdateRuntime {
   static Object? owner;
   static bool Function()? playing;
@@ -20,6 +125,7 @@ class WindowsUpdateRuntime {
   static Future<void> Function()? flushStore;
   static bool restarting = false;
   static Directory? startupTransaction;
+  static String? startupFailure;
 
   static Future<void> initialize(List<String> arguments) async {
     if (!Platform.isWindows ||
@@ -39,6 +145,7 @@ class WindowsUpdateRuntime {
     required String executable,
   }) async {
     startupTransaction = null;
+    startupFailure = null;
     if (arguments.length != 2 || arguments.first != '--windows-update-start') {
       throw const FormatException('更新启动参数无效');
     }
@@ -95,6 +202,13 @@ class WindowsUpdateRuntime {
     final transaction = startupTransaction;
     if (transaction == null) return null;
     final fields = await readPlan(File(p.join(transaction.path, 'plan.txt')));
+    final statusFile = File(p.join(transaction.path, 'status.txt'));
+    if (await statusFile.exists()) {
+      final status = await statusFile.readAsString();
+      if (status.startsWith('failed:')) {
+        startupFailure = '$status\n更新诊断与恢复记录：${transaction.path}';
+      }
+    }
     if (fields['build'] == '$windowsBuildNumber') {
       await File(
         p.join(transaction.path, 'ack.txt'),
@@ -120,6 +234,7 @@ class WindowsUpdateRuntime {
     restarting = true;
     Directory? stage;
     Directory? transaction;
+    WindowsUpdateHelper? helperSession;
     var handedOff = false;
     try {
       final root = Directory(p.dirname(Platform.resolvedExecutable));
@@ -207,42 +322,58 @@ class WindowsUpdateRuntime {
       final helper = await File(
         p.join(root.path, 'HongguoTV-updater.exe'),
       ).copy(p.join(transaction.path, 'HongguoTV-updater.exe'));
-      await Process.start(
+      final process = await Process.start(
         helper.path,
         [plan.path],
-        mode: ProcessStartMode.detached,
+        mode: ProcessStartMode.normal,
         workingDirectory: transaction.path,
       );
-      final readyFile = File(p.join(transaction.path, 'ready.txt'));
-      final statusFile = File(p.join(transaction.path, 'status.txt'));
-      final deadline = DateTime.now().add(const Duration(seconds: 15));
-      while (DateTime.now().isBefore(deadline)) {
-        if (await statusFile.exists())
-          throw StateError(await statusFile.readAsString());
-        if (await readyFile.exists() &&
-            await readyFile.readAsString() == nonce) {
-          await WindowsDesktop.current?.prepareForUpdate();
-          try {
-            if (WindowsDesktop.current case final desktop?) {
-              await desktop.finishExit();
-            } else {
-              await windowManager.destroy();
-            }
-          } catch (_) {
-            await WindowsDesktop.current?.cancelUpdateExit();
-            rethrow;
-          }
-          handedOff = true;
-          exit(0);
+      helperSession = WindowsUpdateHelper(
+        process: process,
+        transaction: transaction,
+        nonce: nonce,
+      );
+      await helperSession.waitReady();
+      try {
+        await WindowsDesktop.current?.prepareForUpdate();
+        await helperSession.authorizeHandoff();
+        handedOff = true;
+        if (WindowsDesktop.current case final desktop?) {
+          await desktop.finishExit();
+        } else {
+          await windowManager.destroy();
         }
-        await Future<void>.delayed(const Duration(milliseconds: 100));
+      } catch (_) {
+        handedOff = false;
+        await WindowsDesktop.current?.cancelUpdateExit();
+        rethrow;
       }
-      throw StateError('更新助手未就绪，应用保持运行，旧版未替换');
+      exit(0);
+    } catch (error, stack) {
+      final stopped =
+          helperSession == null || await helperSession.cancelAndWait();
+      if (!stopped) {
+        Error.throwWithStackTrace(
+          StateError(
+            '$error；更新助手 PID ${helperSession.process.pid} 未确认退出，已保留暂存目录 ${stage?.path} 和事务记录 ${transaction?.path}，请保留这些文件以便恢复',
+          ),
+          stack,
+        );
+      }
+      try {
+        if (stage != null && await stage.exists()) {
+          await stage.delete(recursive: true);
+        }
+      } catch (cleanupError) {
+        Error.throwWithStackTrace(
+          StateError('$error；暂存目录清理失败：$cleanupError；事务记录 ${transaction?.path}'),
+          stack,
+        );
+      }
+      rethrow;
     } finally {
       if (!handedOff) {
         restarting = false;
-        if (stage != null && await stage.exists())
-          await stage.delete(recursive: true);
       }
     }
   }

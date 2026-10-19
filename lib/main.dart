@@ -25,6 +25,7 @@ import 'video_enhancement_assets.dart';
 import 'danmaku_emoji_assets.dart';
 import 'diary_service.dart';
 import 'app_updates.dart';
+import 'app_update_screen.dart';
 import 'windows_update_runtime.dart';
 import 'windows_desktop.dart';
 import 'app_origin.dart';
@@ -327,6 +328,22 @@ class _AppBootstrapState extends State<AppBootstrap>
     if (store?.configurationError != null)
       throw StateError(store!.configurationError!);
     final resume = await WindowsUpdateRuntime.ready();
+    if (WindowsUpdateRuntime.startupFailure case final failure?) {
+      AppUpdates.current?.reportWindowsStartupFailure(failure);
+      final context = navigator.currentContext;
+      if (mounted && context != null) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(
+            content: const Text('上次 Windows 更新未完成，已保留恢复记录'),
+            duration: const Duration(seconds: 15),
+            action: SnackBarAction(
+              label: '查看详情',
+              onPressed: () => openAppUpdates(context),
+            ),
+          ),
+        );
+      }
+    }
     if (!mounted ||
         store == null ||
         resume == null ||

@@ -21,9 +21,11 @@ void main() {
     plan = File(p.join(transaction.path, 'plan.txt'));
     executable = p.join(temporary.path, 'program space 中文', 'HongguoTV.exe');
     WindowsUpdateRuntime.startupTransaction = null;
+    WindowsUpdateRuntime.startupFailure = null;
   });
   tearDown(() async {
     WindowsUpdateRuntime.startupTransaction = null;
+    WindowsUpdateRuntime.startupFailure = null;
     await temporary.delete(recursive: true);
   });
   Future<void> writePlan({
@@ -118,6 +120,22 @@ void main() {
           isFalse,
         );
       }
+    },
+  );
+  test(
+    'rollback startup retains exact native diagnostics for the update UI',
+    () async {
+      await writePlan(build: windowsBuildNumber + 1);
+      const failure =
+          'failed: phase=backup-current-directory; '
+          'MoveFileExW(backup-current) failed, Win32=5; from=I:\\红果TV; '
+          'to=I:\\.hongguo-backup';
+      await File(p.join(transaction.path, 'status.txt')).writeAsString(failure);
+      await load();
+      await WindowsUpdateRuntime.ready();
+      expect(WindowsUpdateRuntime.startupFailure, contains(failure));
+      expect(WindowsUpdateRuntime.startupFailure, contains(transaction.path));
+      expect(await File(p.join(transaction.path, 'ack.txt')).exists(), isFalse);
     },
   );
 }

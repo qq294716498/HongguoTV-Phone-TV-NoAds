@@ -39,6 +39,10 @@ def compile_fixtures(directory):
         subprocess.run(['g++.exe', '-std=c++17', '-municode', '-static', f'-DTEST_BUILD={build}',
                         str(root / 'windows/updater/test_fixture.cpp'), str(resource),
                         '-o', str(directory / f'fixture-{build}.exe')], check=True)
+    subprocess.run(['g++.exe', '-std=c++17', '-municode', '-static', '-O2',
+                    '-DNOMINMAX', '-DUNICODE', '-D_UNICODE', '-DHONGGUOTV_UPDATER_TEST',
+                    str(root / 'windows/updater/updater.cpp'), '-lbcrypt', '-lversion',
+                    '-o', str(directory / 'updater-faults.exe')], check=True)
 
 
 def transaction(base, fixtures, mode, real=False):
@@ -49,6 +53,8 @@ def transaction(base, fixtures, mode, real=False):
     backup = base / f'.hongguo-backup-{nonce}'
     support = base / 'support'
     environment = os.environ.copy()
+    if mode == 'stop-unconfirmed':
+        environment['HONGGUOTV_UPDATER_TEST_STOP_FAILURE'] = '1'
     if real:
         environment['APPDATA'] = str(base / 'appdata')
         environment['LOCALAPPDATA'] = str(base / 'localappdata')
@@ -91,7 +97,8 @@ def transaction(base, fixtures, mode, real=False):
     records(install, tx / 'old-files.tsv')
     records(stage, tx / 'new-files.tsv')
     helper = tx / 'HongguoTV-updater.exe'
-    shutil.copyfile(root / 'build/windows/x64/runner/Release/HongguoTV-updater.exe', helper)
+    helper_source = fixtures / 'updater-faults.exe' if mode == 'stop-unconfirmed' else root / 'build/windows/x64/runner/Release/HongguoTV-updater.exe'
+    shutil.copyfile(helper_source, helper)
     parent = subprocess.Popen([str(install / 'HongguoTV.exe'), '--hold', str(tx)], env=environment)
     second = subprocess.Popen([str(install / 'HongguoTV.exe'), '--hold', str(tx)], env=environment) if mode == 'second-instance' else None
     plan = tx / 'plan.txt'
@@ -132,11 +139,18 @@ def transaction(base, fixtures, mode, real=False):
             handle = kernel.CreateFileW(str(install / 'HongguoTV.exe'), 0x80000000, 1, None, 3, 0, None)
             if handle in [None, ctypes.c_void_p(-1).value]:
                 raise RuntimeError('Cannot create busy file fixture')
+        if mode == 'cancel-before-ready':
+            (tx / 'cancel.txt').write_text(nonce, encoding='ascii')
         process = subprocess.Popen([str(helper), str(plan)], env=environment, cwd=tx)
         wait_for(lambda: (tx / 'ready.txt').exists() or (tx / 'status.txt').exists())
         if (tx / 'ready.txt').exists():
-            (tx / 'stop-old').touch()
-            parent.wait(timeout=10)
+            if mode == 'cancel-after-ready':
+                (tx / 'cancel.txt').write_text(nonce, encoding='ascii')
+            else:
+                if mode != 'no-handoff':
+                    (tx / 'commit.txt').write_text(nonce, encoding='ascii')
+                (tx / 'stop-old').touch()
+                parent.wait(timeout=10)
         code = process.wait(timeout=90)
         status = (tx / 'status.txt').read_text(encoding='utf-8')
         if mode == 'success':
@@ -146,6 +160,15 @@ def transaction(base, fixtures, mode, real=False):
             if not real:
                 wait_for(lambda: (tx / 'child-39').exists())
                 assert config.read_text(encoding='utf-8') == original
+        elif mode == 'stop-unconfirmed':
+            assert code == 1 and 'exit unconfirmed; rollback withheld' in status, status
+            assert backup.is_dir() and install.is_dir() and not stage.exists()
+            assert config.read_text(encoding='utf-8') == 'new-config-awaiting-ack'
+            assert (tx / 'preferences-backup.json').read_text(encoding='utf-8') == original
+            assert not (tx / 'child-38').exists()
+            events = [json.loads(line) for line in (tx / 'helper-diagnostics.jsonl').read_text(encoding='utf-8').splitlines()]
+            assert any(event['event'] == 'rollback-withheld' for event in events)
+            assert not any(event['phase'] == 'rollback-directories' for event in events)
         elif mode in ['crash', 'hang']:
             assert code == 1 and 'rolled back' in status, status
             wait_for(lambda: (tx / 'child-38').exists())
@@ -153,6 +176,16 @@ def transaction(base, fixtures, mode, real=False):
             assert hashlib.sha256((install / 'HongguoTV.exe').read_bytes()).digest() == hashlib.sha256((fixtures / 'fixture-38.exe').read_bytes()).digest()
         else:
             assert code == 1 and status.startswith('failed') and not backup.exists(), status
+            if mode in ['cancel-before-ready', 'cancel-after-ready']:
+                assert 'cancelled before directory activation' in status, status
+                assert parent.poll() is None and stage.is_dir()
+            if mode == 'no-handoff':
+                assert 'without update handoff authorization' in status, status
+            if mode == 'busy':
+                assert 'phase=backup-current-directory' in status and 'Win32=' in status, status
+                events = [json.loads(line) for line in (tx / 'helper-diagnostics.jsonl').read_text(encoding='utf-8').splitlines()]
+                failures = [event for event in events if event['event'] == 'MoveFileExW-failure']
+                assert failures and all(int(event['win32Error']) != 0 and event['from'] == str(install) and event['to'] == str(backup) for event in failures)
             if mode == 'unowned':
                 assert (install / 'personal-file.txt').read_text() == 'preserve this file'
         if real:
@@ -161,7 +194,8 @@ def transaction(base, fixtures, mode, real=False):
             assert phase['phase'] == 'acknowledged' and phase['nonce'] == nonce, phase
             assert json.loads(config.read_text(encoding='utf-8'))['flutter.app_origin_notice_acknowledged_v1'] is True
         return {'case': 'real-client-startup-ack' if real else mode, 'ok': True, 'status': status,
-                'configurationPreserved': True, 'architecture': 'x64',
+                'configurationPreserved': mode != 'stop-unconfirmed',
+                'configurationBackupPreserved': True, 'architecture': 'x64',
                 'build': build, 'oldBuild': old_build, 'startupAcknowledged': real}
     except BaseException:
         if real:
@@ -188,11 +222,12 @@ def transaction(base, fixtures, mode, real=False):
         if handle:
             kernel.CloseHandle.argtypes = [ctypes.c_void_p]
             kernel.CloseHandle(handle)
-        if real:
+        if real or mode == 'stop-unconfirmed':
             pid_file = tx / 'started-pids.txt'
             if pid_file.exists():
                 for child_pid in pid_file.read_text().splitlines():
                     subprocess.run(['taskkill', '/F', '/PID', child_pid], capture_output=True)
+        if real:
             if existing_config is not None:
                 config.write_bytes(existing_config)
             else:
@@ -207,7 +242,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix='hongguo-update-') as temporary:
         base = Path(temporary)
         compile_fixtures(base)
-        for mode in ['success', 'crash', 'hang', 'busy', 'tamper', 'version', 'semantic', 'architecture', 'unowned', 'junction', 'second-instance']:
+        for mode in ['success', 'crash', 'hang', 'busy', 'tamper', 'version', 'semantic', 'architecture', 'unowned', 'junction', 'second-instance', 'cancel-before-ready', 'cancel-after-ready', 'no-handoff', 'stop-unconfirmed']:
             results.append(transaction(base / mode, base, mode))
             print(json.dumps(results[-1]))
         results.append(transaction(base / 'real', base, 'success', real=True))
