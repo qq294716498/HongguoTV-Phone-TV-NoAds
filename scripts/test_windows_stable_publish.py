@@ -38,7 +38,8 @@ class WindowsStablePublishTests(unittest.TestCase):
         for patch in [mock.patch.object(publish, 'root', self.root), mock.patch.object(publish, 'output', self.output),
                       mock.patch.object(publish, 'github', return_value=json.dumps({'object': {'sha': 'current'}})),
                       mock.patch.dict(publish.os.environ, {'GITHUB_SHA': 'current'}),
-                      mock.patch.object(publish.os, 'chdir')]:
+                      mock.patch.object(publish.os, 'chdir'),
+                      mock.patch.object(publish, 'validate_release_source')]:
             patch.start()
             self.addCleanup(patch.stop)
 

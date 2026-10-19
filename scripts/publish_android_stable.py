@@ -6,31 +6,34 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 
 root = Path(__file__).resolve().parents[1]
 output = root / 'dist/android'
 repository = 'qq294716498/HongguoTV-Phone-TV-NoAds'
 certificate = '55c3c3395a00e56e99b8bfd580b14c99618da74db19692a2e42606eb05c47ba9'
-windows_tag = 'windows-v0.1.17-42'
-windows_tags = ('windows-v0.1.15-40', windows_tag)
+windows_tag = 'windows-v0.1.19-44'
+windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', windows_tag)
 offsets = {'arm64-v8a': 2000, 'armeabi-v7a': 1000, 'x86_64': 4000}
-release_branch = 'release/tv-0.1.18-43'
-tv_source = '0cf19ed34f5dd84bcd5d0a6e777f0eab2e92081b'
-windows_source = '34ec11d73de7b796e444bcf81463e2e9a203650b'
+release_branch = 'release/windows-android-0.1.19-44'
+approved_source = '8ff55a1fe9f559b823a6b19be3a4a51dfbf4d429'
 release_only_paths = frozenset({
     'README.md', '.github/workflows/android-stable.yml',
+    '.github/workflows/windows-preview.yml',
     'scripts/publish_android_stable.py', 'scripts/test_android_stable_publish.py',
-    'test/app_update_live_test.dart',
+    'scripts/publish_windows_stable.py', 'scripts/test_windows_stable_publish.py',
+    'scripts/reuse_windows_package.py', 'scripts/test_reuse_windows_package.py',
+    'test/app_update_live_test.dart', 'test/windows_update_live_test.dart',
 })
 
 
 def validate_release_source(commit):
-    ancestor = subprocess.check_output(['git', 'merge-base', tv_source, commit], cwd=root, text=True).strip()
-    if ancestor != tv_source:
-        raise ValueError('Release must descend from the approved TV source')
-    changed = set(subprocess.check_output(['git', 'diff', '--name-only', tv_source, commit, '--'], cwd=root, text=True).splitlines())
+    ancestor = subprocess.check_output(['git', 'merge-base', approved_source, commit], cwd=root, text=True).strip()
+    if ancestor != approved_source:
+        raise ValueError('Release must descend from the approved runtime source')
+    changed = set(subprocess.check_output(['git', 'diff', '--name-only', approved_source, commit, '--'], cwd=root, text=True).splitlines())
     if changed - release_only_paths:
-        raise ValueError('Runtime source changed beyond the approved TV commit: ' + ', '.join(sorted(changed - release_only_paths)))
+        raise ValueError('Runtime source changed beyond the approved runtime commit: ' + ', '.join(sorted(changed - release_only_paths)))
 
 
 def github(*arguments):
@@ -54,6 +57,25 @@ def validated_windows_snapshots(commit):
     if candidate['draft'] or candidate['prerelease'] or candidate['target_commitish'] != commit or not required.issubset({asset['name'] for asset in candidate['assets']}):
         raise ValueError('Published Windows baseline is not finalized or has a different source')
     return {name: snapshot(value) for name, value in published.items()}
+
+
+def wait_for_windows(commit, timeout=1200):
+    deadline = time.monotonic() + timeout
+    required = {'Windows-update-check.json', 'Windows-update-channel.json', 'Android-isolation.json', 'SHA256SUMS.txt'}
+    while time.monotonic() < deadline:
+        result = subprocess.run(['gh', 'api', f'repos/{repository}/releases/tags/{windows_tag}'], capture_output=True, text=True)
+        if result.returncode == 0:
+            candidate = json.loads(result.stdout)
+            if candidate['target_commitish'] != commit:
+                raise ValueError('Windows release source differs from this Android candidate')
+            if not candidate['draft'] and not candidate['prerelease'] and required.issubset({asset['name'] for asset in candidate['assets']}):
+                print('Matching Windows release finalized; Android public validation may proceed.', flush=True)
+                return
+        elif '404' not in result.stderr:
+            raise ValueError('Unable to verify the Windows release dependency: ' + result.stderr)
+        print('Waiting for the matching Windows release to finish public update and isolation checks.', flush=True)
+        time.sleep(30)
+    raise TimeoutError('Windows release dependency did not finalize before the Android publication deadline')
 
 
 def write(name, value):
@@ -87,12 +109,14 @@ def main():
     os.chdir(root)
     version, raw_build = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(), re.M).group(1).split('+')
     build = int(raw_build)
-    if version != '0.1.18' or build != 43:
-        raise ValueError('This workflow only publishes Android 0.1.18+43')
+    if version != '0.1.19' or build != 44:
+        raise ValueError('This workflow only publishes Android 0.1.19+44')
     validate_release_source(os.environ['GITHUB_SHA'])
     tag = f'app-v{version}-{build}'
     phase = sys.argv[1]
-    if phase == 'stage':
+    if phase == 'wait-windows':
+        wait_for_windows(os.environ['GITHUB_SHA'])
+    elif phase == 'stage':
         head = json.loads(github('api', f'repos/{repository}/git/ref/heads/{release_branch}'))['object']['sha']
         if head != os.environ['GITHUB_SHA']:
             raise ValueError('Newer Android source superseded this build')
@@ -103,22 +127,22 @@ def main():
         if exists.returncode == 0:
             raise ValueError('Release exists; never replace published APK assets')
         latest = json.loads(github('api', f'repos/{repository}/releases/latest'))
-        if latest['tag_name'] != 'app-v0.1.17-42' or int(latest['tag_name'].rsplit('-', 1)[1]) >= build:
+        if latest['tag_name'] != 'app-v0.1.18-43' or int(latest['tag_name'].rsplit('-', 1)[1]) >= build:
             raise ValueError('Android version must increase beyond current stable')
         listed = json.loads(github('api', f'repos/{repository}/releases?per_page=100'))
         for item in listed:
             match = re.fullmatch(r'app-v\d+\.\d+\.\d+-(\d+)', item['tag_name'])
             if match and int(match[1]) >= build:
                 raise ValueError('A newer or reserved Android build already exists')
-        write('Release-before.json', {'android': snapshot(latest), 'windows': validated_windows_snapshots(windows_source)})
-        subprocess.run([sys.executable, 'scripts/finish_task.py', '--message', 'Android 0.1.18 TV 弹幕真实时长、遥控搜索焦点、紧凑控制条与选集、播放方向键和菜单键；三ABI既有正式签名构建及集中回归通过，未实测实体TV'], check=True)
+        write('Release-before.json', {'android': snapshot(latest), 'windows': validated_windows_snapshots(os.environ['GITHUB_SHA'])})
+        subprocess.run([sys.executable, 'scripts/finish_task.py', '--message', 'Android 0.1.19 TV全局持久解码模式与失败恢复入口；Windows更新事务、诊断及托盘暂停；三ABI既有正式签名构建及集中回归通过，未实测实体TV'], check=True)
         subprocess.run([sys.executable, 'scripts/sync_source.py', '--check'], check=True)
         source = max(root.parent.glob('真果·鉴-*.zip'), key=lambda p: p.stat().st_mtime_ns)
         source_package = output / f'HongguoTV-{version}-source.zip'
         shutil.copy2(source, source_package)
         write('Source-and-checks.json', {'version': version, 'build': build, 'sourceCommit': head,
-              'androidBaseline': 'app-v0.1.17-42', 'preservedWindowsBaseline': windows_tag,
-              'runtimeBaselineCommit': tv_source, 'runtimeChangesBeyondApprovedTvCommit': False,
+              'androidBaseline': 'app-v0.1.18-43', 'preservedWindowsBaseline': windows_tag,
+              'runtimeBaselineCommit': approved_source, 'runtimeChangesBeyondApprovedCommit': False,
               'workflowRun': f'https://github.com/{repository}/actions/runs/{os.environ["GITHUB_RUN_ID"]}',
               'sourceArchiveSha256': digest(source_package), 'expectedCertificate': certificate,
               'formatAnalysisPythonFlutterAndGoRacePassed': True, 'allThreeSignedApksValidated': True,
@@ -164,7 +188,7 @@ def main():
         (output / 'SHA256SUMS.txt').write_text(''.join(f'{digest(p)}  {p.name}\n' for p in files), encoding='ascii')
         subprocess.run(['gh', 'release', 'upload', tag, *[str(output / name) for name in ['staged-apk-validation.json', 'latest-apk-validation.json', 'staged-update-check.json', 'latest-update-check.json', 'Windows-isolation.json', 'SHA256SUMS.txt']]], check=True)
     else:
-        raise ValueError('Expected stage, promote or finalize')
+        raise ValueError('Expected wait-windows, stage, promote or finalize')
 
 
 if __name__ == '__main__':

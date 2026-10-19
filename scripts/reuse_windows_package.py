@@ -7,25 +7,51 @@ import subprocess
 import zipfile
 
 
+approved_commit = '8c999359160d7127d9358cf605b86a1b1cd81cbf'
+approved_run = '39221734603'
+approved_sha256 = '5086ae22e2bb1c34fa45b1f93f8f0659158b062a83f326c6ea8ae52e59314b05'
+release_only_paths = frozenset({
+    'README.md', '.github/workflows/android-stable.yml',
+    '.github/workflows/windows-preview.yml',
+    'scripts/publish_android_stable.py', 'scripts/test_android_stable_publish.py',
+    'scripts/publish_windows_stable.py', 'scripts/test_windows_stable_publish.py',
+    'scripts/reuse_windows_package.py', 'scripts/test_reuse_windows_package.py',
+    'test/app_update_live_test.dart', 'test/windows_update_live_test.dart',
+})
+
+
+def validate_original_run(run, run_id):
+    if (run_id != approved_run or str(run.get('id')) != approved_run
+            or run.get('head_sha') != approved_commit
+            or run.get('conclusion') != 'success'
+            or run.get('path') != '.github/workflows/windows-preview.yml'
+            or run.get('head_repository', {}).get('full_name') != 'qq294716498/HongguoTV-Phone-TV-NoAds'):
+        raise ValueError('Original run is not the approved successful Windows build')
+
+
+def validate_source(root):
+    changed = set(subprocess.check_output(['git', 'diff', '--name-only', approved_commit, 'HEAD'], cwd=root, text=True).splitlines())
+    if changed - release_only_paths:
+        raise ValueError('Application or build inputs changed; a fresh compilation is required')
+
+
 def main():
     root = Path(__file__).resolve().parents[1]
     os.chdir(root)
-    commit = 'ee60cf8abada4b75f9f57dac24a6adb154641f06'
+    commit = approved_commit
     run_id = os.environ['REUSE_RUN_ID']
     if not re.fullmatch(r'\d+', run_id):
         raise ValueError('Invalid original build run')
     run = json.loads(subprocess.check_output([
         'gh', 'api', f'repos/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/{run_id}'], text=True))
-    if run['head_sha'] != commit:
-        raise ValueError('Original run does not contain the expected compiled source')
+    validate_original_run(run, run_id)
     subprocess.run(['git', 'fetch', '--depth=1', 'origin', commit], check=True)
-    changed = set(subprocess.check_output(['git', 'diff', '--name-only', commit, 'HEAD'], text=True).splitlines())
-    allowed = {'scripts/smoke_windows.py', 'scripts/reuse_windows_package.py', '.github/workflows/windows-preview.yml'}
-    if changed - allowed:
-        raise ValueError('Application or build inputs changed; a fresh compilation is required')
+    validate_source(root)
     output = root / 'dist/windows'
     validation = json.loads((output / 'Windows-validation.json').read_text(encoding='utf-8-sig'))
-    if validation.get('ok') is not True or validation.get('architecture') != 'x64':
+    if (validation.get('ok') is not True or validation.get('architecture') != 'x64'
+            or validation.get('version') != '0.1.19' or validation.get('build') != 44
+            or validation.get('sha256') != approved_sha256):
         raise ValueError('The original package did not pass validation')
     package = output / validation['package']
     if package.parent != output or package.stat().st_size != validation['bytes']:

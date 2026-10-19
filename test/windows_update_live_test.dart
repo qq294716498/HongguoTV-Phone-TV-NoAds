@@ -90,13 +90,27 @@ void main() {
       ).latest();
       expect(android['tag_name'], Platform.environment['EXPECTED_ANDROID_TAG']);
       expect(android['prerelease'], false);
+      final androidTag = RegExp(
+        r'^app-v(\d+\.\d+\.\d+)-(\d+)$',
+      ).firstMatch(android['tag_name'] as String)!;
+      final androidBuild = int.parse(androidTag[2]!);
       for (final abi in updateAbiOffsets.keys) {
+        final androidRelease = AppRelease.parse(
+          android,
+          InstalledApp(
+            version: '0.1.17',
+            code: updateAbiOffsets[abi]! + 42,
+            abi: abi,
+          ),
+        );
+        expect(androidRelease, isNotNull);
+        expect(androidRelease!.code, updateAbiOffsets[abi]! + androidBuild);
         expect(
           AppRelease.parse(
             android,
             InstalledApp(
-              version: '0.1.16',
-              code: updateAbiOffsets[abi]! + 41,
+              version: androidTag[1]!,
+              code: updateAbiOffsets[abi]! + androidBuild,
               abi: abi,
             ),
           ),
@@ -112,6 +126,7 @@ void main() {
           'downloadSha256': digest,
           'sameBuildIgnored': true,
           'androidRejectsWindowsTag': true,
+          'androidAbiSelectionVerified': true,
           'windowsPrerelease': false,
           'rateLimitFallbackVerified': true,
           'realCrossVersionInstallationTested': false,

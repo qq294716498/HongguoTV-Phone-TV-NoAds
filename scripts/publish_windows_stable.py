@@ -12,6 +12,26 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[1]
 output = root / 'dist/windows'
 repository = 'qq294716498/HongguoTV-Phone-TV-NoAds'
+release_branch = 'release/windows-android-0.1.19-44'
+approved_source = '8ff55a1fe9f559b823a6b19be3a4a51dfbf4d429'
+previous_windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42')
+release_only_paths = frozenset({
+    'README.md', '.github/workflows/android-stable.yml',
+    '.github/workflows/windows-preview.yml',
+    'scripts/publish_android_stable.py', 'scripts/test_android_stable_publish.py',
+    'scripts/publish_windows_stable.py', 'scripts/test_windows_stable_publish.py',
+    'scripts/reuse_windows_package.py', 'scripts/test_reuse_windows_package.py',
+    'test/app_update_live_test.dart', 'test/windows_update_live_test.dart',
+})
+
+
+def validate_release_source(commit):
+    ancestor = subprocess.check_output(['git', 'merge-base', approved_source, commit], cwd=root, text=True).strip()
+    if ancestor != approved_source:
+        raise ValueError('Release must descend from the approved runtime source')
+    changed = set(subprocess.check_output(['git', 'diff', '--name-only', approved_source, commit, '--'], cwd=root, text=True).splitlines())
+    if changed - release_only_paths:
+        raise ValueError('Runtime source changed beyond the approved runtime commit: ' + ', '.join(sorted(changed - release_only_paths)))
 
 
 def github(*arguments):
@@ -108,7 +128,8 @@ def main():
     tag = f'windows-v{version}-{build}'
     package = output / f'HongguoTV-{version}-windows-x64.zip'
     if sys.argv[1] == 'stage':
-        current_head = json.loads(github('api', f'repos/{repository}/git/ref/heads/fix/follow-sync-danmaku-ribbon-0.1.17-42'))['object']['sha']
+        validate_release_source(os.environ['GITHUB_SHA'])
+        current_head = json.loads(github('api', f'repos/{repository}/git/ref/heads/{release_branch}'))['object']['sha']
         if current_head != os.environ['GITHUB_SHA']:
             raise ValueError('A newer source commit superseded this release candidate')
         validation = read_json('Windows-validation.json')
@@ -144,7 +165,7 @@ def main():
         exists = subprocess.run(['gh', 'release', 'view', tag], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if exists.returncode == 0:
             raise ValueError('Release exists; never replace published assets')
-        write_json('Windows-previous-release.json', release_identity(json.loads(github('api', f'repos/{repository}/releases/tags/windows-v0.1.15-40'))))
+        write_json('Windows-previous-release.json', {name: release_identity(json.loads(github('api', f'repos/{repository}/releases/tags/{name}'))) for name in previous_windows_tags})
         android = metadata()
         if not android['tag'].startswith('app-v'):
             raise ValueError('Android latest is not an Android release')
@@ -169,7 +190,7 @@ def main():
         ci = f'https://github.com/{repository}/actions/runs/{os.environ["GITHUB_RUN_ID"]}'
         write_json('Source-and-checks.json', {
             'version': version, 'build': int(build), 'sourceCommit': commit,
-            'baselineTag': 'app-v0.1.16-41', 'baselineCommit': '49e8200bae9d58e6266fa23382ef649d8a44adf2',
+            'baselineTag': 'app-v0.1.18-43', 'baselineCommit': '7544a0566b34aff5d853bd1b6f64c6a7cb3a1701',
             'workflowRun': ci,
             'binaryBuildCommit': os.environ.get('WINDOWS_BINARY_COMMIT', commit),
             'binaryBuildRun': os.environ.get('WINDOWS_BINARY_RUN', os.environ['GITHUB_RUN_ID']),
@@ -182,7 +203,7 @@ def main():
                           'public-release-to-running-previous-client replacement', 'consumer Windows 10/11 GPU/CPU compatibility',
                           'audio device output']})
         readme = (root / 'README.md').read_text(encoding='utf-8')
-        notes = readme.split('## Windows 正式版：', 1)[1].split('## Android 最近更新：', 1)[0]
+        notes = readme.split('## Windows 正式版：', 1)[1].split('\n## ', 1)[0]
         notes += f'\n构建及静态回归、Windows 完整包与合成媒体启动验证已通过。\n\n源码提交：https://github.com/{repository}/commit/{commit}\n\nCI：{ci}\n\n校验：SHA256SUMS.txt。Windows 正式渠道发布后继续验证实际更新下载和 Android Latest 隔离。\n'
         notes_file = Path(os.environ['RUNNER_TEMP']) / 'windows-release-notes.md'
         notes_file.write_text(notes, encoding='utf-8')
@@ -204,8 +225,8 @@ def main():
         after = metadata()
         if isolation['before'] != after:
             raise ValueError('Android Latest or original assets changed during Windows release')
-        previous_windows = json.loads(github('api', f'repos/{repository}/releases/tags/windows-v0.1.15-40'))
-        if release_identity(previous_windows) != read_json('Windows-previous-release.json'):
+        previous_windows = {name: release_identity(json.loads(github('api', f'repos/{repository}/releases/tags/{name}'))) for name in previous_windows_tags}
+        if previous_windows != read_json('Windows-previous-release.json'):
             raise ValueError('Previously published Windows release changed during patch publication')
         update = read_json('Windows-update-check.json')
         if update['ok'] is not True or update['windowsTag'] != tag or update['androidLatest'] != after['tag']:
@@ -217,7 +238,7 @@ def main():
         if channel.get('ok') is not True or channel.get('tag') != tag or update.get('rateLimitFallbackVerified') is not True:
             raise ValueError('Windows fallback update channel has not been verified')
         isolation.update(after=after, ok=True, windowsPrerelease=False, windowsMarkedLatest=False,
-                         previousWindowsTag='windows-v0.1.15-40', previousWindowsUnchanged=True)
+                         previousWindowsTags=list(previous_windows_tags), previousWindowsUnchanged=True)
         write_json('Android-isolation.json', isolation)
         files = sorted(file for file in output.iterdir() if file.is_file() and file.name != 'SHA256SUMS.txt')
         (output / 'SHA256SUMS.txt').write_text(''.join(

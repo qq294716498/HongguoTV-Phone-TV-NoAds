@@ -1,4 +1,5 @@
 import hashlib
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -10,6 +11,25 @@ from publish_android_stable import certificate, offsets, validate_apks
 
 
 class AndroidStablePublishTests(unittest.TestCase):
+    def test_android_waits_for_final_windows_evidence_without_republishing_it(self):
+        names = ['Windows-update-check.json', 'Windows-update-channel.json', 'Android-isolation.json', 'SHA256SUMS.txt']
+        complete = dict(target_commitish='current', draft=False, prerelease=False,
+                        assets=[{'name': name} for name in names])
+        waiting = mock.Mock(returncode=0, stdout=json.dumps({**complete, 'assets': complete['assets'][:-1]}))
+        ready = mock.Mock(returncode=0, stdout=json.dumps(complete))
+        with mock.patch.object(publish.subprocess, 'run', side_effect=[waiting, ready]) as calls, mock.patch.object(publish.time, 'sleep') as sleep:
+            publish.wait_for_windows('current')
+            self.assertEqual(calls.call_count, 2)
+            self.assertTrue(all(call.args[0][0:2] == ['gh', 'api'] for call in calls.call_args_list))
+            sleep.assert_called_once_with(30)
+
+    def test_windows_dependency_denies_different_source_and_permission_errors(self):
+        for result in [mock.Mock(returncode=0, stdout=json.dumps({'target_commitish': 'other'})),
+                       mock.Mock(returncode=1, stderr='HTTP 403: Resource not accessible by integration')]:
+            with mock.patch.object(publish.subprocess, 'run', return_value=result), mock.patch.object(publish.time, 'sleep') as sleep, self.assertRaises(ValueError):
+                publish.wait_for_windows('current')
+            sleep.assert_not_called()
+
     def test_published_windows_baseline_is_verified_and_preserved_without_republishing(self):
         assets = [{'id': n, 'name': name, 'size': 1, 'digest': 'sha256:synthetic'}
                   for n, name in enumerate(['Windows-update-check.json', 'Windows-update-channel.json',
@@ -30,12 +50,12 @@ class AndroidStablePublishTests(unittest.TestCase):
                 current[field] = previous
 
     def test_release_scope_rejects_windows_runtime_and_other_unapproved_changes(self):
-        with mock.patch.object(publish.subprocess, 'check_output', side_effect=[publish.tv_source, 'README.md\n.github/workflows/android-stable.yml\n']):
+        with mock.patch.object(publish.subprocess, 'check_output', side_effect=[publish.approved_source, 'README.md\n.github/workflows/android-stable.yml\n']):
             publish.validate_release_source('candidate')
         for changed in ['lib/windows_desktop.dart', 'lib/player_screen.dart', 'pubspec.yaml']:
-            with mock.patch.object(publish.subprocess, 'check_output', side_effect=[publish.tv_source, changed]), self.subTest(changed=changed), self.assertRaisesRegex(ValueError, 'Runtime source changed'):
+            with mock.patch.object(publish.subprocess, 'check_output', side_effect=[publish.approved_source, changed]), self.subTest(changed=changed), self.assertRaisesRegex(ValueError, 'Runtime source changed'):
                 publish.validate_release_source('candidate')
-        with mock.patch.object(publish.subprocess, 'check_output', return_value='other'), self.assertRaisesRegex(ValueError, 'approved TV source'):
+        with mock.patch.object(publish.subprocess, 'check_output', return_value='other'), self.assertRaisesRegex(ValueError, 'approved runtime source'):
             publish.validate_release_source('candidate')
 
     def test_signing_preflight_reports_presence_without_secret_values(self):

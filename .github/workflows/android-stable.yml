@@ -138,14 +138,15 @@ jobs:
           retention-days: 14
   release:
     needs: [checks, android]
-    if: github.event_name == 'workflow_dispatch' && inputs.publish_release && github.ref == 'refs/heads/release/tv-0.1.18-43'
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_release && github.ref == 'refs/heads/release/windows-android-0.1.19-44'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     permissions:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
-      EXPECTED_UPDATE_TAG: app-v0.1.18-43
+      EXPECTED_UPDATE_TAG: app-v0.1.19-44
+      EXPECTED_WINDOWS_TAG: windows-v0.1.19-44
       CHECK_LIVE_UPDATE: 'true'
       CHECK_UPDATE_DOWNLOAD: 'true'
     steps:
@@ -167,6 +168,8 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get --enforce-lockfile
+      - name: Wait for matching Windows publication and isolation checks
+        run: python3 scripts/publish_android_stable.py wait-windows
       - name: Stage signed immutable Android candidate and preserve Windows assets
         run: python3 scripts/publish_android_stable.py stage
       - name: Download staged APKs through the actual updater
@@ -198,7 +201,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: android-0.1.18-release-evidence
+          name: android-0.1.19-release-evidence
           path: |
             dist/android/*
             dist/update-check/*-update-check.json

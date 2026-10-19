@@ -35,8 +35,8 @@ void main() {
       final results = <Map<String, Object>>[];
       for (final entry in updateAbiOffsets.entries) {
         final installed = InstalledApp(
-          version: '0.1.17',
-          code: entry.value + 42,
+          version: '0.1.18',
+          code: entry.value + 43,
           abi: entry.key,
         );
         final release = AppRelease.parse(stableData, installed);
@@ -77,14 +77,27 @@ void main() {
         clientFactory: () =>
             HttpClient()..findProxy = HttpClient.findProxyFromEnvironment,
       ).latest();
-      expect(windows['tag_name'], 'windows-v0.1.17-42');
+      final expectedWindowsTag = Platform.environment['EXPECTED_WINDOWS_TAG']!;
+      expect(windows['tag_name'], expectedWindowsTag);
       expect(windows['prerelease'], false);
+      final windowsBuild = int.parse(expectedWindowsTag.split('-').last);
+      expect(
+        AppRelease.parseWindows(
+          windows,
+          InstalledApp(
+            version: '0.1.19',
+            code: windowsBuild,
+            abi: 'windows-x64',
+          ),
+        ),
+        isNull,
+      );
       expect(
         AppRelease.parseWindows(
           windows,
           const InstalledApp(version: '0.1.17', code: 42, abi: 'windows-x64'),
-        ),
-        isNull,
+        )!.code,
+        windowsBuild,
       );
       expect(
         () => AppRelease.parseWindows(

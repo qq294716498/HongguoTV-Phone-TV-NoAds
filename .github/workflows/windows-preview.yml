@@ -36,6 +36,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -69,6 +70,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -130,7 +132,7 @@ jobs:
           retention-days: 14
 
   release:
-    if: github.event_name == 'workflow_dispatch' && inputs.publish_release && github.ref == 'refs/heads/fix/follow-sync-danmaku-ribbon-0.1.17-42'
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_release && github.ref == 'refs/heads/release/windows-android-0.1.19-44'
     needs: [checks, windows]
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -138,12 +140,13 @@ jobs:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
-      WINDOWS_BINARY_COMMIT: ${{ inputs.reuse_run_id && 'ee60cf8abada4b75f9f57dac24a6adb154641f06' || github.sha }}
+      WINDOWS_BINARY_COMMIT: ${{ inputs.reuse_run_id && '8c999359160d7127d9358cf605b86a1b1cd81cbf' || github.sha }}
       WINDOWS_BINARY_RUN: ${{ inputs.reuse_run_id || github.run_id }}
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/download-artifact@v4
         with:
           name: hongguotv-windows-x64
