@@ -32,12 +32,12 @@ void main() {
               items: const [
                 DanmakuItem(
                   id: 'first',
-                  text: '爽文怒[爽]【怒】［撇嘴］[戳手手][笑][敬礼][什么][哭][马上有福][未知] 😎',
+                  text: '爽文怒[爽]【怒】［撇嘴］[戳手手][笑][敬礼][什么][哭][吃瓜][马上有福][未知] 😎',
                   timeMs: 0,
                 ),
                 DanmakuItem(
                   id: 'alias',
-                  text: '爽文怒😆😠😒👉👈😄🫡❓😢[马上有福][未知] 😎',
+                  text: '爽文怒😆😠😒👉👈😄🫡❓😢🍉[马上有福][未知] 😎',
                   timeMs: 500,
                 ),
               ],
@@ -64,14 +64,15 @@ void main() {
               ),
             ),
           );
-          const rendered = '爽文怒[爽]【怒】［撇嘴］[戳手手][笑][敬礼][什么][哭][马上有福][未知] 😎  ♥ 2';
+          const rendered =
+              '爽文怒[爽]【怒】［撇嘴］[戳手手][笑][敬礼][什么][哭][吃瓜][马上有福][未知] 😎  ♥ 2';
           final line = find.byWidgetPredicate(
             (widget) => widget is DanmakuEmojiText && widget.text == rendered,
           );
           expect(line, findsOneWidget);
           expect(
             controller.items.single.text,
-            '爽文怒[爽]【怒】［撇嘴］[戳手手][笑][敬礼][什么][哭][马上有福][未知] 😎',
+            '爽文怒[爽]【怒】［撇嘴］[戳手手][笑][敬礼][什么][哭][吃瓜][马上有福][未知] 😎',
           );
           expect(
             find.byKey(const ValueKey('danmaku-item-alias')),
@@ -124,7 +125,7 @@ void main() {
           await tester.pump();
           expect(
             find.descendant(of: line, matching: find.byType(RawImage)),
-            findsNWidgets(10),
+            findsNWidgets(11),
           );
           expect(
             tester.widget<Transform>(motionBeforeDecode).transform.storage[12],

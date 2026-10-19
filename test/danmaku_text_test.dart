@@ -261,8 +261,9 @@ void main() {
       '哭': '😢',
       '什么': '❓',
       '敬礼': '🫡',
+      '吃瓜': '🍉',
     };
-    expect({...officialDouyinExpressionNames, ...aliases.keys}, hasLength(235));
+    expect({...officialDouyinExpressionNames, ...aliases.keys}, hasLength(236));
     for (final entry in aliases.entries) {
       for (final pair in [('[', ']'), ('【', '】'), ('［', '］')]) {
         expect(

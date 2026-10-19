@@ -69,7 +69,7 @@ void main() {
     (tester) async {
       final cache = DanmakuEmojiCache();
       addTearDown(cache.dispose);
-      const text = '中文EN[笑][敬礼][什么][哭][戳手手][未收录][马上有福]end';
+      const text = '中文EN[笑][敬礼][什么][哭][戳手手][吃瓜][未收录][马上有福]end';
       final content = DanmakuEmojiContent.parse(text);
       if (Platform.environment['HG_UI_CAPTURE_DIR'] != null) {
         tester.view.physicalSize = const Size(1100, 240);
@@ -123,7 +123,7 @@ void main() {
       await finishDecoding(tester, cache);
       expect(
         content.span(style, scaler, cache).children!.whereType<WidgetSpan>(),
-        hasLength(6),
+        hasLength(7),
       );
       expect(
         content.span(style, scaler, cache).toPlainText(),
@@ -147,14 +147,14 @@ void main() {
       final bundle = FailingEmojiBundle();
       final cache = DanmakuEmojiCache(bundle: bundle);
       addTearDown(cache.dispose);
-      const text = '力拔EN[笑][敬礼][什么][哭][戳手手][未知][马上有福]\uFFFC';
+      const text = '力拔EN[笑][敬礼][什么][哭][戳手手][吃瓜][未知][马上有福]\uFFFC';
       cache.ensureLoaded([text]);
       await finishDecoding(tester, cache);
       final content = DanmakuEmojiContent.parse(text);
       expect(content.parts.map((p) => p.text).join(), text);
       expect(
         content.span(style, scaler, cache).toPlainText(),
-        '力拔EN[笑][敬礼][什么][哭][戳手手][未知][马上有福][OBJ]',
+        '力拔EN[笑][敬礼][什么][哭][戳手手][吃瓜][未知][马上有福][OBJ]',
       );
       expect(
         content.span(style, scaler, cache).children!.whereType<WidgetSpan>(),
@@ -164,6 +164,36 @@ void main() {
       cache.ensureLoaded([text]);
       expect(bundle.calls, calls);
       expect(cache.loading, isFalse);
+    },
+  );
+
+  testWidgets(
+    'eating-melon aliases share one bundled image and preserve every original token before load',
+    (tester) async {
+      final cache = DanmakuEmojiCache();
+      addTearDown(cache.dispose);
+      const text = '吃瓜EN[吃瓜][吃瓜群众]【吃瓜】［吃瓜］[西瓜][吃瓜未知]';
+      final content = DanmakuEmojiContent.parse(text);
+      expect(content.parts.map((part) => part.text).join(), text);
+      expect(content.span(style, scaler, cache).toPlainText(), text);
+      expect(content.parts.expand((part) => part.assets).toSet(), {
+        '1f349.png',
+      });
+      cache.ensureLoaded([text]);
+      await finishDecoding(tester, cache);
+      expect(cache.imageCount, 1);
+      expect(
+        content.span(style, scaler, cache).children!.whereType<WidgetSpan>(),
+        hasLength(5),
+      );
+      expect(
+        content.span(style, scaler, cache).toPlainText(),
+        startsWith('吃瓜EN'),
+      );
+      expect(
+        content.span(style, scaler, cache).toPlainText(),
+        endsWith('[吃瓜未知]'),
+      );
     },
   );
 

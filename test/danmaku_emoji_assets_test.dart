@@ -13,7 +13,7 @@ import 'danmaku_text_test.dart' show officialDouyinExpressionNames;
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('all 235 named expression equivalents use bundled Fluent PNGs', () {
+  test('all 236 named expression equivalents use bundled Fluent PNGs', () {
     final names = {
       ...officialDouyinExpressionNames,
       '捂嘴笑',
@@ -37,8 +37,9 @@ void main() {
       '哭',
       '什么',
       '敬礼',
+      '吃瓜',
     };
-    expect(names, hasLength(235));
+    expect(names, hasLength(236));
     final glyphs = <String>{};
     for (final name in names) {
       for (final glyph in danmakuDisplayText('[$name]').characters) {
