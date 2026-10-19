@@ -1,0 +1,58 @@
+name: Validate TV decoder source without signing
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: decoder-validation-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  android-player:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: "platforms;android-36"
+          accept-android-sdk-licenses: true
+      - run: sdkmanager 'ndk;28.2.13676358'
+      - run: flutter pub get --enforce-lockfile
+      - name: Check compilation graph contains no APK packaging or signing
+        working-directory: android
+        run: |
+          mkdir -p ../build
+          ./gradlew :video_player_android:compileDebugKotlin :video_player_android:compileDebugJavaWithJavac :video_player_android:testDebugUnitTest :video_player_android:lintDebug :app:compileDebugKotlin :app:compileDebugJavaWithJavac :app:lintDebug --dry-run > ../build/android-source-task-graph.txt
+          if rg ':(validateSigning\w*|sign\w*|packageDebug|assembleDebug)\s' ../build/android-source-task-graph.txt; then
+            echo 'Unexpected signing or APK packaging task'
+            exit 1
+          fi
+      - name: Compile player and application, run synthetic tests and lint
+        working-directory: android
+        run: ./gradlew :video_player_android:compileDebugKotlin :video_player_android:compileDebugJavaWithJavac :video_player_android:testDebugUnitTest :video_player_android:lintDebug :app:compileDebugKotlin :app:compileDebugJavaWithJavac :app:lintDebug
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tv-decoder-source-validation
+          path: |
+            build/android-source-task-graph.txt
+            build/video_player_android/reports/
+            build/video_player_android/test-results/
+            build/app/reports/
+          if-no-files-found: warn
+          retention-days: 14
