@@ -20,7 +20,7 @@
 
 ## 当前 Android 版本：0.1.18+43
 
-手机/TV 共用 Android 0.1.18+43 已正式发布，本轮只调整 TV 行为，保留既有播放源、弹幕、预加载、连播、全季、追剧/进度、搜索和下载。运行时代码来自已验证 TV 提交 `0cf19ed`；正式源码以 `app-v0.1.18-43` 标签为准。Windows 正式版仍为 0.1.17，本轮未构建或发布 Windows 独立修改。
+手机/TV 共用 Android 0.1.18+43 已正式发布，该版本只调整 TV 行为，保留既有播放源、弹幕、预加载、连播、全季、追剧/进度、搜索和下载。运行时代码来自已验证 TV 提交 `0cf19ed`；正式源码以 `app-v0.1.18-43` 标签为准。Windows 正式版仍为 0.1.17；0.1.18+43 发布阶段未构建或发布 Windows 独立修改，本次 Windows 源码验证见上方 0.1.19+44 开发记录。
 
 [Android 0.1.18 正式发布页](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/app-v0.1.18-43) · [构建与发布验证](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/39107356975) · [对应源码提交 7544a05](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/commit/7544a0566b34aff5d853bd1b6f64c6a7cb3a1701)
 
