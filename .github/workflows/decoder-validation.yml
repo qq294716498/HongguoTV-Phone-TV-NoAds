@@ -1,6 +1,8 @@
 name: Validate TV decoder source without signing
 
 on:
+  push:
+    branches: [fix/windows-tv-decoder-maintenance]
   workflow_dispatch:
 
 permissions:
