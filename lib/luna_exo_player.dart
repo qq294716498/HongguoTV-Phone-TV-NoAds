@@ -1,3 +1,5 @@
+import 'package:video_player_android/video_player_android.dart';
+import 'tv_decoder_settings.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -107,6 +109,7 @@ class LunaExoPlayer implements Player {
   LunaExoPlayer({
     this.television,
     this.textureOutput,
+    this.decoderMode,
     this.initializationTimeout = const Duration(seconds: 20),
     this.transitionTimeout = const Duration(seconds: 10),
     this.preparationRetryDelay = const Duration(seconds: 3),
@@ -117,6 +120,7 @@ class LunaExoPlayer implements Player {
   VideoPlayerController? _controller;
   final bool Function()? television;
   final bool Function()? textureOutput;
+  final TvDecoderMode? Function()? decoderMode;
   final Duration initializationTimeout;
   final Duration transitionTimeout;
   final Duration preparationRetryDelay;
@@ -646,6 +650,13 @@ class LunaExoPlayer implements Player {
       '[ExoPlayer] open(gen=$myGen): url=$url, isHls=$isHls, formatHint=$formatHint, output=$viewType, headers=${headers.keys.toList()}',
     );
 
+    final decoder = decoderMode?.call();
+    final options = decoder == null
+        ? VideoPlayerOptions(mixWithOthers: true)
+        : AndroidDecoderOptions(decoderMode: decoder.name);
+    DiaryService.add(
+      '[ExoPlayer] decoder=${decoder?.name ?? "system-default"}',
+    );
     VideoPlayerController c;
     if (url.startsWith('/') || (uri != null && uri.scheme == 'file')) {
       final filePath = uri != null && uri.scheme == 'file'
@@ -655,7 +666,7 @@ class LunaExoPlayer implements Player {
       c = VideoPlayerController.file(
         File(filePath),
         viewType: viewType,
-        videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+        videoPlayerOptions: options,
       );
     } else {
       c = VideoPlayerController.networkUrl(
@@ -663,7 +674,7 @@ class LunaExoPlayer implements Player {
         viewType: viewType,
         formatHint: formatHint,
         httpHeaders: headers,
-        videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+        videoPlayerOptions: options,
       );
     }
 
@@ -681,7 +692,8 @@ class LunaExoPlayer implements Player {
         return;
       }
       DiaryService.add('[ExoPlayer] 首次 initialize 失败: $e');
-      if (!formatKnown &&
+      if (!(decoder != null && isDecoderCompatibilityError(e.toString())) &&
+          !formatKnown &&
           uri != null &&
           (uri.scheme == 'http' || uri.scheme == 'https')) {
         final alternateFormat = formatHint == VideoFormat.hls
@@ -704,7 +716,7 @@ class LunaExoPlayer implements Player {
           viewType: viewType,
           formatHint: alternateFormat,
           httpHeaders: retryHeaders,
-          videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+          videoPlayerOptions: options,
         );
         try {
           await c.initialize().timeout(initializationTimeout);

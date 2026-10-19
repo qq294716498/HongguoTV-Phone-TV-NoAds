@@ -889,7 +889,7 @@ packages:
     source: hosted
     version: "2.14.0"
   video_player_android:
-    dependency: "direct overridden"
+    dependency: "direct main"
     description:
       path: "packages/video_player_android"
       relative: true

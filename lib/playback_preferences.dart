@@ -1,3 +1,4 @@
+import 'tv_decoder_settings.dart';
 import 'video_enhancement_preferences.dart';
 import 'watch_reminder_models.dart';
 
@@ -18,6 +19,7 @@ class PlaybackPreferences {
     this.reminders = const WatchReminderPreferences(),
     this.preload = true,
     this.tvTextureOutput = false,
+    this.tvDecoderMode = TvDecoderMode.automatic,
     this.enhancement = const VideoEnhancementPreferences(),
   });
 
@@ -31,6 +33,7 @@ class PlaybackPreferences {
 
   final bool preload;
   final bool tvTextureOutput;
+  final TvDecoderMode tvDecoderMode;
   final VideoEnhancementPreferences enhancement;
 
   double effectiveDanmakuSpeed({required bool mobile}) =>
@@ -57,6 +60,7 @@ class PlaybackPreferences {
     WatchReminderPreferences? reminders,
     bool? preload,
     bool? tvTextureOutput,
+    TvDecoderMode? tvDecoderMode,
     VideoEnhancementPreferences? enhancement,
   }) => PlaybackPreferences(
     speed: speed ?? this.speed,
@@ -68,6 +72,7 @@ class PlaybackPreferences {
     reminders: reminders ?? this.reminders,
     preload: preload ?? this.preload,
     tvTextureOutput: tvTextureOutput ?? this.tvTextureOutput,
+    tvDecoderMode: tvDecoderMode ?? this.tvDecoderMode,
     enhancement: enhancement ?? this.enhancement,
   );
 
@@ -81,6 +86,7 @@ class PlaybackPreferences {
     'reminders': reminders.toJson(),
     'preload': preload,
     'tvTextureOutput': tvTextureOutput,
+    'tvDecoderMode': tvDecoderMode.name,
     'enhancement': enhancement.toJson(),
   };
 
@@ -107,6 +113,7 @@ class PlaybackPreferences {
       reminders: WatchReminderPreferences.fromJson(value['reminders']),
       preload: preload,
       tvTextureOutput: value['tvTextureOutput'] as bool? ?? false,
+      tvDecoderMode: TvDecoderMode.parse(value['tvDecoderMode']),
       enhancement: VideoEnhancementPreferences.fromJson(value['enhancement']),
     );
   }

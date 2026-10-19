@@ -1,3 +1,4 @@
+import 'tv_decoder_settings.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -163,6 +164,8 @@ class _PlayerScreenState extends State<PlayerScreen>
   double _resumePosition = 0;
   bool _rotating = false;
   bool _television = false;
+  bool _televisionDevice = false;
+  bool _decoderFailure = false;
   AppOrientationController? _orientationController;
   bool get _pictureInPictureVisible =>
       _pictureInPictureActive || _pictureInPictureRequested;
@@ -198,6 +201,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     danmakuOpacity: _danmakuOpacity,
     preload: _preloadEnabled,
     reminders: widget.store.playbackPreferences.reminders,
+    tvTextureOutput: widget.store.playbackPreferences.tvTextureOutput,
+    tvDecoderMode: widget.store.playbackPreferences.tvDecoderMode,
     enhancement: _enhancement.preferences,
   );
   String get _qualityLabel => _plan?.local == true
@@ -229,6 +234,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     super.initState();
     _television =
         context.getInheritedWidgetOfExactType<AppLayout>()?.television ?? false;
+    final layout = context.getInheritedWidgetOfExactType<AppLayout>();
+    _televisionDevice = layout?.deviceTelevision ?? _television;
     WidgetsBinding.instance.addObserver(this);
     _detail = widget.detail;
     _index = widget.initialIndex;
@@ -282,6 +289,8 @@ class _PlayerScreenState extends State<PlayerScreen>
             ? LunaExoPlayer(
                 television: () => _television,
                 textureOutput: () => _preferences.tvTextureOutput,
+                decoderMode: () =>
+                    _televisionDevice ? _preferences.tvDecoderMode : null,
               )
             : Player(
                 configuration: const PlayerConfiguration(
@@ -374,7 +383,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       _player.stream.error.listen((error) {
         if (_enhancement.handlePlaybackError(error)) return;
         if (!_closed && _acceptErrors && mounted && error.trim().isNotEmpty) {
-          _queueRecovery();
+          _queueRecovery(error: error);
         }
       }),
     );
@@ -1106,6 +1115,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       _interactions.cancel();
     }
     _television = television;
+    _televisionDevice = AppLayout.isTelevisionDevice(context);
     _setTelevisionPlaybackActive(_television);
     _orientationController = AppOrientationScope.maybeOf(context);
     final orientation = MediaQuery.orientationOf(context);
@@ -1151,7 +1161,12 @@ class _PlayerScreenState extends State<PlayerScreen>
     _applyLifecycleVisibility();
   }
 
-  void _queueRecovery() {
+  void _queueRecovery({String? error}) {
+    if (_televisionDevice &&
+        error != null &&
+        isDecoderCompatibilityError(error)) {
+      _decoderFailure = true;
+    }
     if (_closed || !_acceptErrors || _error != null) {
       return;
     }
@@ -1193,13 +1208,18 @@ class _PlayerScreenState extends State<PlayerScreen>
     _errorTimer?.cancel();
     _pendingError = false;
     final position = _currentPosition;
-    final action = current.local
+    final action = current.local || _decoderFailure
         ? PlaybackRecoveryAction.stop
         : _recovery.next(current);
     DiaryService.add(
       '[Recovery] episode=${_detail.episodes[_index].number}, action=${action.name}, position=$position, playing=${_player.state.playing}, intent=$_playIntent',
     );
     if (action == PlaybackRecoveryAction.stop) {
+      if (_decoderFailure) {
+        _playIntent = false;
+        _preloader.clear();
+        _syncScreenOn();
+      }
       _resumePosition = position;
       final ticket = _generation;
       try {
@@ -1212,7 +1232,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             _openedIndex = -1;
             await _player.stop();
           } finally {
-            await _releaseSession(current.session);
+            if (!_decoderFailure) await _releaseSession(current.session);
           }
         });
       } catch (_) {}
@@ -1220,7 +1240,9 @@ class _PlayerScreenState extends State<PlayerScreen>
         setState(() {
           _loading = false;
           _localFailure = current.local;
-          _error = current.local
+          _error = _decoderFailure
+              ? '当前视频规格或解码器不兼容。请打开播放设置更改 TV 解码模式，或更换线路、降低清晰度；系统软解也可能不支持该视频。'
+              : current.local
               ? widget.allowOnlineFallback
                     ? '本地视频读取失败，请重试或重新下载；也可以手动改为在线播放。'
                     : '本地成品读取失败，请重试或重新生成。'
@@ -1548,6 +1570,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     _health.reset();
     if (recoveryAction == null) {
       _recovery.reset();
+      _decoderFailure = false;
       _playIntent = playWhenReady;
     }
     _resumePosition = position;
@@ -1789,7 +1812,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             _smoothTransition = false;
           });
           _acceptErrors = true;
-          _queueRecovery();
+          _queueRecovery(error: error.toString());
         } else {
           if (prepared != null) {
             await _releaseSession(prepared.session);
@@ -1972,9 +1995,12 @@ class _PlayerScreenState extends State<PlayerScreen>
       preload: true,
     );
     final outputChanged =
-        _television &&
         _player is LunaExoPlayer &&
-        nextPreferences.tvTextureOutput != _preferences.tvTextureOutput;
+        ((_television &&
+                nextPreferences.tvTextureOutput !=
+                    _preferences.tvTextureOutput) ||
+            (_televisionDevice &&
+                nextPreferences.tvDecoderMode != _preferences.tvDecoderMode));
     await widget.store.setPlaybackPreferences(nextPreferences);
     if (!mounted || _closed || widget.store.profileEpoch != _profileEpoch)
       return;
@@ -2272,6 +2298,45 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
+  Future<void> _changePlaybackRoute() async {
+    if (_closed || _loading || _plan?.hasAlternative != true) return;
+    _recovery.reset();
+    _decoderFailure = false;
+    _playIntent = true;
+    await _play(
+      _index,
+      position: _currentPosition,
+      recoveryAction: PlaybackRecoveryAction.alternative,
+    );
+  }
+
+  Widget _televisionRecoveryActions(BuildContext context) => Wrap(
+    spacing: 12,
+    runSpacing: 10,
+    alignment: WrapAlignment.center,
+    children: [
+      FilledButton.tonalIcon(
+        key: const ValueKey('tv-recovery-settings'),
+        onPressed: () => _televisionSettings(context),
+        icon: const Icon(Icons.tune_rounded),
+        label: const Text('播放设置'),
+      ),
+      if (!_loading && !_localFailure && _plan?.hasAlternative == true)
+        FilledButton.tonalIcon(
+          key: const ValueKey('tv-recovery-source'),
+          onPressed: _changePlaybackRoute,
+          icon: const Icon(Icons.swap_horiz_rounded),
+          label: const Text('更换播放线路'),
+        ),
+      TextButton.icon(
+        key: const ValueKey('tv-recovery-back'),
+        onPressed: () => Navigator.of(context).maybePop(),
+        icon: const Icon(Icons.arrow_back_rounded),
+        label: const Text('返回选剧'),
+      ),
+    ],
+  );
+
   Future<void> _televisionSettings(BuildContext context) async {
     if (_panelOpen || _closed) return;
     setState(() => _panelOpen = true);
@@ -2287,6 +2352,9 @@ class _PlayerScreenState extends State<PlayerScreen>
               speed: _speed,
               tvTextureOutput: _player is LunaExoPlayer
                   ? _preferences.tvTextureOutput
+                  : null,
+              tvDecoderMode: _player is LunaExoPlayer && _televisionDevice
+                  ? _preferences.tvDecoderMode
                   : null,
               quality: _requestedQuality,
               qualities: _plan?.qualities ?? [],
@@ -2319,6 +2387,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         _preferences.copyWith(
           speed: selection.speed,
           tvTextureOutput: selection.tvTextureOutput,
+          tvDecoderMode: selection.tvDecoderMode,
           quality: selection.quality,
           autoAdvance: true,
           danmaku: selection.danmaku,
@@ -2898,6 +2967,16 @@ class _PlayerScreenState extends State<PlayerScreen>
                     ),
                   ),
                 ),
+              if (_televisionDevice &&
+                  _loading &&
+                  _error == null &&
+                  !hideOverlayForPictureInPicture)
+                Positioned(
+                  bottom: 24,
+                  left: 24,
+                  right: 24,
+                  child: _televisionRecoveryActions(context),
+                ),
               if (_error != null && !hideOverlayForPictureInPicture)
                 ColoredBox(
                   color: Colors.black.withValues(alpha: .9),
@@ -2912,6 +2991,8 @@ class _PlayerScreenState extends State<PlayerScreen>
                       alignment: WrapAlignment.center,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
+                        if (_televisionDevice)
+                          _televisionRecoveryActions(context),
                         FilledButton.tonalIcon(
                           onPressed: () =>
                               DiaryService.showDiaryDialog(context),

@@ -396,6 +396,7 @@ class CreationOptions {
     required this.httpHeaders,
     this.userAgent,
     this.backBufferDurationMs,
+    this.decoderMode,
   });
 
   String uri;
@@ -408,8 +409,10 @@ class CreationOptions {
 
   int? backBufferDurationMs;
 
+  String? decoderMode;
+
   List<Object?> _toList() {
-    return <Object?>[uri, formatHint, httpHeaders, userAgent, backBufferDurationMs];
+    return <Object?>[uri, formatHint, httpHeaders, userAgent, backBufferDurationMs, decoderMode];
   }
 
   Object encode() {
@@ -424,6 +427,7 @@ class CreationOptions {
       httpHeaders: (result[2]! as Map<Object?, Object?>).cast<String, String>(),
       userAgent: result[3] as String?,
       backBufferDurationMs: result[4] as int?,
+      decoderMode: result[5] as String?,
     );
   }
 
@@ -440,7 +444,8 @@ class CreationOptions {
         _deepEquals(formatHint, other.formatHint) &&
         _deepEquals(httpHeaders, other.httpHeaders) &&
         _deepEquals(userAgent, other.userAgent) &&
-        _deepEquals(backBufferDurationMs, other.backBufferDurationMs);
+        _deepEquals(backBufferDurationMs, other.backBufferDurationMs) &&
+        _deepEquals(decoderMode, other.decoderMode);
   }
 
   @override
@@ -449,7 +454,7 @@ class CreationOptions {
 
   @override
   String toString() {
-    return 'CreationOptions(uri: $uri, formatHint: $formatHint, httpHeaders: $httpHeaders, userAgent: $userAgent, backBufferDurationMs: $backBufferDurationMs)';
+    return 'CreationOptions(uri: $uri, formatHint: $formatHint, httpHeaders: $httpHeaders, userAgent: $userAgent, backBufferDurationMs: $backBufferDurationMs, decoderMode: $decoderMode)';
   }
 }
 

@@ -1,3 +1,4 @@
+import 'tv_decoder_settings.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -835,6 +836,7 @@ class TelevisionPlaybackSetting {
   const TelevisionPlaybackSetting({
     this.speed,
     this.tvTextureOutput,
+    this.tvDecoderMode,
     this.quality,
     this.autoAdvance,
     this.danmaku,
@@ -845,6 +847,7 @@ class TelevisionPlaybackSetting {
   });
   final double? speed;
   final bool? tvTextureOutput;
+  final TvDecoderMode? tvDecoderMode;
   final int? quality;
   final bool? autoAdvance;
   final bool? danmaku;
@@ -859,6 +862,7 @@ class TelevisionSettingsDialog extends StatelessWidget {
     super.key,
     required this.speed,
     this.tvTextureOutput,
+    this.tvDecoderMode,
     required this.quality,
     required this.qualities,
     required this.favorite,
@@ -877,6 +881,7 @@ class TelevisionSettingsDialog extends StatelessWidget {
   });
   final double speed;
   final bool? tvTextureOutput;
+  final TvDecoderMode? tvDecoderMode;
   final int quality;
   final List<int> qualities;
   final bool favorite;
@@ -903,6 +908,17 @@ class TelevisionSettingsDialog extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (tvDecoderMode != null) ...[
+              TvDecoderSettings(
+                value: tvDecoderMode!,
+                applyingToPlayback: true,
+                onChanged: (mode) => Navigator.pop(
+                  context,
+                  TelevisionPlaybackSetting(tvDecoderMode: mode),
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
             const Text('倍速', style: TextStyle(fontSize: 18)),
             const SizedBox(height: 8),
             Wrap(
@@ -913,7 +929,7 @@ class TelevisionSettingsDialog extends StatelessWidget {
                   RemoteButton(
                     key: ValueKey('tv-speed-$value'),
                     label: '${value}x',
-                    autofocus: value == speed,
+                    autofocus: tvDecoderMode == null && value == speed,
                     selected: value == speed,
                     onPressed: () => Navigator.pop(
                       context,

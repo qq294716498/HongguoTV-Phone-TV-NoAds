@@ -5,6 +5,8 @@ import 'package:duanju_app/local_store.dart';
 import 'package:duanju_app/models.dart';
 import 'package:duanju_app/player_screen.dart';
 import 'package:duanju_app/settings_screen.dart';
+import 'package:duanju_app/tv_decoder_settings.dart';
+import 'package:duanju_app/playback_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,6 +16,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'fixtures.dart';
 import 'player_fixtures.dart';
 import 'remote_test_helpers.dart';
+
+class DecoderFailurePlayer extends ScriptedPlayer {
+  void decoderFailure() => errorController.add(
+    'MediaCodecVideoRenderer error, format_supported=NO_EXCEEDS_CAPABILITIES',
+  );
+}
 
 void main() {
   setUp(mockPlayerDevice);
@@ -110,6 +118,66 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await settle(tester);
   }
+
+  testWidgets(
+    'TV decoder failure stops retries and keeps settings and route switch accessible',
+    (tester) async {
+      final repository = RouteRepository();
+      final player = DecoderFailurePlayer();
+      await mount(tester, repository, player);
+      final opens = player.opened.length;
+      player.decoderFailure();
+      await settle(tester);
+      await tester.pump(const Duration(seconds: 1));
+      await settle(tester);
+      expect(find.text('暂时无法播放'), findsOneWidget);
+      expect(find.textContaining('当前视频规格或解码器不兼容'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 30));
+      await settle(tester);
+      expect(player.opened.length, opens);
+      expect(repository.fallbackCalls, 0);
+      final settings = find.byKey(const ValueKey('tv-recovery-settings'));
+      await tester.ensureVisible(settings);
+      await tester.tap(settings);
+      await settle(tester);
+      expect(find.text('播放设置'), findsWidgets);
+      await press(tester, LogicalKeyboardKey.escape);
+      final source = find.byKey(const ValueKey('tv-recovery-source'));
+      await tester.ensureVisible(source);
+      await tester.tap(source);
+      await settle(tester);
+      expect(repository.fallbackCalls, 1);
+      expect(player.opened.length, opens + 1);
+      expect(find.text('暂时无法播放'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await settle(tester);
+      expect(repository.active, isEmpty);
+    },
+  );
+
+  test(
+    'TV decoder preferences migrate safely and preserve other playback settings',
+    () {
+      final old = PlaybackPreferences.fromJson({'speed': 1.25, 'quality': 720});
+      expect(old.tvDecoderMode, TvDecoderMode.automatic);
+      final saved = old.copyWith(
+        tvDecoderMode: TvDecoderMode.software,
+        tvTextureOutput: true,
+      );
+      final restored = PlaybackPreferences.fromJson(saved.toJson());
+      expect(restored.tvDecoderMode, TvDecoderMode.software);
+      expect(restored.tvTextureOutput, true);
+      expect(restored.speed, 1.25);
+      expect(restored.quality, 720);
+      expect(
+        PlaybackPreferences.fromJson({
+          'tvDecoderMode': 'unknown',
+        }).tvDecoderMode,
+        TvDecoderMode.automatic,
+      );
+      expect(isDecoderCompatibilityError('HTTP 403'), false);
+    },
+  );
 
   testWidgets(
     'TV and global danmaku settings persist and update live without changing video rate',

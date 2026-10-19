@@ -1,3 +1,4 @@
+import 'tv_decoder_settings.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -80,6 +81,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _decoderSettings() async {
+    final selection = await showDialog<TvDecoderMode>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('TV 解码设置'),
+        content: SizedBox(
+          width: 640,
+          child: SingleChildScrollView(
+            child: TvDecoderSettings(
+              value: widget.store.playbackPreferences.tvDecoderMode,
+              onChanged: (mode) => Navigator.pop(context, mode),
+            ),
+          ),
+        ),
+      ),
+    );
+    if (selection == null || !mounted) return;
+    await saveUserChange(
+      context,
+      () => widget.store.setPlaybackPreferences(
+        widget.store.playbackPreferences.copyWith(tvDecoderMode: selection),
+      ),
+    );
+    if (mounted) setState(() {});
   }
 
   Future<void> _chooseTheme() async {
@@ -183,6 +210,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
             padding: const EdgeInsets.all(16),
             children: [
               const AppUpdateTile(),
+              if (defaultTargetPlatform == TargetPlatform.android &&
+                  AppLayout.isTelevisionDevice(context))
+                ListTile(
+                  key: const ValueKey('global-tv-decoder-settings'),
+                  leading: const Icon(Icons.memory_rounded),
+                  title: const Text('TV 解码模式'),
+                  subtitle: Text(
+                    widget.store.playbackPreferences.tvDecoderMode.label,
+                  ),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: _decoderSettings,
+                ),
               ListTile(
                 key: const ValueKey('global-danmaku-settings'),
                 leading: const Icon(Icons.subtitles_rounded),
