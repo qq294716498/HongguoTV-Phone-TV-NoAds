@@ -2,28 +2,34 @@
 
 基于 [guoapp](https://github.com/zhoufuweigg/guoapp) 的非官方独立客户端。手机与 Android TV 共用 Android 应用，另提供 Windows x64 客户端；支持浏览、搜索、播放、弹幕、追剧和下载。
 
-## 本次更新：0.1.22+47
+## 本次更新：0.1.23+48
 
-本次整合红果取源与切集恢复、Windows 全屏和剧情简介、当前集与本季数量、跳过版本及弹幕表情改进。保留播放源、弹幕速度与透明度、预加载、下一集 / 下一季、全季、追剧与进度、搜索发现、下载与合并、备份、TV 解码设置和局域网互联。安装包、源码及验证结果以对应 Release 和附件为准；自动化不等同用户设备验收。
+本次补齐红果播放模型接口偶发空正文时的有限重试，并增加 Windows 单实例和更新交接保护。保留 0.1.22 的取源时限与取消、切集恢复、Windows 全屏和剧情简介、当前集与本季数量、跳过版本及弹幕表情改进，以及播放源、弹幕设置、预加载、下一集 / 下一季、全季、追剧与进度、搜索发现、下载与合并、备份、TV 解码设置和局域网互联。安装包、源码及验证结果以对应 Release 和附件为准；自动化不等同用户设备验收。
 
-## Windows 正式版：0.1.22+47
+## Windows 正式版：0.1.23+48
 
+- 红果播放模型接口遇到 HTTP 200 且正文为零字节时，最多增加一次短退避重试；仍服从当前请求时限、取消和站源冷却，不刷新设备身份，不把所有空响应都视为已经解决。
+- 同一 Windows 账户下，支持单实例的客户端跨安装目录共用一个实例；再次启动唤醒托盘或最小化窗口，保持原暂停状态。旧版 0.1.22 及更早的 EXE 无法追溯补上启动检查，请先从托盘退出旧版，再使用新版入口。
+- 更新重启继续等待旧客户端退出；发生跨目录实例冲突时保护正在使用的用户配置，保留事务记录供恢复。
 - 红果取源增加统一时限和取消处理；切集、返回或关闭时终止过期任务，隔离迟到结果，避免旧请求占用新一集的状态。预加载失败后可重新取源。
 - 正确显示站源冷却剩余时间并停止无效自动重试，遵守服务端 429 的 Retry-After；保留限流保护，不绕过冷却。
 - 修复最大化进入全屏、迷你窗恢复全屏时原生客户区不足的问题；退出全屏恢复正常标题栏和原窗口状态。保持视频比例及正常黑边。
 - 侧栏加入可展开、滚动的剧情简介，修复深色面板文字颜色；显示当前集与本季数量，连载或未完整列表使用“已更新 / 已载入”，保留特别篇名称。
 - “跳过此版本”只隐藏该版本的自动提示，设置中仍可手动检查、下载和安装；新版本重新提示。
 - 弹幕补充 [笑]、[哭]、[什么]、[敬礼]、[吃瓜] 等表情；图片未就绪或失败时保留原始文字，未知名称不丢失。
+- 未取得确切对应素材的 [没看够] 保留完整方括号文字；手机、TV 和 Windows 共用此回退规则，不用其他表情代替，也不显示空白或 OBJ。
 
 Windows 10/11 x64 完整 ZIP 仍未签名。构建、完整包校验、合成媒体启动、托盘 / 迷你窗、更新事务及公网更新下载 / 静态清单回退的结果见本次 Release 附件。真实站源长时间连播、用户旧版本原地替换、消费级 GPU、音频设备和多显示器混合 DPI 尚未实测；保持视频比例及正常黑边。
 
-## Android 最近更新：0.1.22+47
+## Android 最近更新：0.1.23+48
 
+- 手机与 TV 共用播放模型接口的空正文有限重试：最多增加一次短退避，仍在原总时限内；取消、切集立即终止旧任务，429 / Retry-After 不重试绕过。
 - 手机与 TV 共用红果取源、预加载及切集修复：统一请求时限，取消过期任务并隔离迟到结果，失败后可重新获取播放地址。
 - 正确显示冷却剩余时间，停止无效自动重试并遵守服务端 429 的 Retry-After；不绕过限流保护。
 - 修复简介正文颜色，显示当前集与本季播放列表数量；连载、未完整列表和特别篇保留对应含义。
 - “跳过此版本”只关闭该版本的自动提示，设置中的手动检查、下载和安装继续可用。
 - 补充弹幕表情与 [吃瓜] 别名；图片加载失败或尚未就绪时保留原始文字，未知名称保持原文。
+- [没看够] 暂未取得确切素材，保留完整原文；缺图时手机、TV、Windows 均不使用不相关表情替代。
 
 手机 / TV 继续共用 com.hongguo.tv、既有正式证书和三 ABI，最低 Android 8.0 不变。版本、证书、ABI、安装包完整性与公开更新下载的核验结果见本次 Release 附件。真实手机 / TV 覆盖安装、索尼 HEVC、遥控器及长时间连播尚未实测。
 
@@ -31,20 +37,20 @@ Windows 10/11 x64 完整 ZIP 仍未签名。构建、完整包校验、合成媒
 
 请选择与平台和架构匹配的安装包；可用版本、校验清单和源码以对应 Release 的实际附件为准。
 
-[Android 最新正式版](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/latest) · [Windows 正式版](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/windows-v0.1.22-47)
+[Android 最新正式版](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/latest) · [Windows 正式版](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/windows-v0.1.23-48)
 
 | 设备架构 | 下载 |
 | --- | --- |
-| Windows 10/11 x64 · 完整 ZIP、未签名 | [HongguoTV 0.1.22 Windows x64](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.22-47/HongguoTV-0.1.22-windows-x64.zip) |
-| Android arm64-v8a · 大多数手机及较新的电视 / 盒子 | [HongguoTV 0.1.22 ARM64](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.22-47/HongguoTV-0.1.22-arm64-v8a.apk) |
-| Android armeabi-v7a · 32 位手机 / 电视 / 盒子 | [HongguoTV 0.1.22 32 位](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.22-47/HongguoTV-0.1.22-armeabi-v7a.apk) |
-| Android x86_64 · 对应架构模拟器 | [HongguoTV 0.1.22 x86_64](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.22-47/HongguoTV-0.1.22-x86_64.apk) |
+| Windows 10/11 x64 · 完整 ZIP、未签名 | [HongguoTV 0.1.23 Windows x64](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.23-48/HongguoTV-0.1.23-windows-x64.zip) |
+| Android arm64-v8a · 大多数手机及较新的电视 / 盒子 | [HongguoTV 0.1.23 ARM64](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.23-48/HongguoTV-0.1.23-arm64-v8a.apk) |
+| Android armeabi-v7a · 32 位手机 / 电视 / 盒子 | [HongguoTV 0.1.23 32 位](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.23-48/HongguoTV-0.1.23-armeabi-v7a.apk) |
+| Android x86_64 · 对应架构模拟器 | [HongguoTV 0.1.23 x86_64](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.23-48/HongguoTV-0.1.23-x86_64.apk) |
 
 支持 Android 8.0 及以上系统。请选择与设备和已安装应用匹配的架构；更新时直接覆盖安装，无需先卸载。
 
-三架构 APK 的 [SHA-256 校验清单](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.22-47/SHA256SUMS.txt) 与源码见 [0.1.22 发布页](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/app-v0.1.22-47)。Windows 的校验清单及源码见上方 Windows 正式版入口。最新版本源码可从对应发布标签查看；其他分支的源码版本以各自的 `pubspec.yaml` 为准。
+三架构 APK 的 [SHA-256 校验清单](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.23-48/SHA256SUMS.txt) 与源码见 [0.1.23 发布页](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/app-v0.1.23-48)。Windows 的校验清单及源码见上方 Windows 正式版入口。最新版本源码可从对应发布标签查看；其他分支的源码版本以各自的 `pubspec.yaml` 为准。
 
-Windows 请完整解压到可写目录，勿只复制 EXE 或混放旧 DLL。**0.1.17 自带旧更新助手，首次升级建议先保存进度并从托盘彻底退出旧程序，再下载完整 ZIP，解压到独立的新目录。**同一 Windows 账户继续使用原应用数据；保留原目录，不卸载或清除数据。新版助手的保护在运行新版后用于后续更新。
+Windows 请完整解压到可写目录，勿只复制 EXE 或混放旧 DLL。**首次从旧版升级，或旧更新器在暂存目录解压 DLL 时报告拒绝访问，请先保存进度并从托盘彻底退出旧程序，再下载完整 ZIP，解压到独立的新目录。**同一 Windows 账户继续使用原应用数据；保留原目录，不卸载或清除数据。手动换用完整包不会修复仍在运行的旧更新器；新版交接保护在运行新版后用于后续更新。
 
 ## 应用内更新
 
@@ -95,11 +101,11 @@ Windows 请完整解压到可写目录，勿只复制 EXE 或混放旧 DLL。**0
 
 | 平台 | 安装包与验证结果 |
 | --- | --- |
-| Android 手机 / Android TV | 0.1.22+47 三 ABI、既有正式证书、最低 Android 8.0；包名、版本、架构、证书、CRC / 对齐、资源、SHA-256 与公网更新下载结果见发布附件 |
-| Windows | 0.1.22+47 x64 未签名完整 ZIP；构建、版本 / DLL / 运行库、资源、SHA-256、合成媒体原生启动、托盘 / 迷你窗、16 项更新事务和公网下载 / 静态清单回退结果见发布附件 |
+| Android 手机 / Android TV | 0.1.23+48 三 ABI、既有正式证书、最低 Android 8.0；包名、版本、架构、证书、CRC / 对齐、资源、SHA-256 与公网更新下载结果见发布附件 |
+| Windows | 0.1.23+48 x64 未签名完整 ZIP；构建、版本 / DLL / 运行库、资源、SHA-256、合成媒体原生启动、托盘 / 迷你窗、17 项更新事务、16 项单实例回归和公网下载 / 静态清单回退结果见发布附件 |
 | iOS | 保留工程与构建支持，本次无已签名安装包 |
 
-静态检查、默认 / 全站源自动化、Python 门禁、两种 Go race 配置及平台构建的结果，见 [Android 发布附件](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/app-v0.1.22-47) 与 [Windows 发布附件](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/windows-v0.1.22-47)。请以本次 CI 和随包报告为准，不把源码、构建记录或签名检查等同完整实机验收。
+静态检查、默认 / 全站源自动化、Python 门禁、两种 Go race 配置及平台构建的结果，见 [Android 发布附件](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/app-v0.1.23-48) 与 [Windows 发布附件](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/windows-v0.1.23-48)。请以本次 CI 和随包报告为准，不把源码、构建记录或签名检查等同完整实机验收。
 
 自动化使用合成数据 / 媒体并禁用站源图片。真实手机 / TV 覆盖安装、索尼 HEVC、遥控器、真实站源长时间连播，以及用户 Windows 旧版原地替换、消费级 GPU / 音频设备和多显示器混合 DPI 尚未实测；正常宽屏留黑和素材自带黑边保留。取源失败还可能受源站与网络影响，不把本次生命周期修复认定为全部现场故障的唯一原因。
 
