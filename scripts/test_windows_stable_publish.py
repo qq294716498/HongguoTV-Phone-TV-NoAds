@@ -10,6 +10,74 @@ from unittest import mock
 import publish_windows_stable as publish
 
 
+class WindowsReleaseNotesTests(unittest.TestCase):
+    def test_fallback_manifest_never_caches_pending_or_premature_verified_notes(self):
+        tag = 'windows-v0.1.22-47'
+        package = b'synthetic package'
+        checksum = hashlib.sha256(package).hexdigest()
+        asset = dict(name='HongguoTV-0.1.22-windows-x64.zip', size=len(package), digest='sha256:' + checksum,
+                     state='uploaded', browser_download_url=f'https://github.com/{publish.repository}/releases/download/{tag}/HongguoTV-0.1.22-windows-x64.zip')
+        body = 'Windows 0.1.22：恢复修复；未签名；真机仍未实测。\n\n' + publish.pending_publication_note
+        current = dict(tag_name=tag, draft=False, prerelease=False, body=body, assets=[asset])
+        previous = {'sha': 'previous', 'content': base64.b64encode(json.dumps(
+            {'schema': 1, 'release': {'tag_name': 'windows-v0.1.19-44'}}).encode()).decode()}
+        with mock.patch.object(publish, 'github', side_effect=[json.dumps(current), json.dumps({'commit': {'sha': 'channel'}})]), \
+                mock.patch.object(publish, 'read_json', return_value={'bytes': len(package), 'sha256': checksum}), \
+                mock.patch.object(publish.urllib.request, 'urlopen', return_value=io.BytesIO(package)), \
+                mock.patch.object(publish.subprocess, 'run', return_value=mock.Mock(returncode=0, stdout=json.dumps(previous))), \
+                mock.patch.dict(publish.os.environ, {'RUNNER_TEMP': 'synthetic-temp'}), \
+                mock.patch.object(Path, 'write_text') as written, mock.patch.object(publish, 'write_json'):
+            publish.publish_channel(tag, '0.1.22', '47')
+            payload = json.loads(written.call_args.args[0])
+            manifest = json.loads(base64.b64decode(payload['content']))
+            self.assertIn('未签名；真机仍未实测', manifest['release']['body'])
+            self.assertNotIn(publish.pending_publication_note, manifest['release']['body'])
+            self.assertNotIn(publish.verified_publication_note, manifest['release']['body'])
+
+    def test_final_notes_mark_verified_channel_and_preserve_unsigned_limits(self):
+        tag = 'windows-v0.1.22-47'
+        body = '0.1.22+47\n假全屏与取源恢复修复。\nWindows x64 仍未签名；真实站源仍未实测。\n' + publish.pending_publication_note
+        final = body.replace(publish.pending_publication_note, publish.verified_publication_note)
+        current = dict(tag_name=tag, draft=False, prerelease=False, target_commitish='current', body=body)
+        with mock.patch.object(publish, 'github', side_effect=[json.dumps(current), json.dumps({**current, 'body': final})]) as reads, \
+                mock.patch.dict(publish.os.environ, {'GITHUB_SHA': 'current', 'RUNNER_TEMP': 'synthetic-temp'}), \
+                mock.patch.object(Path, 'write_text') as written, mock.patch.object(publish.subprocess, 'run') as edits:
+            publish.finalize_release_notes(tag)
+            written.assert_called_once_with(final, encoding='utf-8')
+            edits.assert_called_once_with(['gh', 'release', 'edit', tag, '--notes-file',
+                                          str(Path('synthetic-temp') / 'windows-release-notes-final.md')], check=True)
+            self.assertEqual(reads.call_args_list, [mock.call('api', f'repos/{publish.repository}/releases/tags/{tag}')] * 2)
+            self.assertNotIn(publish.pending_publication_note, final)
+            self.assertIn('仍未签名；真实站源仍未实测', final)
+
+    def test_final_notes_cannot_modify_old_or_unverified_release(self):
+        tag = 'windows-v0.1.22-47'
+        current = dict(tag_name=tag, draft=False, prerelease=False, target_commitish='current', body=publish.pending_publication_note)
+        cases = [('tag_name', 'windows-v0.1.19-44'), ('draft', True), ('prerelease', True),
+                 ('target_commitish', 'old'), ('body', 'no publication status')]
+        for field, value in cases:
+            with self.subTest(field=field), mock.patch.object(publish, 'github', return_value=json.dumps({**current, field: value})), \
+                    mock.patch.dict(publish.os.environ, {'GITHUB_SHA': 'current'}), \
+                    mock.patch.object(Path, 'write_text') as written, mock.patch.object(publish.subprocess, 'run') as edits:
+                with self.assertRaises(ValueError):
+                    publish.finalize_release_notes(tag)
+                written.assert_not_called()
+                edits.assert_not_called()
+
+    def test_failed_android_isolation_never_marks_notes_complete(self):
+        with mock.patch.object(Path, 'read_text', return_value='version: 0.1.22+47\n'), \
+                mock.patch.object(publish.os, 'chdir'), \
+                mock.patch.object(publish, 'read_json', return_value={'before': {'tag': 'app-v0.1.19-44'}}), \
+                mock.patch.object(publish, 'metadata', return_value={'tag': 'app-v0.1.20-45'}), \
+                mock.patch.object(publish, 'finalize_release_notes') as notes, \
+                mock.patch.object(publish.subprocess, 'run') as writes, \
+                mock.patch('sys.argv', ['publish_windows_stable.py', 'finalize']):
+            with self.assertRaisesRegex(ValueError, 'Android Latest or original assets changed'):
+                publish.main()
+            notes.assert_not_called()
+            writes.assert_not_called()
+
+
 class WindowsStablePublishTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()

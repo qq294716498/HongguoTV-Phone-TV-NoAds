@@ -13,9 +13,11 @@ root = Path(__file__).resolve().parents[1]
 output = root / 'dist/windows'
 repository = 'qq294716498/HongguoTV-Phone-TV-NoAds'
 release_branch = 'release/windows-android-0.1.22-47'
-approved_source = 'PIN_FINAL_RUNTIME_COMMIT_BEFORE_RELEASE'
+approved_source = 'd4194620b569488633345d93e639e1eeb4209625'
 previous_windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44')
 previous_android_tag = 'app-v0.1.19-44'
+pending_publication_note = '公开发布核验进行中：尚未完成 Windows 公网 ZIP 下载、升级通道及 Android Latest 隔离检查。'
+verified_publication_note = '公开发布核验已完成：Windows 公网 ZIP 下载与 SHA-256、正式升级通道和 API 限流回退检查通过；Android Latest 隔离及旧版本资产保持检查通过。'
 release_only_paths = frozenset({
     'README.md', '.github/workflows/android-stable.yml',
     '.github/workflows/windows-preview.yml',
@@ -39,6 +41,21 @@ def validate_release_source(commit):
 
 def github(*arguments):
     return subprocess.check_output(['gh', *arguments], cwd=root, text=True)
+
+
+def finalize_release_notes(tag):
+    published = json.loads(github('api', f'repos/{repository}/releases/tags/{tag}'))
+    if tag != 'windows-v0.1.22-47' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
+        raise ValueError('Only the current verified Windows stable release notes may be finalized')
+    body = published['body']
+    if body.count(pending_publication_note) != 1:
+        raise ValueError('Windows publication status paragraph is missing or ambiguous')
+    notes = body.replace(pending_publication_note, verified_publication_note)
+    notes_file = Path(os.environ['RUNNER_TEMP']) / 'windows-release-notes-final.md'
+    notes_file.write_text(notes, encoding='utf-8')
+    subprocess.run(['gh', 'release', 'edit', tag, '--notes-file', str(notes_file)], check=True)
+    if json.loads(github('api', f'repos/{repository}/releases/tags/{tag}'))['body'] != notes:
+        raise ValueError('Final Windows release notes update was not confirmed')
 
 
 def metadata():
@@ -86,6 +103,7 @@ def publish_channel(tag, version, build):
     if received != asset['size'] or digest.hexdigest() != validation['sha256']:
         raise ValueError('Public Windows download failed checksum verification')
     release = {name: published[name] for name in ['tag_name', 'draft', 'prerelease', 'body']}
+    release['body'] = release['body'].replace(pending_publication_note, '').strip()
     release['assets'] = [{name: item[name] for name in
                           ['name', 'size', 'digest', 'state', 'browser_download_url']} for item in assets]
     manifest = {'schema': 1, 'release': release}
@@ -212,7 +230,7 @@ def main():
                           'audio device output']})
         readme = (root / 'README.md').read_text(encoding='utf-8')
         notes = readme.split('## Windows 正式版：', 1)[1].split('\n## ', 1)[0]
-        notes += f'\n构建及静态回归、Windows 完整包与合成媒体启动验证已通过。Windows 10 / 11 x64 版本仍未签名；真实站源、长时间连播、用户旧版原地替换和消费级 GPU / 音频设备仍未实测。\n\n源码提交：https://github.com/{repository}/commit/{commit}\n\nCI：{ci}\n\n校验：SHA256SUMS.txt。Windows 正式渠道发布后继续验证实际更新下载和 Android Latest 隔离。\n'
+        notes += f'\n构建及静态回归、Windows 完整包与合成媒体启动验证已通过。Windows 10 / 11 x64 版本仍未签名；真实站源、长时间连播、用户旧版原地替换和消费级 GPU / 音频设备仍未实测。\n\n源码提交：https://github.com/{repository}/commit/{commit}\n\nCI：{ci}\n\n校验：SHA256SUMS.txt。\n\n{pending_publication_note}\n'
         notes_file = Path(os.environ['RUNNER_TEMP']) / 'windows-release-notes.md'
         notes_file.write_text(notes, encoding='utf-8')
         assets = [package, source_package] + [output / name for name in
@@ -256,6 +274,7 @@ def main():
                         str(output / 'Windows-update-channel.json'),
                         str(output / 'Windows-previous-release.json'),
                         str(output / 'SHA256SUMS.txt')], check=True)
+        finalize_release_notes(tag)
     else:
         raise ValueError('Expected stage or finalize')
 

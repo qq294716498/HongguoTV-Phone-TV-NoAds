@@ -15,9 +15,12 @@ certificate = '55c3c3395a00e56e99b8bfd580b14c99618da74db19692a2e42606eb05c47ba9'
 windows_tag = 'windows-v0.1.22-47'
 windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', windows_tag)
 previous_android_tag = 'app-v0.1.19-44'
+pending_publication_note = '公开发布核验进行中：尚未完成三 ABI 公网下载、签名复核及 Android / Windows 升级通道隔离检查。'
+verified_publication_note = '公开发布核验已完成：三 ABI 公网下载、SHA-256、正式证书与版本复核通过；Android Latest 和 Windows 升级通道隔离、旧版本资产保持检查通过。'
+windows_verified_publication_note = '公开发布核验已完成：Windows 公网 ZIP 下载与 SHA-256、正式升级通道和 API 限流回退检查通过；Android Latest 隔离及旧版本资产保持检查通过。'
 offsets = {'arm64-v8a': 2000, 'armeabi-v7a': 1000, 'x86_64': 4000}
 release_branch = 'release/windows-android-0.1.22-47'
-approved_source = 'PIN_FINAL_RUNTIME_COMMIT_BEFORE_RELEASE'
+approved_source = 'd4194620b569488633345d93e639e1eeb4209625'
 release_only_paths = frozenset({
     'README.md', '.github/workflows/android-stable.yml',
     '.github/workflows/windows-preview.yml',
@@ -47,6 +50,21 @@ def release(tag):
     return json.loads(github('api', f'repos/{repository}/releases/tags/{tag}'))
 
 
+def finalize_release_notes(tag):
+    published = release(tag)
+    if tag != 'app-v0.1.22-47' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
+        raise ValueError('Only the current verified Android stable release notes may be finalized')
+    body = published['body']
+    if body.count(pending_publication_note) != 1:
+        raise ValueError('Android publication status paragraph is missing or ambiguous')
+    notes = body.replace(pending_publication_note, verified_publication_note)
+    notes_file = Path(os.environ['RUNNER_TEMP']) / 'android-release-notes-final.md'
+    notes_file.write_text(notes, encoding='utf-8')
+    subprocess.run(['gh', 'release', 'edit', tag, '--notes-file', str(notes_file)], check=True)
+    if release(tag)['body'] != notes:
+        raise ValueError('Final Android release notes update was not confirmed')
+
+
 def snapshot(value):
     return {'id': value['id'], 'tag': value['tag_name'], 'target': value['target_commitish'],
             'prerelease': value['prerelease'], 'assets': sorted([
@@ -57,7 +75,7 @@ def validated_windows_snapshots(commit):
     published = {name: release(name) for name in windows_tags}
     candidate = published[windows_tag]
     required = {'Windows-update-check.json', 'Windows-update-channel.json', 'Android-isolation.json', 'SHA256SUMS.txt'}
-    if candidate['draft'] or candidate['prerelease'] or candidate['target_commitish'] != commit or not required.issubset({asset['name'] for asset in candidate['assets']}):
+    if candidate['draft'] or candidate['prerelease'] or candidate['target_commitish'] != commit or not required.issubset({asset['name'] for asset in candidate['assets']}) or windows_verified_publication_note not in candidate.get('body', ''):
         raise ValueError('Published Windows baseline is not finalized or has a different source')
     return {name: snapshot(value) for name, value in published.items()}
 
@@ -71,7 +89,7 @@ def wait_for_windows(commit, timeout=1200):
             candidate = json.loads(result.stdout)
             if candidate['target_commitish'] != commit:
                 raise ValueError('Windows release source differs from this Android candidate')
-            if not candidate['draft'] and not candidate['prerelease'] and required.issubset({asset['name'] for asset in candidate['assets']}):
+            if not candidate['draft'] and not candidate['prerelease'] and required.issubset({asset['name'] for asset in candidate['assets']}) and windows_verified_publication_note in candidate.get('body', ''):
                 print('Matching Windows release finalized; Android public validation may proceed.', flush=True)
                 return
         elif '404' not in result.stderr:
@@ -152,7 +170,7 @@ def main():
               'realPhoneOrTvPerformanceMeasured': False, 'realDevicePlaybackVerified': False})
         readme = (root / 'README.md').read_text()
         notes = readme.split('## Android 最近更新：', 1)[1].split('\n## ', 1)[0]
-        notes += f'\n源码：https://github.com/{repository}/commit/{head}\n\nCI：https://github.com/{repository}/actions/runs/{os.environ["GITHUB_RUN_ID"]}\n\n手机 / TV 继续共用 com.hongguo.tv、既有正式证书和 Android 8.0 最低版本；三 ABI 公网下载、SHA-256 与签名版本校验完成后才转正式 Latest。真实手机 / TV 覆盖安装、流畅度、解码和长时间连播仍未实测。\n'
+        notes += f'\n源码：https://github.com/{repository}/commit/{head}\n\nCI：https://github.com/{repository}/actions/runs/{os.environ["GITHUB_RUN_ID"]}\n\n手机 / TV 继续共用 com.hongguo.tv、既有正式证书和 Android 8.0 最低版本。真实手机 / TV 覆盖安装、流畅度、解码和长时间连播仍未实测。\n\n{pending_publication_note}\n'
         notes_file = Path(os.environ['RUNNER_TEMP']) / 'android-release-notes.md'
         notes_file.write_text(notes, encoding='utf-8')
         assets = [output / f'HongguoTV-{version}-{abi}.apk' for abi in offsets] + [source_package, output / 'APK-validation.json', output / 'Source-and-checks.json', output / 'Signing-availability.json']
@@ -190,6 +208,7 @@ def main():
         files = sorted(p for p in output.iterdir() if p.is_file() and p.name != 'SHA256SUMS.txt' and p.name != 'Release-before.json')
         (output / 'SHA256SUMS.txt').write_text(''.join(f'{digest(p)}  {p.name}\n' for p in files), encoding='ascii')
         subprocess.run(['gh', 'release', 'upload', tag, *[str(output / name) for name in ['staged-apk-validation.json', 'latest-apk-validation.json', 'staged-update-check.json', 'latest-update-check.json', 'Windows-isolation.json', 'SHA256SUMS.txt']]], check=True)
+        finalize_release_notes(tag)
     else:
         raise ValueError('Expected wait-windows, stage, promote or finalize')
 
