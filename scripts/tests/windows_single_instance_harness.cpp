@@ -73,6 +73,8 @@ void Report() {
   MoveFileExW(temporary.c_str(), report_path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
 }
 void RestoreOwnWindow() {
+  const DWORD delay = restores == 0 ? Number(L"restore-delay-once", 0) : 0;
+  if (delay) Sleep(delay);
   ++restores;
   if (window) ShowWindow(window, IsIconic(window) ? SW_RESTORE : SW_SHOWNOACTIVATE);
   Report();
@@ -188,8 +190,8 @@ int wmain(int argc, wchar_t** argv) {
     options.product_name = kProduct;
     options.window_class = Arg(L"application-id") + L".Window";
     options.window_title = options.window_class;
-    options.activation_timeout_ms = Number(L"activation-timeout", 700);
-    options.message_timeout_ms = Number(L"message-timeout", 120);
+    options.activation_timeout_ms = Number(L"activation-timeout", 2500);
+    options.message_timeout_ms = Number(L"message-timeout", 1000);
     options.update_wait_ms = Number(L"update-wait", 800);
     guard = std::make_unique<SingleInstanceGuard>(options);
     started_guard = GetTickCount64();

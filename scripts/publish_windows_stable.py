@@ -13,7 +13,7 @@ root = Path(__file__).resolve().parents[1]
 output = root / 'dist/windows'
 repository = 'qq294716498/HongguoTV-Phone-TV-NoAds'
 release_branch = 'release/windows-android-0.1.23-48'
-approved_source = 'd4194620b569488633345d93e639e1eeb4209625'
+approved_source = '7ef2ce407abcb40b2faa5a9cb13a52e01efa3511'
 previous_windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47')
 previous_android_tag = 'app-v0.1.22-47'
 previous_android_commit = '1281b06ed7d49aba3b380b6ca310d98f38481486'
@@ -26,6 +26,8 @@ release_only_paths = frozenset({
     'scripts/publish_windows_stable.py', 'scripts/test_windows_stable_publish.py',
     'scripts/reuse_windows_package.py', 'scripts/test_reuse_windows_package.py',
     'test/app_update_live_test.dart', 'test/windows_update_live_test.dart',
+    'scripts/test_windows_single_instance_native.py',
+    'scripts/tests/windows_single_instance_harness.cpp',
 })
 
 

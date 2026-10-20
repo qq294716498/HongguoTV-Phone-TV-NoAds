@@ -147,7 +147,12 @@ class FixtureProcess:
         return read_json(self.report)
 
     def wait_state(self, predicate=lambda state: True, timeout=8):
-        return wait_for(lambda: (lambda state: state if state and predicate(state) else None)(self.state()), timeout)
+        try:
+            return wait_for(lambda: (lambda state: state if state and predicate(state) else None)(self.state()), timeout)
+        except AssertionError as failure:
+            raise AssertionError('{}; last_state={!r}; exit_code={!r}; secondary_state={!r}'.format(
+                failure, self.state(), self.process.poll(),
+                getattr(self.suite, 'last_secondary_state', None))) from failure
 
     def command(self, name):
         self.sequence += 1
@@ -191,6 +196,7 @@ class WindowsSingleInstanceNativeTests(unittest.TestCase):
         self.directory = self.base / uuid.uuid4().hex
         self.directory.mkdir()
         self.processes = []
+        self.last_secondary_state = None
         self.current = self.copy_executable(self.current_source, 'install-A')
 
     def tearDown(self):
@@ -216,6 +222,7 @@ class WindowsSingleInstanceNativeTests(unittest.TestCase):
     def secondary(self, **options):
         process = self.launch(**options)
         state = process.wait_state()
+        self.last_secondary_state = state
         process.exit_code()
         return process, state
 
@@ -246,15 +253,25 @@ class WindowsSingleInstanceNativeTests(unittest.TestCase):
         self.assertFalse(owner.command('hide')['visible'])
         _, state = self.secondary()
         self.assertEqual(state['result'], 'activated', state)
-        owner.wait_state(lambda value: value['visible'] and value['restores'] == 1)
+        owner.wait_state(lambda value: value['visible'] and value['restores'] >= 1)
         self.assert_paused(owner)
+        owner.close()
+
+        # A timed-out send may already have run in the receiver. Restore must
+        # remain harmless when the real protocol retries; it is not exactly-once.
+        slow_owner = self.owner(restore_delay_once=1500)
+        self.assertFalse(slow_owner.command('hide')['visible'])
+        _, retry = self.secondary(activation_timeout=3500)
+        self.assertEqual(retry['result'], 'activated', retry)
+        slow_owner.wait_state(lambda value: value['visible'] and value['restores'] >= 2)
+        self.assert_paused(slow_owner)
 
     def test_minimized_restore_preserves_pause(self):
         owner = self.owner()
         self.assertTrue(owner.command('minimize')['minimized'])
         _, state = self.secondary()
         self.assertEqual(state['result'], 'activated', state)
-        owner.wait_state(lambda value: not value['minimized'] and value['restores'] == 1)
+        owner.wait_state(lambda value: not value['minimized'] and value['restores'] >= 1)
         self.assert_paused(owner)
 
     def test_restore_waits_for_both_ready_signals(self):
