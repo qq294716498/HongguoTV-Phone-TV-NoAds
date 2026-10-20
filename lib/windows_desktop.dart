@@ -122,6 +122,7 @@ class WindowsDesktop extends ChangeNotifier
   Future<void> restore() => _run(() async {
     _restoring = inTray;
     await manager.setSkipTaskbar(false);
+    if (await manager.isMinimized()) await manager.restore();
     await manager.show();
     await manager.focus();
     inTray = false;
@@ -259,11 +260,22 @@ class WindowsDesktop extends ChangeNotifier
       await channel.invokeMethod<void>('dispose');
       await manager.setPreventClose(false);
       await finishExit();
-    } catch (_) {
+    } catch (failure, stack) {
+      available = false;
+      try {
+        available = await channel.invokeMethod<bool>('initialize') ?? false;
+        await manager.setPreventClose(true);
+      } catch (recoveryFailure) {
+        DiaryService.add('[Windows] Exit recovery failed: $recoveryFailure');
+      }
       quitting = false;
-      await restoreUI?.call();
+      try {
+        await restoreUI?.call();
+      } catch (recoveryFailure) {
+        DiaryService.add('[Windows] UI recovery failed: $recoveryFailure');
+      }
       notifyListeners();
-      rethrow;
+      Error.throwWithStackTrace(failure, stack);
     }
   }
 

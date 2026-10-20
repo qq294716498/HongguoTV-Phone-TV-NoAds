@@ -2,7 +2,7 @@ name: Windows desktop
 
 on:
   push:
-    branches: ['windows/**', fix/hongguo-playback-release-0.1.22-47, release/windows-android-0.1.22-47]
+    branches: ['windows/**', fix/hongguo-playback-release-0.1.22-47, release/windows-android-0.1.22-47, release/windows-android-0.1.23-48, candidate/hongguo-retry-single-instance-0.1.23-48]
   workflow_dispatch:
     inputs:
       publish_release:
@@ -88,6 +88,8 @@ jobs:
           (Split-Path $compiler) | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - run: python -m pip install pefile==2024.8.26
       - run: python scripts/build_windows.py --all-sources
+      - name: Verify isolated native single-instance lifecycle with MSVC
+        run: python scripts/test_windows_single_instance_native.py --msvc --report dist/windows/Windows-single-instance-native.json
       - name: Validate updater ZIP handling on Windows filesystem
         run: flutter test --no-pub test/windows_update_package_test.dart test/windows_update_startup_test.dart --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true --reporter=expanded
       - name: Verify version, x64 architecture, DLL imports, resources and hashes
@@ -112,7 +114,7 @@ jobs:
           retention-days: 14
 
   release:
-    if: github.ref == 'refs/heads/release/windows-android-0.1.22-47' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_release))
+    if: github.ref == 'refs/heads/release/windows-android-0.1.23-48' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_release))
     needs: [checks, windows]
     runs-on: ubuntu-latest
     timeout-minutes: 20

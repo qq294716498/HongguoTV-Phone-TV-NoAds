@@ -67,8 +67,9 @@ void FlutterWindow::TrayMenu() {
   if (command == kQuit) TrayAction("quit");
 }
 
-FlutterWindow::FlutterWindow(const flutter::DartProject& project)
-    : project_(project) {}
+FlutterWindow::FlutterWindow(const flutter::DartProject& project,
+    SingleInstanceGuard& instance_guard)
+    : project_(project), instance_guard_(instance_guard) {}
 
 FlutterWindow::~FlutterWindow() {}
 
@@ -91,9 +92,11 @@ bool FlutterWindow::OnCreate() {
   desktop_channel_ = std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
     flutter_controller_->engine()->messenger(), "duanju/desktop",
     &flutter::StandardMethodCodec::GetInstance());
+  instance_guard_.SetRestoreCallback([this]() { TrayAction("restore"); });
   desktop_channel_->SetMethodCallHandler([this](const auto& call, auto result) {
     if (call.method_name() == "initialize") {
       result->Success(flutter::EncodableValue(tray_active_ || AddTray()));
+      instance_guard_.SetDesktopReady(true);
     } else if (call.method_name() == "branding") {
       const auto brand = LoadIcon(GetModuleHandle(nullptr), MAKEINTRESOURCE(IDI_APP_ICON));
       const auto window_icon = reinterpret_cast<HICON>(GetClassLongPtr(GetHandle(), GCLP_HICON));
@@ -151,6 +154,7 @@ bool FlutterWindow::OnCreate() {
       values[flutter::EncodableValue("minimized")] = flutter::EncodableValue(IsIconic(GetHandle()) != FALSE);
       result->Success(flutter::EncodableValue(values));
     } else if (call.method_name() == "dispose") {
+      instance_guard_.SetDesktopReady(false);
       RemoveTray();
       result->Success();
     } else if (call.method_name() == "setPlayback") {
@@ -222,6 +226,7 @@ bool FlutterWindow::OnCreate() {
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
     this->Show();
+    instance_guard_.SetFirstFrameReady();
   });
 
   // Flutter can complete the first frame before the "show window" callback is
@@ -233,6 +238,9 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  instance_guard_.SetDesktopReady(false);
+  instance_guard_.SetRestoreCallback({});
+  instance_guard_.DetachWindow();
   RemoveTray();
   desktop_channel_.reset();
   SetThreadExecutionState(ES_CONTINUOUS);
@@ -248,6 +256,8 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  LRESULT activation_result = 0;
+  if (instance_guard_.HandleActivation(message, &activation_result)) return activation_result;
   static const UINT taskbar_created = RegisterWindowMessage(L"TaskbarCreated");
   if (taskbar_created != 0 && message == taskbar_created && tray_active_) AddTray();
   if (message == kTrayMessage && tray_active_) {

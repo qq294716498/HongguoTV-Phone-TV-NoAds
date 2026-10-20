@@ -9,12 +9,13 @@
 #include <memory>
 
 #include "win32_window.h"
+#include "single_instance.h"
 
 // A window that does nothing but host a Flutter view.
 class FlutterWindow : public Win32Window {
  public:
   // Creates a new FlutterWindow hosting a Flutter view running |project|.
-  explicit FlutterWindow(const flutter::DartProject& project);
+  FlutterWindow(const flutter::DartProject& project, SingleInstanceGuard& instance_guard);
   virtual ~FlutterWindow();
 
  protected:
@@ -27,6 +28,7 @@ class FlutterWindow : public Win32Window {
  private:
   // The project to run.
   flutter::DartProject project_;
+  SingleInstanceGuard& instance_guard_;
 
   // The Flutter instance hosted by this window.
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;

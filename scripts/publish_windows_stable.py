@@ -12,10 +12,11 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[1]
 output = root / 'dist/windows'
 repository = 'qq294716498/HongguoTV-Phone-TV-NoAds'
-release_branch = 'release/windows-android-0.1.22-47'
+release_branch = 'release/windows-android-0.1.23-48'
 approved_source = 'd4194620b569488633345d93e639e1eeb4209625'
-previous_windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44')
-previous_android_tag = 'app-v0.1.19-44'
+previous_windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47')
+previous_android_tag = 'app-v0.1.22-47'
+previous_android_commit = '1281b06ed7d49aba3b380b6ca310d98f38481486'
 pending_publication_note = '公开发布核验进行中：尚未完成 Windows 公网 ZIP 下载、升级通道及 Android Latest 隔离检查。'
 verified_publication_note = '公开发布核验已完成：Windows 公网 ZIP 下载与 SHA-256、正式升级通道和 API 限流回退检查通过；Android Latest 隔离及旧版本资产保持检查通过。'
 release_only_paths = frozenset({
@@ -45,7 +46,7 @@ def github(*arguments):
 
 def finalize_release_notes(tag):
     published = json.loads(github('api', f'repos/{repository}/releases/tags/{tag}'))
-    if tag != 'windows-v0.1.22-47' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
+    if tag != 'windows-v0.1.23-48' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
         raise ValueError('Only the current verified Windows stable release notes may be finalized')
     body = published['body']
     if body.count(pending_publication_note) != 1:
@@ -77,6 +78,33 @@ def release_identity(value):
     return {**{name: value[name] for name in ['id', 'tag_name', 'target_commitish', 'draft', 'prerelease']},
             'assets': sorted([{name: asset[name] for name in ['id', 'name', 'size', 'digest']}
                               for asset in value['assets']], key=lambda asset: asset['id'])}
+
+
+def validate_single_instance(value):
+    names = {
+        'test_concurrent_launches_have_one_primary',
+        'test_same_user_different_paths_share_identity',
+        'test_hidden_tray_restore_preserves_pause',
+        'test_minimized_restore_preserves_pause',
+        'test_restore_waits_for_both_ready_signals',
+        'test_missing_ipc_window_is_bounded_and_then_recovers',
+        'test_hung_window_is_bounded',
+        'test_legacy_hidden_and_minimized_restore_without_toggle',
+        'test_legacy_without_window_blocks_new_client',
+        'test_normal_and_abnormal_exit_release_mutex',
+        'test_mutex_handle_is_not_inherited',
+        'test_update_start_does_not_activate_or_ack_running_owner',
+        'test_update_start_waits_for_exit_then_owns_mutex',
+        'test_cross_path_owner_blocks_updater_child_without_ack',
+        'test_update_start_refuses_legacy_owner',
+        'test_shutdown_activation_waits_for_takeover_or_cancelled_exit',
+    }
+    expected = {'__main__.WindowsSingleInstanceNativeTests.' + name for name in names}
+    cases = value.get('cases', [])
+    if value.get('nativeExecuted') is not True or value.get('successful') is not True or value.get('compiler', {}).get('family') != 'MSVC' or value.get('testsRun') != len(expected) or len(cases) != len(expected) or {item.get('test') for item in cases} != expected or not all(item.get('status') == 'passed' for item in cases):
+        raise ValueError('Native single-instance behavior not validated with MSVC')
+    if value.get('sourceCommit') != os.environ['GITHUB_SHA'] or value.get('workflowRun') != os.environ['GITHUB_RUN_ID']:
+        raise ValueError('Native single-instance evidence must come from this source and workflow run')
 
 
 def publish_channel(tag, version, build):
@@ -146,8 +174,8 @@ def main():
     version, build = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(encoding='utf-8'), re.MULTILINE).group(1).split('+')
     if not re.fullmatch(r'\d+\.\d+\.\d+', version):
         raise ValueError('Only Windows stable releases are allowed')
-    if version != '0.1.22' or build != '47':
-        raise ValueError('This workflow only publishes Windows 0.1.22+47')
+    if version != '0.1.23' or build != '48':
+        raise ValueError('This workflow only publishes Windows 0.1.23+48')
     tag = f'windows-v{version}-{build}'
     package = output / f'HongguoTV-{version}-windows-x64.zip'
     if sys.argv[1] == 'stage':
@@ -161,8 +189,9 @@ def main():
         smoke = read_json('Windows-smoke.json')
         signature = read_json('Windows-signature.json')
         transactions = read_json('Windows-update-transaction.json')
+        validate_single_instance(read_json('Windows-single-instance-native.json'))
         cases = transactions.get('cases', [])
-        expected_cases = {'success', 'crash', 'hang', 'busy', 'tamper', 'version', 'semantic', 'architecture', 'unowned', 'junction', 'second-instance', 'cancel-before-ready', 'cancel-after-ready', 'no-handoff', 'stop-unconfirmed', 'real-client-startup-ack'}
+        expected_cases = {'success', 'crash', 'hang', 'busy', 'tamper', 'version', 'semantic', 'architecture', 'unowned', 'junction', 'second-instance', 'cross-directory-client', 'cancel-before-ready', 'cancel-after-ready', 'no-handoff', 'stop-unconfirmed', 'real-client-startup-ack'}
         if transactions.get('ok') is not True or transactions.get('build') != int(build) or transactions.get('version') != version or len(cases) != len(expected_cases) or {item.get('case') for item in cases} != expected_cases or not all(item.get('ok') is True for item in cases):
             raise ValueError('Native update transactions not validated')
         real = next(item for item in cases if item['case'] == 'real-client-startup-ack')
@@ -206,7 +235,7 @@ def main():
         write_json('Android-isolation.json', {'before': android, 'androidParserUnchanged': True,
                                               'parserSha256': hashlib.sha256(old.encode()).hexdigest()})
         subprocess.run([sys.executable, 'scripts/finish_task.py', '--message',
-                        '完成 Windows 0.1.22 x64 播放恢复修复的新构建、完整包、托盘、迷你窗及更新事务验证'], check=True)
+                        '完成 Windows 0.1.23 x64 播放恢复修复的新构建、完整包、托盘、迷你窗及更新事务验证'], check=True)
         subprocess.run([sys.executable, 'scripts/sync_source.py', '--check'], check=True)
         source = max(root.parent.glob('真果·鉴-*.zip'), key=lambda file: file.stat().st_mtime_ns)
         source_package = output / f'HongguoTV-{version}-source.zip'
@@ -215,7 +244,7 @@ def main():
         ci = f'https://github.com/{repository}/actions/runs/{os.environ["GITHUB_RUN_ID"]}'
         write_json('Source-and-checks.json', {
             'version': version, 'build': int(build), 'sourceCommit': commit,
-            'baselineTag': previous_android_tag, 'baselineCommit': 'b72bb2987b1b98deadeaecdbf0255dbee59f4506',
+            'baselineTag': previous_android_tag, 'baselineCommit': previous_android_commit,
             'runtimeBaselineCommit': approved_source, 'runtimeChangesBeyondApprovedCommit': False,
             'workflowRun': ci,
             'binaryBuildCommit': os.environ['WINDOWS_BINARY_COMMIT'],
@@ -223,6 +252,7 @@ def main():
             'formatAndAnalysisPassed': True, 'pythonTestsPassed': True,
             'flutterDefaultAndAllSourceTestsPassed': True, 'goRaceDefaultAndAllSourcesPassed': True,
             'windowsCompileAndPackageValidationPassed': True, 'nativeUpdateTransactionsPassed': True,
+            'nativeSingleInstancePassed': True,
             'nativeTrayAndMiniWindowPassed': True, 'unsigned': True,
             'sourceArchiveSha256': hashlib.file_digest(source_package.open('rb'), 'sha256').hexdigest(),
             'notTested': ['real-provider playback', 'long-running episode/season transitions',
@@ -234,7 +264,7 @@ def main():
         notes_file = Path(os.environ['RUNNER_TEMP']) / 'windows-release-notes.md'
         notes_file.write_text(notes, encoding='utf-8')
         assets = [package, source_package] + [output / name for name in
-                 ['Windows-validation.json', 'Windows-smoke.json', 'Windows-signature.json', 'Windows-update-transaction.json', 'Source-and-checks.json']]
+                 ['Windows-validation.json', 'Windows-smoke.json', 'Windows-signature.json', 'Windows-update-transaction.json', 'Windows-single-instance-native.json', 'Source-and-checks.json']]
         subprocess.run(['gh', 'release', 'create', tag, *map(str, assets), '--target', commit,
                         '--title', f'红果TV Windows {version} · x64 未签名正式版',
                         '--notes-file', str(notes_file), '--draft', '--latest=false'], check=True)

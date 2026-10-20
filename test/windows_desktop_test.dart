@@ -8,6 +8,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 class DesktopHarness {
   final calls = <MethodCall>[];
   bool visible = true, topmost = false, fullscreen = false, maximized = false;
+  bool minimized = false;
+  Object? destroyFailure;
   bool trayAvailable = true;
   String titleBar = 'normal';
   void Function(int)? exitProcess;
@@ -27,7 +29,11 @@ class DesktopHarness {
           calls.add(call);
           switch (call.method) {
             case 'isMinimized':
-              return false;
+              return minimized;
+            case 'restore':
+              minimized = false;
+            case 'destroy':
+              if (destroyFailure case final failure?) throw failure;
             case 'isFullScreen':
               return fullscreen;
             case 'isMaximized':
@@ -92,6 +98,82 @@ class DesktopHarness {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test(
+    'restore unminimizes without changing paused playback or an existing maximized fullscreen window',
+    () async {
+      for (final minimized in [false, true]) {
+        final harness = DesktopHarness();
+        await harness.initialize();
+        harness.minimized = minimized;
+        harness.maximized = !minimized;
+        harness.fullscreen = !minimized;
+        harness.desktop.inTray = true;
+        var playing = false;
+        harness.desktop.togglePlayback = () => playing = !playing;
+        harness.calls.clear();
+        await harness.action('restore');
+        expect(harness.minimized, isFalse);
+        expect(harness.maximized, !minimized);
+        expect(harness.fullscreen, !minimized);
+        expect(playing, isFalse);
+        expect(harness.desktop.inTray, isFalse);
+        expect(
+          harness.calls.where((call) => call.method == 'restore').length,
+          minimized ? 1 : 0,
+        );
+        harness.dispose();
+      }
+    },
+  );
+  test(
+    'failed native exit reinitializes restore without a queue deadlock and preserves the original failure',
+    () async {
+      for (final failUiRecovery in [false, true]) {
+        final harness = DesktopHarness();
+        await harness.initialize();
+        var playing = true;
+        harness.desktop.pausePlayback = () async {
+          playing = false;
+        };
+        harness.desktop.togglePlayback = () => playing = !playing;
+        await harness.desktop.requestClose();
+        harness.trayAvailable = false;
+        harness.destroyFailure = PlatformException(code: 'synthetic_destroy');
+        var recoveryCalls = 0;
+        harness.desktop.restoreUI = () async {
+          recoveryCalls++;
+          if (failUiRecovery) throw StateError('synthetic UI recovery failure');
+        };
+        await expectLater(
+          harness.desktop.quit().timeout(const Duration(seconds: 2)),
+          throwsA(
+            isA<PlatformException>().having(
+              (error) => error.code,
+              'code',
+              'synthetic_destroy',
+            ),
+          ),
+        );
+        expect(recoveryCalls, 1);
+        expect(harness.desktop.quitting, isFalse);
+        expect(
+          harness.calls.where((call) => call.method == 'initialize').length,
+          2,
+        );
+        expect(
+          harness.calls
+              .lastWhere((call) => call.method == 'setPreventClose')
+              .arguments,
+          {'isPreventClose': true},
+        );
+        await harness.action('restore').timeout(const Duration(seconds: 2));
+        expect(harness.visible, isTrue);
+        expect(harness.desktop.inTray, isFalse);
+        expect(playing, isFalse);
+        harness.dispose();
+      }
+    },
+  );
   test(
     'fullscreen normalizes the native frame after entry and restores the caption after exit while preserving maximization',
     () async {

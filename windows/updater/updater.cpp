@@ -11,6 +11,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include "../runner/single_instance.h"
 
 namespace fs = std::filesystem;
 
@@ -477,8 +478,21 @@ int wmain(int argc, wchar_t** argv) {
         const auto config = transaction.parent_path().parent_path() / L"shared_preferences.json";
         bool configRestored = true;
         if (fs::exists(savedConfig)) {
+          SingleInstanceOptions recoveryOptions;
+          recoveryOptions.update_wait_ms = 0;
+#ifdef HONGGUOTV_UPDATER_TEST
+          recoveryOptions.application_id += L".TransactionTest." + Wide(cancellationNonce);
+          recoveryOptions.executable_name = L"HongguoTV-transaction-fixture.exe";
+          recoveryOptions.product_name = L"Update fixture";
+#endif
+          SingleInstanceGuard recoveryLease(recoveryOptions);
+          if (recoveryLease.Start(true) != SingleInstanceResult::kPrimary) {
+            configRestored = false;
+            status += "; configuration recovery withheld because another client is running or its identity is uncertain; preserve configuration backup=" + Utf8(savedConfig.native());
+            Log("configuration-recovery-withheld", {{"reason", Utf8(recoveryLease.error())}, {"backup", Utf8(savedConfig.native())}});
+          }
           SafePath(config);
-          if (fs::exists(config) && !CopyFileW(config.c_str(), (transaction / L"failed-preferences.json").c_str(), TRUE)) {
+          if (configRestored && fs::exists(config) && !CopyFileW(config.c_str(), (transaction / L"failed-preferences.json").c_str(), TRUE)) {
             const DWORD copyError = GetLastError();
             Log("CopyFileW(failed-preferences)", {{"win32Error", std::to_string(copyError)}, {"from", Utf8(config.native())}, {"to", Utf8((transaction / L"failed-preferences.json").native())}});
             configRestored = false;

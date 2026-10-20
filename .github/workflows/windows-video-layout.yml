@@ -2,7 +2,7 @@ name: Windows video layout diagnostics
 
 on:
   push:
-    branches: [fix/windows-layout-description-skip-0.1.20-45, fix/windows-client-viewport-0.1.21-46, fix/hongguo-playback-release-0.1.22-47, release/windows-android-0.1.22-47]
+    branches: [fix/windows-layout-description-skip-0.1.20-45, fix/windows-client-viewport-0.1.21-46, fix/hongguo-playback-release-0.1.22-47, release/windows-android-0.1.22-47, release/windows-android-0.1.23-48, candidate/hongguo-retry-single-instance-0.1.23-48]
   workflow_dispatch:
 
 permissions:

@@ -1,3 +1,4 @@
+import argparse
 import ctypes
 import hashlib
 import json
@@ -30,18 +31,22 @@ def records(directory, target):
         for file in sorted(directory.rglob('*')) if file.is_file()), encoding='utf-8')
 
 
-def compile_fixtures(directory):
-    current_build = int(re.search(r'^version:.*\+(\d+)', (root / 'pubspec.yaml').read_text(), re.M).group(1))
+def compile_fixtures(directory, cxx='g++.exe'):
+    compiler = Path(cxx)
+    windres = str(compiler.with_name('windres.exe')) if compiler.is_absolute() else 'windres.exe'
+    current_build = int(re.search(r'^version:.*\+(\d+)', (root / 'pubspec.yaml').read_text(encoding='utf-8'), re.M).group(1))
     for build in sorted({37, 38, 39, current_build - 1}):
         resource = directory / f'fixture-{build}.o'
-        subprocess.run(['windres.exe', f'-DTEST_BUILD={build}',
+        subprocess.run([windres, f'-DTEST_BUILD={build}',
                         str(root / 'windows/updater/test_fixture.rc'), str(resource)], check=True)
-        subprocess.run(['g++.exe', '-std=c++17', '-municode', '-static', f'-DTEST_BUILD={build}',
+        subprocess.run([cxx, '-std=c++17', '-municode', '-static', f'-DTEST_BUILD={build}', '-DNOMINMAX',
                         str(root / 'windows/updater/test_fixture.cpp'), str(resource),
+                        str(root / 'windows/runner/single_instance.cpp'), '-ladvapi32', '-lversion', '-luser32',
                         '-o', str(directory / f'fixture-{build}.exe')], check=True)
-    subprocess.run(['g++.exe', '-std=c++17', '-municode', '-static', '-O2',
+    subprocess.run([cxx, '-std=c++17', '-municode', '-static', '-O2',
                     '-DNOMINMAX', '-DUNICODE', '-D_UNICODE', '-DHONGGUOTV_UPDATER_TEST',
-                    str(root / 'windows/updater/updater.cpp'), '-lbcrypt', '-lversion',
+                    str(root / 'windows/updater/updater.cpp'), str(root / 'windows/runner/single_instance.cpp'),
+                    '-lbcrypt', '-lversion', '-ladvapi32', '-luser32',
                     '-o', str(directory / 'updater-faults.exe')], check=True)
 
 
@@ -63,7 +68,7 @@ def transaction(base, fixtures, mode, real=False):
         Path(environment['LOCALAPPDATA']).mkdir()
     install.mkdir()
     stage.mkdir()
-    build = int(re.search(r'^version:.*\+(\d+)', (root / 'pubspec.yaml').read_text(), re.M).group(1)) if real else 39
+    build = int(re.search(r'^version:.*\+(\d+)', (root / 'pubspec.yaml').read_text(encoding='utf-8'), re.M).group(1)) if real else 39
     old_build = build - 1 if real else 38
     if real:
         version = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(encoding='utf-8'), re.M).group(1).split('+')[0]
@@ -97,10 +102,11 @@ def transaction(base, fixtures, mode, real=False):
     records(install, tx / 'old-files.tsv')
     records(stage, tx / 'new-files.tsv')
     helper = tx / 'HongguoTV-updater.exe'
-    helper_source = fixtures / 'updater-faults.exe' if mode == 'stop-unconfirmed' else root / 'build/windows/x64/runner/Release/HongguoTV-updater.exe'
+    helper_source = root / 'build/windows/x64/runner/Release/HongguoTV-updater.exe' if real else fixtures / 'updater-faults.exe'
     shutil.copyfile(helper_source, helper)
     parent = subprocess.Popen([str(install / 'HongguoTV.exe'), '--hold', str(tx)], env=environment)
     second = subprocess.Popen([str(install / 'HongguoTV.exe'), '--hold', str(tx)], env=environment) if mode == 'second-instance' else None
+    other = None
     plan = tx / 'plan.txt'
     fields = {'root': str(install), 'stage': str(stage), 'backup': str(backup),
               'nonce': nonce, 'pid': parent.pid, 'build': build, 'oldBuild': old_build,
@@ -141,7 +147,23 @@ def transaction(base, fixtures, mode, real=False):
                 raise RuntimeError('Cannot create busy file fixture')
         if mode == 'cancel-before-ready':
             (tx / 'cancel.txt').write_text(nonce, encoding='ascii')
-        process = subprocess.Popen([str(helper), str(plan)], env=environment, cwd=tx)
+        try:
+            process = subprocess.Popen([str(helper), str(plan)], env=environment, cwd=tx)
+        except OSError as failure:
+            diagnostic = {'case': mode, 'ok': False, 'phase': 'launch-helper',
+                          'executable': str(helper.resolve()), 'plan': str(plan.resolve()),
+                          'cwd': str(tx.resolve()), 'winerror': getattr(failure, 'winerror', None),
+                          'error': str(failure), 'helperStarted': False,
+                          'synthetic': not real}
+            try:
+                diagnostic['helperSha256'] = hashlib.sha256(helper.read_bytes()).hexdigest()
+            except OSError as read_failure:
+                diagnostic['helperReadError'] = str(read_failure)
+            print(json.dumps(diagnostic, ensure_ascii=True), flush=True)
+            report = root / 'dist/windows/Windows-update-transaction-launch-failure.json'
+            report.parent.mkdir(parents=True, exist_ok=True)
+            report.write_text(json.dumps(diagnostic, ensure_ascii=True, indent=2) + '\n', encoding='utf-8')
+            raise
         wait_for(lambda: (tx / 'ready.txt').exists() or (tx / 'status.txt').exists())
         if (tx / 'ready.txt').exists():
             if mode == 'cancel-after-ready':
@@ -151,6 +173,13 @@ def transaction(base, fixtures, mode, real=False):
                     (tx / 'commit.txt').write_text(nonce, encoding='ascii')
                 (tx / 'stop-old').touch()
                 parent.wait(timeout=10)
+                if mode == 'cross-directory-client':
+                    other_install = base / 'other-installation'
+                    other_install.mkdir()
+                    other_executable = other_install / 'HongguoTV-transaction-fixture.exe'
+                    shutil.copyfile(fixtures / 'fixture-39.exe', other_executable)
+                    other = subprocess.Popen([str(other_executable), '--hold-client', str(tx)], env=environment)
+                    wait_for(lambda: (tx / 'other-client-ready').exists())
         code = process.wait(timeout=90)
         status = (tx / 'status.txt').read_text(encoding='utf-8')
         if mode == 'success':
@@ -169,6 +198,15 @@ def transaction(base, fixtures, mode, real=False):
             events = [json.loads(line) for line in (tx / 'helper-diagnostics.jsonl').read_text(encoding='utf-8').splitlines()]
             assert any(event['event'] == 'rollback-withheld' for event in events)
             assert not any(event['phase'] == 'rollback-directories' for event in events)
+        elif mode == 'cross-directory-client':
+            assert code == 1 and 'rolled back' in status and 'configuration recovery withheld' in status, status
+            assert config.read_text(encoding='utf-8') == 'active-other-client-config'
+            assert (tx / 'preferences-backup.json').read_text(encoding='utf-8') == original
+            assert (tx / 'update-child-refused').read_text() == 'blocked'
+            assert not (tx / 'ack.txt').exists() and not (tx / 'child-38').exists()
+            assert other.poll() is None
+            events = [json.loads(line) for line in (tx / 'helper-diagnostics.jsonl').read_text(encoding='utf-8').splitlines()]
+            assert any(event['event'] == 'configuration-recovery-withheld' for event in events)
         elif mode in ['crash', 'hang']:
             assert code == 1 and 'rolled back' in status, status
             wait_for(lambda: (tx / 'child-38').exists())
@@ -211,11 +249,14 @@ def transaction(base, fixtures, mode, real=False):
     finally:
         (tx / 'stop-old').touch()
         (tx / 'stop-new').touch()
+        (tx / 'stop-other-client').touch()
         if parent.poll() is None:
             parent.terminate()
             parent.wait(timeout=5)
         if second:
             second.wait(timeout=5)
+        if other:
+            other.wait(timeout=5)
         if process and process.poll() is None:
             process.terminate()
             process.wait(timeout=5)
@@ -236,17 +277,22 @@ def transaction(base, fixtures, mode, real=False):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--cxx', default='g++.exe')
+    parser.add_argument('--synthetic-only', action='store_true')
+    args = parser.parse_args()
     if platform.system() != 'Windows':
         raise SystemExit('Windows runner required')
     results = []
     with tempfile.TemporaryDirectory(prefix='hongguo-update-') as temporary:
         base = Path(temporary)
-        compile_fixtures(base)
-        for mode in ['success', 'crash', 'hang', 'busy', 'tamper', 'version', 'semantic', 'architecture', 'unowned', 'junction', 'second-instance', 'cancel-before-ready', 'cancel-after-ready', 'no-handoff', 'stop-unconfirmed']:
+        compile_fixtures(base, args.cxx)
+        for mode in ['success', 'crash', 'hang', 'busy', 'tamper', 'version', 'semantic', 'architecture', 'unowned', 'junction', 'second-instance', 'cancel-before-ready', 'cancel-after-ready', 'no-handoff', 'stop-unconfirmed', 'cross-directory-client']:
             results.append(transaction(base / mode, base, mode))
             print(json.dumps(results[-1]))
-        results.append(transaction(base / 'real', base, 'success', real=True))
-        print(json.dumps(results[-1]))
+        if not args.synthetic_only:
+            results.append(transaction(base / 'real', base, 'success', real=True))
+            print(json.dumps(results[-1]))
     report = root / 'dist/windows/Windows-update-transaction.json'
     identity = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(encoding='utf-8'), re.M).group(1).split('+')
     report.write_text(json.dumps({'ok': True, 'version': identity[0], 'build': int(identity[1]), 'cases': results, 'signed': False,

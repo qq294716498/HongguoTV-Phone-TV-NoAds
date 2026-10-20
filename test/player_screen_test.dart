@@ -122,6 +122,25 @@ class BlockedRouteRepository extends RouteRepository {
   }
 }
 
+class DeferredResolveRouteRepository extends RouteRepository {
+  final pendingResolve = Completer<PlaybackPlan>();
+  bool deferFirst = true;
+
+  @override
+  Future<PlaybackPlan> resolve(
+    Drama drama,
+    Episode episode, {
+    int quality = 0,
+  }) {
+    if (!deferFirst) return super.resolve(drama, episode, quality: quality);
+    deferFirst = false;
+    primaryCalls++;
+    requestedQualities.add(quality);
+    requestedEpisodes.add(episode.number);
+    return pendingResolve.future;
+  }
+}
+
 void main() {
   setUp(mockPlayerDevice);
   var previewFontsLoaded = false;
@@ -339,6 +358,50 @@ void main() {
       expect(repository.active, isEmpty);
     },
   );
+
+  for (final lateResult in ['success', 'failure']) {
+    testWidgets(
+      'switching episodes bypasses pending source retries and ignores late $lateResult',
+      (tester) async {
+        final repository = DeferredResolveRouteRepository();
+        final player = ScriptedPlayer();
+        await mount(tester, repository, player);
+        expect(repository.requestedEpisodes, [1]);
+        expect(repository.pendingResolve.isCompleted, false);
+        expect(player.opened, isEmpty);
+        await tester.tap(find.byKey(const ValueKey('play-episode-2')));
+        await settleOperations(tester);
+        expect(repository.requestedEpisodes, [1, 2]);
+        expect(repository.pendingResolve.isCompleted, false);
+        expect(player.opened, hasLength(1));
+        expect(player.state.playing, true);
+        expect(repository.active, hasLength(1));
+        final current = player.opened.single.uri;
+        final active = Set<String>.of(repository.active);
+        if (lateResult == 'success') {
+          const late = PlaybackPlan(
+            url: 'https://media.test/late-source-retry.mp4',
+            session: 'late-source-retry',
+          );
+          repository.active.add(late.session);
+          repository.pendingResolve.complete(late);
+        } else {
+          repository.pendingResolve.completeError(
+            AppFailure('Obsolete source retries exhausted'),
+          );
+        }
+        await settleOperations(tester);
+        expect(player.opened, hasLength(1));
+        expect(player.opened.single.uri, current);
+        expect(player.state.playing, true);
+        expect(repository.active, active);
+        expect(find.text('暂时无法播放'), findsNothing);
+        expect(tester.takeException(), isNull);
+        await unmount(tester, player);
+        expect(repository.active, isEmpty);
+      },
+    );
+  }
 
   testWidgets(
     'new episode bypasses an obsolete open and ignores its late completion',

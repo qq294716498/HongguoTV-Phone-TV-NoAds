@@ -12,9 +12,22 @@ from publish_android_stable import certificate, offsets, validate_apks
 
 
 class AndroidStablePublishTests(unittest.TestCase):
+    def test_release_uses_published_022_baseline_and_preserves_all_windows_releases(self):
+        import publish_windows_stable as windows
+        self.assertEqual(publish.previous_android_tag, 'app-v0.1.22-47')
+        self.assertEqual(publish.previous_android_commit, '1281b06ed7d49aba3b380b6ca310d98f38481486')
+        self.assertEqual(windows.previous_android_tag, publish.previous_android_tag)
+        self.assertEqual(windows.previous_android_commit, publish.previous_android_commit)
+        self.assertEqual(publish.windows_tag, 'windows-v0.1.23-48')
+        self.assertEqual(windows.previous_windows_tags, (
+            'windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47'))
+        self.assertEqual(publish.windows_tags, (*windows.previous_windows_tags, publish.windows_tag))
+        self.assertEqual(windows.release_branch, publish.release_branch)
+        self.assertEqual(windows.release_only_paths, publish.release_only_paths)
+
     def test_final_notes_mark_verified_public_downloads_and_preserve_limits(self):
-        tag = 'app-v0.1.22-47'
-        body = '0.1.22+47\n取源恢复与冷却修复。\n既有证书；Android 8.0；真实手机 / TV 仍未实测。\n' + publish.pending_publication_note
+        tag = 'app-v0.1.23-48'
+        body = '0.1.23+48\n取源恢复与冷却修复。\n既有证书；Android 8.0；真实手机 / TV 仍未实测。\n' + publish.pending_publication_note
         final = body.replace(publish.pending_publication_note, publish.verified_publication_note)
         current = dict(tag_name=tag, draft=False, prerelease=False, target_commitish='current', body=body)
         with mock.patch.object(publish, 'release', side_effect=[current, {**current, 'body': final}]) as reads, \
@@ -29,9 +42,9 @@ class AndroidStablePublishTests(unittest.TestCase):
             self.assertIn('真实手机 / TV 仍未实测', final)
 
     def test_final_notes_cannot_modify_old_or_unverified_release(self):
-        tag = 'app-v0.1.22-47'
+        tag = 'app-v0.1.23-48'
         current = dict(tag_name=tag, draft=False, prerelease=False, target_commitish='current', body=publish.pending_publication_note)
-        cases = [('tag_name', 'app-v0.1.19-44'), ('draft', True), ('prerelease', True),
+        cases = [('tag_name', 'app-v0.1.22-47'), ('draft', True), ('prerelease', True),
                  ('target_commitish', 'old'), ('body', 'no publication status')]
         for field, value in cases:
             with self.subTest(field=field), mock.patch.object(publish, 'release', return_value={**current, field: value}), \
@@ -43,10 +56,10 @@ class AndroidStablePublishTests(unittest.TestCase):
                 edits.assert_not_called()
 
     def test_failed_public_latest_validation_never_marks_notes_complete(self):
-        with mock.patch.object(Path, 'read_text', return_value='version: 0.1.22+47\n'), \
+        with mock.patch.object(Path, 'read_text', return_value='version: 0.1.23+48\n'), \
                 mock.patch.object(publish.os, 'chdir'), mock.patch.object(publish, 'validate_release_source'), \
                 mock.patch.object(publish, 'read', return_value={}), \
-                mock.patch.object(publish, 'github', return_value=json.dumps({'tag_name': 'app-v0.1.19-44'})), \
+                mock.patch.object(publish, 'github', return_value=json.dumps({'tag_name': 'app-v0.1.22-47'})), \
                 mock.patch.object(publish, 'finalize_release_notes') as notes, \
                 mock.patch.object(publish.subprocess, 'run') as writes, \
                 mock.patch.dict(publish.os.environ, {'GITHUB_SHA': 'current'}), \
@@ -59,7 +72,7 @@ class AndroidStablePublishTests(unittest.TestCase):
     def test_only_exact_release_branch_push_or_explicit_dispatch_can_publish(self):
         root = Path(__file__).resolve().parents[1]
         fix = 'fix/hongguo-playback-release-0.1.22-47'
-        release = 'release/windows-android-0.1.22-47'
+        release = 'release/windows-android-0.1.23-48'
         for filename in ['android-stable.yml', 'windows-preview.yml']:
             workflow = (root / '.github/workflows' / filename).read_text()
             branches = re.search(r'(?m)^    branches: (.*)$', workflow).group(1)
@@ -68,7 +81,7 @@ class AndroidStablePublishTests(unittest.TestCase):
             expression = re.search(r'(?m)^  release:\n(?:    [^\n]*\n)*?    if: ([^\n]+)', workflow).group(1)
             expression = expression.replace('github.ref', 'ref').replace('github.event_name', 'event').replace('inputs.publish_release', 'publish')
             expression = expression.replace('&&', ' and ').replace('||', ' or ')
-            for branch in [fix, release, 'windows/other', 'main']:
+            for branch in [fix, release, 'candidate/hongguo-retry-single-instance-0.1.23-48', 'release/windows-android-0.1.22-47', 'windows/other', 'main']:
                 for event in ['push', 'workflow_dispatch', 'pull_request']:
                     for publish in [False, True]:
                         expected = branch == release and (event == 'push' or (event == 'workflow_dispatch' and publish))
@@ -82,7 +95,7 @@ class AndroidStablePublishTests(unittest.TestCase):
         self.assertIn('WINDOWS_BINARY_RUN: ${{ github.run_id }}', windows)
 
     def test_android_waits_for_final_windows_evidence_without_republishing_it(self):
-        names = ['Windows-update-check.json', 'Windows-update-channel.json', 'Android-isolation.json', 'SHA256SUMS.txt']
+        names = ['Windows-update-check.json', 'Windows-update-channel.json', 'Windows-update-transaction.json', 'Windows-single-instance-native.json', 'Android-isolation.json', 'SHA256SUMS.txt']
         complete = dict(target_commitish='current', draft=False, prerelease=False, body=publish.windows_verified_publication_note,
                         assets=[{'name': name} for name in names])
         waiting = mock.Mock(returncode=0, stdout=json.dumps({**complete, 'assets': complete['assets'][:-1]}))
@@ -96,7 +109,7 @@ class AndroidStablePublishTests(unittest.TestCase):
     def test_android_waits_until_windows_final_notes_confirm_completion(self):
         from publish_windows_stable import verified_publication_note
         self.assertEqual(publish.windows_verified_publication_note, verified_publication_note)
-        names = ['Windows-update-check.json', 'Windows-update-channel.json', 'Android-isolation.json', 'SHA256SUMS.txt']
+        names = ['Windows-update-check.json', 'Windows-update-channel.json', 'Windows-update-transaction.json', 'Windows-single-instance-native.json', 'Android-isolation.json', 'SHA256SUMS.txt']
         complete = dict(target_commitish='current', draft=False, prerelease=False,
                         assets=[{'name': name} for name in names])
         waiting = mock.Mock(returncode=0, stdout=json.dumps({**complete, 'body': '公开发布核验进行中'}))
@@ -115,8 +128,8 @@ class AndroidStablePublishTests(unittest.TestCase):
 
     def test_published_windows_baseline_is_verified_and_preserved_without_republishing(self):
         assets = [{'id': n, 'name': name, 'size': 1, 'digest': 'sha256:synthetic'}
-                  for n, name in enumerate(['Windows-update-check.json', 'Windows-update-channel.json',
-                                           'Android-isolation.json', 'SHA256SUMS.txt'])]
+                  for n, name in enumerate(['Windows-update-check.json', 'Windows-update-channel.json', 'Windows-update-transaction.json',
+                                           'Windows-single-instance-native.json', 'Android-isolation.json', 'SHA256SUMS.txt'])]
         old = dict(id=1, tag_name='windows-v0.1.15-40', target_commitish='old', draft=False, prerelease=False, assets=[])
         current = dict(id=2, tag_name=publish.windows_tag, target_commitish='current', draft=False, prerelease=False, assets=assets,
                        body=publish.windows_verified_publication_note)
@@ -153,7 +166,7 @@ class AndroidStablePublishTests(unittest.TestCase):
     def test_changed_android_latest_blocks_staging_without_publication(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            (root / 'pubspec.yaml').write_text('version: 0.1.22+47\n')
+            (root / 'pubspec.yaml').write_text('version: 0.1.23+48\n')
             values = [json.dumps({'object': {'sha': 'current'}}),
                       json.dumps({'tag_name': 'app-v0.1.20-45'})]
             with mock.patch.object(publish, 'root', root), mock.patch.object(publish.os, 'chdir'), \
@@ -167,7 +180,7 @@ class AndroidStablePublishTests(unittest.TestCase):
                     publish.main()
                 self.assertEqual(github.call_count, 2)
                 self.assertEqual(commands.call_args_list, [mock.call(
-                    ['gh', 'release', 'view', 'app-v0.1.22-47'],
+                    ['gh', 'release', 'view', 'app-v0.1.23-48'],
                     stdout=publish.subprocess.DEVNULL, stderr=publish.subprocess.DEVNULL)])
 
     def test_signing_preflight_reports_presence_without_secret_values(self):
