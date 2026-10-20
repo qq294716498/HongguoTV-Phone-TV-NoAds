@@ -65,8 +65,10 @@ def msvc_environment():
     if not developer or not developer.is_file():
         raise RuntimeError('Native tests require MSVC C++ tools and Windows SDK; the installed '
                            'Visual Studio has no x64 C++ workload. This is not a skipped/passed native test.')
-    command = '"{}" -no_logo -arch=x64 -host_arch=x64 >nul && set'.format(developer)
-    prepared = subprocess.run(['cmd.exe', '/d', '/s', '/c', command], capture_output=True,
+    # cmd uses doubled outer quotes, not the backslash escaping applied to a
+    # subprocess argument list. VS is normally installed below Program Files.
+    command = 'cmd.exe /d /s /c ""{}" -no_logo -arch=x64 -host_arch=x64 >nul && set"'.format(developer)
+    prepared = subprocess.run(command, capture_output=True,
                               text=True, errors='replace', check=True)
     for line in prepared.stdout.splitlines():
         if '=' in line and not line.startswith('='):
