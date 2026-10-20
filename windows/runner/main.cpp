@@ -52,8 +52,12 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     return EXIT_FAILURE;
   }
   if (!instance_guard.AttachWindow(window.GetHandle())) {
-    MessageBoxW(nullptr, instance_guard.error().c_str(), APP_WINDOW_TITLE,
-        MB_OK | MB_ICONERROR);
+    if (update_start) {
+      OutputDebugStringW(instance_guard.error().c_str());
+    } else {
+      MessageBoxW(nullptr, instance_guard.error().c_str(), APP_WINDOW_TITLE,
+          MB_OK | MB_ICONERROR);
+    }
     return EXIT_FAILURE;
   }
   window.SetQuitOnClose(true);
