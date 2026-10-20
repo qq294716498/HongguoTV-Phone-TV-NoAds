@@ -219,7 +219,12 @@ void main() {
     tester.view.resetDevicePixelRatio();
     tester.view.resetPadding();
     await settleOperations(tester);
+    for (var i = 0; i < 95 && !player.disposalComplete; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await tester.pump();
     expect(player.disposed, isTrue);
+    expect(player.disposalComplete, isTrue);
     expect(tester.takeException(), isNull);
   }
 
@@ -740,9 +745,14 @@ void main() {
             await unmount(tester, player);
             return;
         }
+        final playCallsBeforeLateSeek = player.resumeCalls;
+        expect(
+          playCallsBeforeLateSeek,
+          interruption == 'episode switch' ? 1 : 0,
+        );
         player.pendingSeeks.first.complete();
         await settleOperations(tester);
-        expect(player.resumeCalls, 0);
+        expect(player.resumeCalls, playCallsBeforeLateSeek);
         if (interruption == 'newer seek') {
           expect(player.state.playing, isFalse);
           player.pendingSeeks.last.complete();
