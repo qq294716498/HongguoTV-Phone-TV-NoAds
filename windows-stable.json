@@ -1,17 +1,17 @@
 {
   "schema": 1,
   "release": {
-    "tag_name": "windows-v0.1.22-47",
+    "tag_name": "windows-v0.1.23-48",
     "draft": false,
     "prerelease": false,
-    "body": "0.1.22+47\n\n- 红果取源增加统一时限和取消处理；切集、返回或关闭时终止过期任务，隔离迟到结果，避免旧请求占用新一集的状态。预加载失败后可重新取源。\n- 正确显示站源冷却剩余时间并停止无效自动重试，遵守服务端 429 的 Retry-After；保留限流保护，不绕过冷却。\n- 修复最大化进入全屏、迷你窗恢复全屏时原生客户区不足的问题；退出全屏恢复正常标题栏和原窗口状态。保持视频比例及正常黑边。\n- 侧栏加入可展开、滚动的剧情简介，修复深色面板文字颜色；显示当前集与本季数量，连载或未完整列表使用“已更新 / 已载入”，保留特别篇名称。\n- “跳过此版本”只隐藏该版本的自动提示，设置中仍可手动检查、下载和安装；新版本重新提示。\n- 弹幕补充 [笑]、[哭]、[什么]、[敬礼]、[吃瓜] 等表情；图片未就绪或失败时保留原始文字，未知名称不丢失。\n\nWindows 10/11 x64 完整 ZIP 仍未签名。构建、完整包校验、合成媒体启动、托盘 / 迷你窗、更新事务及公网更新下载 / 静态清单回退的结果见本次 Release 附件。真实站源长时间连播、用户旧版本原地替换、消费级 GPU、音频设备和多显示器混合 DPI 尚未实测；保持视频比例及正常黑边。\n\n构建及静态回归、Windows 完整包与合成媒体启动验证已通过。Windows 10 / 11 x64 版本仍未签名；真实站源、长时间连播、用户旧版原地替换和消费级 GPU / 音频设备仍未实测。\n\n源码提交：https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/commit/1281b06ed7d49aba3b380b6ca310d98f38481486\n\nCI：https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/39400770885\n\n校验：SHA256SUMS.txt。",
+    "body": "0.1.23+48\n\n- 红果播放模型接口遇到 HTTP 200 且正文为零字节时，最多增加一次短退避重试；仍服从当前请求时限、取消和站源冷却，不刷新设备身份，不把所有空响应都视为已经解决。\n- 同一 Windows 账户下，支持单实例的客户端跨安装目录共用一个实例；再次启动唤醒托盘或最小化窗口，保持原暂停状态。旧版 0.1.22 及更早的 EXE 无法追溯补上启动检查，请先从托盘退出旧版，再使用新版入口。\n- 更新重启继续等待旧客户端退出；发生跨目录实例冲突时保护正在使用的用户配置，保留事务记录供恢复。\n- 红果取源增加统一时限和取消处理；切集、返回或关闭时终止过期任务，隔离迟到结果，避免旧请求占用新一集的状态。预加载失败后可重新取源。\n- 正确显示站源冷却剩余时间并停止无效自动重试，遵守服务端 429 的 Retry-After；保留限流保护，不绕过冷却。\n- 修复最大化进入全屏、迷你窗恢复全屏时原生客户区不足的问题；退出全屏恢复正常标题栏和原窗口状态。保持视频比例及正常黑边。\n- 侧栏加入可展开、滚动的剧情简介，修复深色面板文字颜色；显示当前集与本季数量，连载或未完整列表使用“已更新 / 已载入”，保留特别篇名称。\n- “跳过此版本”只隐藏该版本的自动提示，设置中仍可手动检查、下载和安装；新版本重新提示。\n- 弹幕补充 [笑]、[哭]、[什么]、[敬礼]、[吃瓜] 等表情；图片未就绪或失败时保留原始文字，未知名称不丢失。\n- 未取得确切对应素材的 [没看够] 保留完整方括号文字；手机、TV 和 Windows 共用此回退规则，不用其他表情代替，也不显示空白或 OBJ。\n\nWindows 10/11 x64 完整 ZIP 仍未签名。构建、完整包校验、合成媒体启动、托盘 / 迷你窗、更新事务及公网更新下载 / 静态清单回退的结果见本次 Release 附件。真实站源长时间连播、用户旧版本原地替换、消费级 GPU、音频设备和多显示器混合 DPI 尚未实测；保持视频比例及正常黑边。\n\n构建及静态回归、Windows 完整包与合成媒体启动验证已通过。Windows 10 / 11 x64 版本仍未签名；真实站源、长时间连播、用户旧版原地替换和消费级 GPU / 音频设备仍未实测。\n\n源码提交：https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/commit/5bc038a5f3e5e35eaed6568831ac547a5b80b03d\n\nCI：https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/39413727517\n\n校验：SHA256SUMS.txt。",
     "assets": [
       {
-        "name": "HongguoTV-0.1.22-windows-x64.zip",
-        "size": 100946188,
-        "digest": "sha256:5d4bffd60fa6c2fae55ea0a0b26ad453e9be20d5c20d95b705f2f09d80bfccb4",
+        "name": "HongguoTV-0.1.23-windows-x64.zip",
+        "size": 100966341,
+        "digest": "sha256:7a4f89d639e7564a5f9702f8cb69a49472defbbcef16bd5c9d5ba659c49fbf85",
         "state": "uploaded",
-        "browser_download_url": "https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.22-47/HongguoTV-0.1.22-windows-x64.zip"
+        "browser_download_url": "https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.23-48/HongguoTV-0.1.23-windows-x64.zip"
       }
     ]
   }
