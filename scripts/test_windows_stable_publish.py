@@ -17,8 +17,8 @@ class WindowsStablePublishTests(unittest.TestCase):
         self.root = Path(temporary.name)
         self.output = self.root / 'dist/windows'
         self.output.mkdir(parents=True)
-        (self.root / 'pubspec.yaml').write_text('version: 0.1.14+39\n')
-        self.package = self.output / 'HongguoTV-0.1.14-windows-x64.zip'
+        (self.root / 'pubspec.yaml').write_text('version: 0.1.22+47\n')
+        self.package = self.output / 'HongguoTV-0.1.22-windows-x64.zip'
         self.package.write_bytes(b'synthetic package')
         self.smoke = {name: True for name in [
             'ok', 'nativeCore', 'preferences', 'bundledAssets', 'ffprobe', 'remux',
@@ -26,18 +26,19 @@ class WindowsStablePublishTests(unittest.TestCase):
             'fullscreen', 'miniReuseResizeRestore', 'miniNativeCaptionHidden', 'miniNativeResizeBorder', 'normalNativeCaptionRestored', 'nativeTrayHidden', 'trayPausesOnClose', 'trayRestoreStaysPaused',
             'nativeTrayRestored', 'nativeTrayQuit', 'playerUiDetached', 'playerDisposedBeforeExit', 'windowBrandIcon', 'trayBrandIcon', 'firstLaunchNoticeVisible', 'mediaKitPlayback', 'cleanPath',
             'nonAsciiPath', 'differentWorkingDirectory', 'javaEnvironmentRemoved', 'normalAppStartup', 'remoteImagesDisabled']}
-        self.smoke.update(processExitCode=0, version='0.1.14', build=39, nativeTrayToggles=2)
+        self.smoke.update(processExitCode=0, version='0.1.22', build=47, nativeTrayToggles=2)
         self.write('Windows-smoke.json', self.smoke)
-        self.write('Windows-validation.json', {'ok': True, 'architecture': 'x64', 'build': 39,
-                   'version': '0.1.14', 'bytes': self.package.stat().st_size, 'brandIconsVerified': True, 'identityAssetsVerified': True, 'sha256': hashlib.sha256(self.package.read_bytes()).hexdigest()})
+        self.write('Windows-validation.json', {'ok': True, 'architecture': 'x64', 'build': 47,
+                   'version': '0.1.22', 'bytes': self.package.stat().st_size, 'brandIconsVerified': True, 'identityAssetsVerified': True, 'sha256': hashlib.sha256(self.package.read_bytes()).hexdigest()})
         self.write('Windows-signature.json', {'status': 'NotSigned', 'signed': False})
-        self.transactions = {'ok': True, 'version': '0.1.14', 'build': 39, 'cases': [{'case': name, 'ok': True, 'build': 39, 'oldBuild': 38, 'startupAcknowledged': True} for name in [
+        self.transactions = {'ok': True, 'version': '0.1.22', 'build': 47, 'cases': [{'case': name, 'ok': True, 'build': 47, 'oldBuild': 44, 'startupAcknowledged': True} for name in [
             'success', 'crash', 'hang', 'busy', 'tamper', 'version', 'semantic', 'architecture',
             'unowned', 'junction', 'second-instance', 'cancel-before-ready', 'cancel-after-ready', 'no-handoff', 'stop-unconfirmed', 'real-client-startup-ack']]}
         self.write('Windows-update-transaction.json', self.transactions)
         for patch in [mock.patch.object(publish, 'root', self.root), mock.patch.object(publish, 'output', self.output),
                       mock.patch.object(publish, 'github', return_value=json.dumps({'object': {'sha': 'current'}})),
-                      mock.patch.dict(publish.os.environ, {'GITHUB_SHA': 'current'}),
+                      mock.patch.dict(publish.os.environ, {'GITHUB_SHA': 'current', 'GITHUB_RUN_ID': '100',
+                                                          'WINDOWS_BINARY_COMMIT': 'current', 'WINDOWS_BINARY_RUN': '100'}),
                       mock.patch.object(publish.os, 'chdir'),
                       mock.patch.object(publish, 'validate_release_source')]:
             patch.start()
@@ -89,8 +90,28 @@ class WindowsStablePublishTests(unittest.TestCase):
                 self.stage()
             writes.assert_not_called()
 
+    def test_old_workflow_binary_or_source_cannot_publish(self):
+        for variables in [{'WINDOWS_BINARY_COMMIT': 'old-source'}, {'WINDOWS_BINARY_RUN': 'previous-run'}]:
+            with self.subTest(variables=variables), mock.patch.dict(publish.os.environ, variables), \
+                    mock.patch.object(publish, 'github') as github, \
+                    mock.patch.object(publish.subprocess, 'run') as writes:
+                with self.assertRaisesRegex(ValueError, 'fresh compilation'):
+                    self.stage()
+                github.assert_not_called()
+                writes.assert_not_called()
+
+    def test_changed_android_latest_blocks_windows_publication(self):
+        with mock.patch.object(publish, 'metadata', return_value={'tag': 'app-v0.1.20-45'}), \
+                mock.patch.object(publish, 'release_identity', return_value={}), \
+                mock.patch.object(publish.subprocess, 'run', return_value=mock.Mock(returncode=1)) as commands:
+            with self.assertRaisesRegex(ValueError, 'approved stable baseline'):
+                self.stage()
+            self.assertEqual(commands.call_args_list, [mock.call(
+                ['gh', 'release', 'view', 'windows-v0.1.22-47'],
+                stdout=publish.subprocess.DEVNULL, stderr=publish.subprocess.DEVNULL)])
+
     def test_fallback_channel_requires_actual_public_bytes_before_any_mutation(self):
-        tag = 'windows-v0.1.14-39'
+        tag = 'windows-v0.1.22-47'
         asset = {'name': self.package.name, 'size': self.package.stat().st_size,
                  'digest': 'sha256:' + hashlib.sha256(self.package.read_bytes()).hexdigest(),
                  'browser_download_url': f'https://github.com/{publish.repository}/releases/download/{tag}/{self.package.name}',
@@ -100,24 +121,24 @@ class WindowsStablePublishTests(unittest.TestCase):
                 mock.patch.object(publish.urllib.request, 'urlopen', return_value=io.BytesIO(b'tampered')), \
                 mock.patch.object(publish.subprocess, 'run') as mutations:
             with self.assertRaisesRegex(ValueError, 'checksum'):
-                publish.publish_channel(tag, '0.1.14', '39')
+                publish.publish_channel(tag, '0.1.22', '47')
             self.assertEqual(github.call_count, 1)
             mutations.assert_not_called()
 
     def test_fallback_channel_never_replaces_a_newer_build(self):
-        tag = 'windows-v0.1.14-39'
+        tag = 'windows-v0.1.22-47'
         asset = {'name': self.package.name, 'size': self.package.stat().st_size,
                  'digest': 'sha256:' + hashlib.sha256(self.package.read_bytes()).hexdigest(),
                  'browser_download_url': f'https://github.com/{publish.repository}/releases/download/{tag}/{self.package.name}',
                  'state': 'uploaded'}
         release = {'tag_name': tag, 'draft': False, 'prerelease': False, 'body': 'release', 'assets': [asset]}
         existing = {'sha': 'previous', 'content': base64.b64encode(json.dumps(
-            {'schema': 1, 'release': {**release, 'tag_name': 'windows-v0.1.16-41'}}).encode()).decode()}
+            {'schema': 1, 'release': {**release, 'tag_name': 'windows-v0.1.23-48'}}).encode()).decode()}
         with mock.patch.object(publish, 'github', return_value=json.dumps(release)) as github, \
                 mock.patch.object(publish.urllib.request, 'urlopen', return_value=io.BytesIO(self.package.read_bytes())), \
                 mock.patch.object(publish.subprocess, 'run', return_value=mock.Mock(returncode=0, stdout=json.dumps(existing))):
             with self.assertRaisesRegex(ValueError, 'newer'):
-                publish.publish_channel(tag, '0.1.14', '39')
+                publish.publish_channel(tag, '0.1.22', '47')
             self.assertEqual(github.call_count, 1)
 
 

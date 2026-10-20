@@ -1,5 +1,7 @@
 import 'package:video_player_android/video_player_android.dart';
+
 import 'tv_decoder_settings.dart';
+
 import 'dart:async';
 import 'dart:io';
 
@@ -103,6 +105,23 @@ class LunaPlayerStreams implements PlayerStream {
   }
 }
 
+class _PlayerOperationCancelled implements Exception {}
+
+class _PlayerMediaOperation {
+  _PlayerMediaOperation(this.generation, {required this.wantsPlay});
+
+  final int generation;
+  bool wantsPlay;
+  final cancelled = Completer<void>();
+  HttpClient? sniffClient;
+
+  void cancel() {
+    sniffClient?.close(force: true);
+    sniffClient = null;
+    if (!cancelled.isCompleted) cancelled.complete();
+  }
+}
+
 /// 采用和 LunaTV-Mobile 完全相同架构的 ExoPlayer (AndroidX Media3) 播放器封装，
 /// 同时对上层红果鉴播控 UI (PlayerControls & TelevisionControls) 暴露完全兼容的 Player 契约。
 class LunaExoPlayer implements Player {
@@ -113,17 +132,26 @@ class LunaExoPlayer implements Player {
     this.initializationTimeout = const Duration(seconds: 20),
     this.transitionTimeout = const Duration(seconds: 10),
     this.preparationRetryDelay = const Duration(seconds: 3),
+    this.operationTimeout = const Duration(seconds: 3),
+    this.disposeTimeout = const Duration(seconds: 2),
   }) {
     state = const PlayerState().copyWith(volume: 100.0);
   }
 
   VideoPlayerController? _controller;
+  VideoPlayerController? _openingController;
+  _PlayerMediaOperation? _pendingMedia;
+  Completer<void> _commandsCancelled = Completer<void>();
+  final _activeCommands = <VideoPlayerController, int>{};
+  final _controllerDisposals = Expando<Future<void>>();
   final bool Function()? television;
   final bool Function()? textureOutput;
   final TvDecoderMode? Function()? decoderMode;
   final Duration initializationTimeout;
   final Duration transitionTimeout;
   final Duration preparationRetryDelay;
+  final Duration operationTimeout;
+  final Duration disposeTimeout;
   String? _lastControllerError;
   static const diagnosticChannel = MethodChannel('hongguo/video_diagnostics');
   VoidCallback? _valueListener;
@@ -190,6 +218,107 @@ class LunaExoPlayer implements Player {
             (nativeView
                 ? VideoViewType.platformView
                 : VideoViewType.textureView);
+  }
+
+  void _cancelOperations() {
+    ++_openGeneration;
+    _pendingMedia?.cancel();
+    _pendingMedia = null;
+    if (!_commandsCancelled.isCompleted) _commandsCancelled.complete();
+    _commandsCancelled = Completer<void>();
+  }
+
+  _PlayerMediaOperation _beginMediaOperation({required bool play}) {
+    _cancelOperations();
+    final operation = _PlayerMediaOperation(_openGeneration, wantsPlay: play);
+    _pendingMedia = operation;
+    return operation;
+  }
+
+  bool _currentMedia(_PlayerMediaOperation operation) =>
+      !_disposed &&
+      operation.generation == _openGeneration &&
+      !operation.cancelled.isCompleted;
+
+  Future<T> _awaitMedia<T>(
+    Future<T> pending,
+    _PlayerMediaOperation operation,
+    Duration timeout,
+  ) => _awaitCancellable(pending, operation.cancelled.future, timeout);
+
+  Future<T> _awaitCancellable<T>(
+    Future<T> pending,
+    Future<void> cancelled,
+    Duration timeout,
+  ) {
+    final result = Completer<T>();
+    final timer = Timer(timeout, () {
+      if (!result.isCompleted) {
+        result.completeError(TimeoutException('播放器操作超时', timeout));
+      }
+    });
+    pending.then(
+      (value) {
+        if (!result.isCompleted) result.complete(value);
+      },
+      onError: (Object error, StackTrace stack) {
+        if (!result.isCompleted) result.completeError(error, stack);
+      },
+    );
+    cancelled.then((_) {
+      if (!result.isCompleted) {
+        result.completeError(_PlayerOperationCancelled());
+      }
+    });
+    return result.future.whenComplete(timer.cancel);
+  }
+
+  void _finishMedia(_PlayerMediaOperation operation) {
+    if (identical(_pendingMedia, operation)) _pendingMedia = null;
+  }
+
+  Future<void> cancelPending() async {
+    if (_disposed) return;
+    final release =
+        _pendingMedia != null ||
+        _openingController != null ||
+        _transitioning ||
+        _activeCommands.containsKey(_controller);
+    _cancelOperations();
+    ++_prepareGeneration;
+    _preparedIdentity = _preparedUrl = _preparedMediaType = null;
+    _preparedHeaders = null;
+    _preparingNext = null;
+    _prepareRetryAt = DateTime(2000);
+    if (release) await _releaseController();
+  }
+
+  Future<void> _command(
+    VideoPlayerController c,
+    Future<void> Function() run,
+  ) async {
+    final generation = _openGeneration;
+    final cancelled = _commandsCancelled.future;
+    _activeCommands[c] = (_activeCommands[c] ?? 0) + 1;
+    try {
+      await _awaitCancellable(run(), cancelled, operationTimeout);
+      if (_disposed || generation != _openGeneration || c != _controller) {
+        throw _PlayerOperationCancelled();
+      }
+    } on TimeoutException catch (error) {
+      if (!_disposed && generation == _openGeneration && c == _controller) {
+        _reportControllerError(c, error.toString());
+        await cancelPending();
+      }
+      rethrow;
+    } finally {
+      final remaining = (_activeCommands[c] ?? 1) - 1;
+      if (remaining == 0) {
+        _activeCommands.remove(c);
+      } else {
+        _activeCommands[c] = remaining;
+      }
+    }
   }
 
   Map<String, String> _headers(Media media) {
@@ -398,7 +527,8 @@ class LunaExoPlayer implements Player {
     if (!retainPreviousFrame) clearRetainedFrame();
     if (!canTransition) return open(media, play: play, mediaType: mediaType);
     final c = _controller!;
-    final ticket = ++_openGeneration;
+    final operation = _beginMediaOperation(play: play);
+    final ticket = operation.generation;
     final retentionSequence = _frameRetentionSequence;
     final clock = Stopwatch()..start();
     _transitioning = true;
@@ -418,16 +548,18 @@ class LunaExoPlayer implements Player {
     }
     try {
       if (_disposed || ticket != _openGeneration) return;
-      final result = await diagnosticChannel
-          .invokeMapMethod<String, dynamic>('transition', {
-            'playerId': c.playerId,
-            'url': media.uri,
-            'headers': headers,
-            'identity': identity,
-            'mediaType': mediaType,
-            'requestElapsedMs': requestElapsedMs,
-          })
-          .timeout(transitionTimeout);
+      final result = await _awaitMedia(
+        diagnosticChannel.invokeMapMethod<String, dynamic>('transition', {
+          'playerId': c.playerId,
+          'url': media.uri,
+          'headers': headers,
+          'identity': identity,
+          'mediaType': mediaType,
+          'requestElapsedMs': requestElapsedMs,
+        }),
+        operation,
+        transitionTimeout,
+      );
       if (_disposed || ticket != _openGeneration || _controller != c) return;
       if (result == null) throw StateError('切集未返回首帧结果');
       lastTransitionUsedPrepared = result['usedPrepared'] == true;
@@ -478,9 +610,13 @@ class LunaExoPlayer implements Player {
       _lastControllerError = null;
       _startDiagnostics();
       _startPositionPolling();
-      if (_transitionWantsPlay) {
-        await c.play().timeout(const Duration(seconds: 3));
+      if (_transitionWantsPlay && operation.wantsPlay) {
+        await _awaitMedia(c.play(), operation, operationTimeout);
+        if (_currentMedia(operation) && !operation.wantsPlay) {
+          await _awaitMedia(c.pause(), operation, operationTimeout);
+        }
       }
+      if (!_currentMedia(operation) || c != _controller) return;
       _onControllerValue(c);
       if (retainPreviousFrame && frameHold.active) {
         final nativeGeneration = (result['transitionGeneration'] as num?)
@@ -508,6 +644,8 @@ class LunaExoPlayer implements Player {
       if (_disposed || ticket != _openGeneration) return;
       _transitioning = false;
       clearRetainedFrame();
+      await _releaseController();
+      if (!_currentMedia(operation)) return;
       if (!reopenOnFailure) {
         DiaryService.add('[Transition] 预取交接失败，交由重新取址: $error');
         rethrow;
@@ -516,6 +654,7 @@ class LunaExoPlayer implements Player {
       await open(media, play: _transitionWantsPlay, mediaType: mediaType);
     } finally {
       if (ticket == _openGeneration) _transitioning = false;
+      _finishMedia(operation);
     }
   }
 
@@ -525,23 +664,27 @@ class LunaExoPlayer implements Player {
     bool play = true,
     String mediaType = '',
   }) async {
-    final pending = _openMedia(playable, play: play, mediaType: mediaType);
-    final ticket = _openGeneration;
-    await pending.timeout(
-      const Duration(seconds: 45),
-      onTimeout: () {
-        if (!_disposed && ticket == _openGeneration) {
-          ++_openGeneration;
-          unawaited(_releaseController());
-        }
-        throw TimeoutException('播放器加载超时');
-      },
-    );
+    if (_disposed || playable is! Media || playable.uri.isEmpty) return;
+    final operation = _beginMediaOperation(play: play);
+    try {
+      await _awaitMedia(
+        _openMedia(playable, operation, mediaType: mediaType),
+        operation,
+        const Duration(seconds: 45),
+      );
+    } on _PlayerOperationCancelled {
+      return;
+    } on TimeoutException {
+      if (_currentMedia(operation)) await cancelPending();
+      rethrow;
+    } finally {
+      _finishMedia(operation);
+    }
   }
 
   Future<void> _openMedia(
-    Playable playable, {
-    bool play = true,
+    Playable playable,
+    _PlayerMediaOperation operation, {
     String mediaType = '',
   }) async {
     if (_disposed) return;
@@ -551,7 +694,7 @@ class LunaExoPlayer implements Player {
     final url = media.uri;
     if (url.isEmpty) return;
 
-    final myGen = ++_openGeneration;
+    final myGen = operation.generation;
     _positionPollTimer?.cancel();
     _stopDiagnostics();
 
@@ -595,6 +738,7 @@ class LunaExoPlayer implements Player {
         (uri.scheme == 'http' || uri.scheme == 'https')) {
       final client = HttpClient()
         ..connectionTimeout = const Duration(seconds: 5);
+      operation.sniffClient = client;
       try {
         final req = await client
             .getUrl(uri)
@@ -632,6 +776,9 @@ class LunaExoPlayer implements Player {
         DiaryService.add('[Sniff] 探测警告: $e');
       } finally {
         client.close(force: true);
+        if (identical(operation.sniffClient, client)) {
+          operation.sniffClient = null;
+        }
       }
     }
     if (preparationError != null) {
@@ -678,11 +825,12 @@ class LunaExoPlayer implements Player {
       );
     }
 
+    _openingController = c;
     try {
       DiaryService.add(
         '[ExoPlayer] c.initialize() 开始 (formatHint=$formatHint)...',
       );
-      await c.initialize().timeout(initializationTimeout);
+      await _awaitMedia(c.initialize(), operation, initializationTimeout);
       DiaryService.add(
         '[ExoPlayer] c.initialize() 成功! duration=${c.value.duration}, size=${c.value.size}, isInitialized=${c.value.isInitialized}',
       );
@@ -705,6 +853,7 @@ class LunaExoPlayer implements Player {
         try {
           await _disposeController(c);
         } catch (_) {}
+        if (!_currentMedia(operation)) return;
 
         final retryHeaders = Map<String, String>.from(headers);
         if (alternateFormat == VideoFormat.hls) {
@@ -718,8 +867,9 @@ class LunaExoPlayer implements Player {
           httpHeaders: retryHeaders,
           videoPlayerOptions: options,
         );
+        _openingController = c;
         try {
-          await c.initialize().timeout(initializationTimeout);
+          await _awaitMedia(c.initialize(), operation, initializationTimeout);
           formatHint = alternateFormat;
           DiaryService.add('[ExoPlayer] 自愈重试成功! duration=${c.value.duration}');
         } catch (retryErr, retryStack) {
@@ -754,6 +904,7 @@ class LunaExoPlayer implements Player {
     }
 
     _controller = c;
+    if (identical(_openingController, c)) _openingController = null;
     _lastControllerError = null;
     _startDiagnostics();
     final dur = c.value.duration;
@@ -764,7 +915,7 @@ class LunaExoPlayer implements Player {
     state = state.copyWith(
       duration: dur,
       position: Duration.zero,
-      playing: play,
+      playing: operation.wantsPlay,
       buffering: c.value.isBuffering,
       width: w > 0 ? w : 1920,
       height: h > 0 ? h : 1080,
@@ -773,7 +924,7 @@ class LunaExoPlayer implements Player {
 
     _safeAdd(stream.durationController, dur);
     _safeAdd(stream.positionController, Duration.zero);
-    _safeAdd(stream.playingController, play);
+    _safeAdd(stream.playingController, operation.wantsPlay);
     _safeAdd(stream.bufferingController, c.value.isBuffering);
     _safeAdd(stream.videoParamsController, videoParams);
 
@@ -786,17 +937,28 @@ class LunaExoPlayer implements Player {
 
     if (media.start != null && media.start! > Duration.zero) {
       try {
-        await c.seekTo(media.start!).timeout(const Duration(seconds: 3));
+        await _awaitMedia(c.seekTo(media.start!), operation, operationTimeout);
         if (_disposed || myGen != _openGeneration) return;
         state = state.copyWith(position: media.start!);
         _safeAdd(stream.positionController, media.start!);
-      } catch (_) {}
+      } on _PlayerOperationCancelled {
+        rethrow;
+      } catch (error) {
+        if (_currentMedia(operation)) {
+          _reportControllerError(c, error.toString());
+          await _releaseController();
+        }
+        rethrow;
+      }
     }
 
     if (_disposed || myGen != _openGeneration) return;
-    if (play) {
+    if (operation.wantsPlay) {
       try {
-        await c.play().timeout(const Duration(seconds: 3));
+        await _awaitMedia(c.play(), operation, operationTimeout);
+        if (_currentMedia(operation) && !operation.wantsPlay) {
+          await _awaitMedia(c.pause(), operation, operationTimeout);
+        }
       } catch (error) {
         _reportControllerError(c, error.toString());
         rethrow;
@@ -1010,12 +1172,19 @@ class LunaExoPlayer implements Player {
     _safeAdd(stream.errorController, error);
   }
 
-  Future<void> _disposeController(VideoPlayerController controller) async {
-    try {
-      await controller.dispose().timeout(const Duration(seconds: 2));
-    } catch (error) {
-      DiaryService.add('[ExoPlayer] release incomplete: $error');
-    }
+  Future<void> _disposeController(VideoPlayerController controller) {
+    if (identical(_openingController, controller)) _openingController = null;
+    final existing = _controllerDisposals[controller];
+    if (existing != null) return existing;
+    final pending = () async {
+      try {
+        await controller.dispose().timeout(disposeTimeout);
+      } catch (error) {
+        DiaryService.add('[ExoPlayer] release incomplete: $error');
+      }
+    }();
+    _controllerDisposals[controller] = pending;
+    return pending;
   }
 
   Future<void> _releaseController() async {
@@ -1029,18 +1198,32 @@ class LunaExoPlayer implements Player {
     _positionPollTimer?.cancel();
     _stopDiagnostics();
     final c = _controller;
+    final opening = _openingController;
     final listener = _valueListener;
     _controller = null;
+    _openingController = null;
     _valueListener = null;
     _lastControllerError = null;
-    if (c == null) return;
-    if (listener != null) c.removeListener(listener);
-    revision.value++;
-    await _disposeController(c);
+    state = state.copyWith(playing: false, buffering: false);
+    _safeAdd(stream.playingController, false);
+    _safeAdd(stream.bufferingController, false);
+    if (c != null && listener != null) c.removeListener(listener);
+    if (c != null || opening != null) revision.value++;
+    await Future.wait([
+      if (c != null) _disposeController(c),
+      if (opening != null && !identical(opening, c))
+        _disposeController(opening),
+    ]);
   }
 
   @override
   Future<void> play() async {
+    final pending = _pendingMedia;
+    if (pending != null) {
+      pending.wantsPlay = true;
+      _transitionWantsPlay = true;
+      return;
+    }
     if (_transitioning) {
       _transitionWantsPlay = true;
       return;
@@ -1048,7 +1231,10 @@ class LunaExoPlayer implements Player {
     final c = _controller;
     if (c == null) return;
     try {
-      await c.play().timeout(const Duration(seconds: 3));
+      await _command(c, c.play);
+      _onControllerValue(c);
+    } on _PlayerOperationCancelled {
+      return;
     } catch (error) {
       _reportControllerError(c, error.toString());
     }
@@ -1056,6 +1242,8 @@ class LunaExoPlayer implements Player {
 
   @override
   Future<void> pause() async {
+    if (_disposed) return;
+    _pendingMedia?.wantsPlay = false;
     clearRetainedFrame();
     if (_transitioning) {
       _transitionWantsPlay = false;
@@ -1064,7 +1252,8 @@ class LunaExoPlayer implements Player {
     final c = _controller;
     if (c == null) return;
     try {
-      await c.pause();
+      await _command(c, c.pause);
+      _onControllerValue(c);
     } catch (_) {}
   }
 
@@ -1081,11 +1270,12 @@ class LunaExoPlayer implements Player {
 
   @override
   Future<void> seek(Duration target) async {
+    if (_disposed) return;
     clearRetainedFrame();
     final c = _controller;
     if (c == null) return;
     try {
-      await c.seekTo(target);
+      await _command(c, () => c.seekTo(target));
       state = state.copyWith(position: target);
       _safeAdd(stream.positionController, target);
       if (state.completed) {
@@ -1097,31 +1287,35 @@ class LunaExoPlayer implements Player {
 
   @override
   Future<void> setRate(double rate) async {
+    if (_disposed) return;
     final r = rate.clamp(0.25, 4.0);
     state = state.copyWith(rate: r);
     _safeAdd(stream.rateController, r);
     final c = _controller;
     if (c == null) return;
     try {
-      await c.setPlaybackSpeed(r).timeout(const Duration(seconds: 3));
+      await _command(c, () => c.setPlaybackSpeed(r));
     } catch (_) {}
   }
 
   @override
   Future<void> setVolume(double volume) async {
+    if (_disposed) return;
     final v = volume.clamp(0.0, 100.0);
     state = state.copyWith(volume: v);
     _safeAdd(stream.volumeController, v);
     final c = _controller;
     if (c == null) return;
     try {
-      await c.setVolume(v / 100.0);
+      await _command(c, () => c.setVolume(v / 100.0));
     } catch (_) {}
   }
 
   @override
   Future<void> stop() async {
-    final ticket = ++_openGeneration;
+    if (_disposed) return;
+    _cancelOperations();
+    final ticket = _openGeneration;
     await _releaseController();
     if (_disposed || ticket != _openGeneration) return;
     state = state.copyWith(
@@ -1143,8 +1337,9 @@ class LunaExoPlayer implements Player {
 
   @override
   Future<void> dispose() async {
+    if (_disposed) return;
     _disposed = true;
-    ++_openGeneration;
+    _cancelOperations();
     await _releaseController();
     frameHold.dispose();
     frameHoldFailure.dispose();

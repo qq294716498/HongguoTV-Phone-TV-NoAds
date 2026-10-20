@@ -47,6 +47,24 @@ void main() {
   Future<void> tick() => Future<void>.delayed(Duration.zero);
 
   test(
+    'intent cancellation invalidates a resolver before the next load starts',
+    () async {
+      final repository = DeferredRepository();
+      final loader = PlaybackLoader(repository);
+      final old = loader.load(FixtureRepository.free, episode(1));
+      await tick();
+      await loader.cancel();
+      repository.pending[1]!.complete(
+        const PlaybackPlan(url: 'file:///obsolete.mp4', session: 'obsolete'),
+      );
+      expect(await old, isNull);
+      expect(repository.released, ['obsolete']);
+      expect(repository.pending.length, 1);
+      await loader.close();
+    },
+  );
+
+  test(
     'prepared plan promotion does not wait for resolver cancellation',
     () async {
       final repository = DeferredRepository();

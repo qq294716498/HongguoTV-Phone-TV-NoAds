@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 from pathlib import Path
 import tempfile
 import unittest
@@ -11,6 +12,31 @@ from publish_android_stable import certificate, offsets, validate_apks
 
 
 class AndroidStablePublishTests(unittest.TestCase):
+    def test_only_exact_release_branch_push_or_explicit_dispatch_can_publish(self):
+        root = Path(__file__).resolve().parents[1]
+        fix = 'fix/hongguo-playback-release-0.1.22-47'
+        release = 'release/windows-android-0.1.22-47'
+        for filename in ['android-stable.yml', 'windows-preview.yml']:
+            workflow = (root / '.github/workflows' / filename).read_text()
+            branches = re.search(r'(?m)^    branches: (.*)$', workflow).group(1)
+            self.assertIn(fix, branches)
+            self.assertIn(release, branches)
+            expression = re.search(r'(?m)^  release:\n(?:    [^\n]*\n)*?    if: ([^\n]+)', workflow).group(1)
+            expression = expression.replace('github.ref', 'ref').replace('github.event_name', 'event').replace('inputs.publish_release', 'publish')
+            expression = expression.replace('&&', ' and ').replace('||', ' or ')
+            for branch in [fix, release, 'windows/other', 'main']:
+                for event in ['push', 'workflow_dispatch', 'pull_request']:
+                    for publish in [False, True]:
+                        expected = branch == release and (event == 'push' or (event == 'workflow_dispatch' and publish))
+                        with self.subTest(workflow=filename, branch=branch, event=event, publish=publish):
+                            actual = eval(expression, {'__builtins__': {}}, {'ref': 'refs/heads/' + branch, 'event': event, 'publish': publish})
+                            self.assertEqual(actual, expected)
+        windows = (root / '.github/workflows/windows-preview.yml').read_text()
+        self.assertNotIn('reuse_run_id', windows)
+        self.assertNotIn('reuse_windows_package.py', windows)
+        self.assertIn('WINDOWS_BINARY_COMMIT: ${{ github.sha }}', windows)
+        self.assertIn('WINDOWS_BINARY_RUN: ${{ github.run_id }}', windows)
+
     def test_android_waits_for_final_windows_evidence_without_republishing_it(self):
         names = ['Windows-update-check.json', 'Windows-update-channel.json', 'Android-isolation.json', 'SHA256SUMS.txt']
         complete = dict(target_commitish='current', draft=False, prerelease=False,
@@ -50,13 +76,41 @@ class AndroidStablePublishTests(unittest.TestCase):
                 current[field] = previous
 
     def test_release_scope_rejects_windows_runtime_and_other_unapproved_changes(self):
-        with mock.patch.object(publish.subprocess, 'check_output', side_effect=[publish.approved_source, 'README.md\n.github/workflows/android-stable.yml\n']):
+        approved = 'a' * 40
+        with mock.patch.object(publish, 'approved_source', approved), mock.patch.object(publish.subprocess, 'check_output', side_effect=[approved, 'README.md\n.github/workflows/android-stable.yml\n']):
             publish.validate_release_source('candidate')
         for changed in ['lib/windows_desktop.dart', 'lib/player_screen.dart', 'pubspec.yaml']:
-            with mock.patch.object(publish.subprocess, 'check_output', side_effect=[publish.approved_source, changed]), self.subTest(changed=changed), self.assertRaisesRegex(ValueError, 'Runtime source changed'):
+            with mock.patch.object(publish, 'approved_source', approved), mock.patch.object(publish.subprocess, 'check_output', side_effect=[approved, changed]), self.subTest(changed=changed), self.assertRaisesRegex(ValueError, 'Runtime source changed'):
                 publish.validate_release_source('candidate')
-        with mock.patch.object(publish.subprocess, 'check_output', return_value='other'), self.assertRaisesRegex(ValueError, 'approved runtime source'):
+        with mock.patch.object(publish, 'approved_source', approved), mock.patch.object(publish.subprocess, 'check_output', return_value='other'), self.assertRaisesRegex(ValueError, 'approved runtime source'):
             publish.validate_release_source('candidate')
+
+    def test_unpinned_runtime_source_blocks_release_before_git_or_github(self):
+        with mock.patch.object(publish, 'approved_source', 'PIN_FINAL_RUNTIME_COMMIT_BEFORE_RELEASE'), \
+                mock.patch.object(publish.subprocess, 'check_output') as commands:
+            with self.assertRaisesRegex(ValueError, 'must be pinned'):
+                publish.validate_release_source('candidate')
+            commands.assert_not_called()
+
+    def test_changed_android_latest_blocks_staging_without_publication(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'pubspec.yaml').write_text('version: 0.1.22+47\n')
+            values = [json.dumps({'object': {'sha': 'current'}}),
+                      json.dumps({'tag_name': 'app-v0.1.20-45'})]
+            with mock.patch.object(publish, 'root', root), mock.patch.object(publish.os, 'chdir'), \
+                    mock.patch.object(publish, 'validate_release_source'), mock.patch.object(publish, 'validate_apks'), \
+                    mock.patch.object(publish, 'read', return_value={'ok': True}), \
+                    mock.patch.object(publish, 'github', side_effect=values) as github, \
+                    mock.patch.object(publish.subprocess, 'run', return_value=mock.Mock(returncode=1)) as commands, \
+                    mock.patch.dict(publish.os.environ, {'GITHUB_SHA': 'current'}), \
+                    mock.patch('sys.argv', ['publish_android_stable.py', 'stage']):
+                with self.assertRaisesRegex(ValueError, 'increase beyond current stable'):
+                    publish.main()
+                self.assertEqual(github.call_count, 2)
+                self.assertEqual(commands.call_args_list, [mock.call(
+                    ['gh', 'release', 'view', 'app-v0.1.22-47'],
+                    stdout=publish.subprocess.DEVNULL, stderr=publish.subprocess.DEVNULL)])
 
     def test_signing_preflight_reports_presence_without_secret_values(self):
         env = {name: 'synthetic-secret-value' for name in SIGNING_NAMES}

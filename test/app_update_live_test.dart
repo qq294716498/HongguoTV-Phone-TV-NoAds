@@ -35,14 +35,30 @@ void main() {
       final results = <Map<String, Object>>[];
       for (final entry in updateAbiOffsets.entries) {
         final installed = InstalledApp(
-          version: '0.1.18',
-          code: entry.value + 43,
+          version: '0.1.17',
+          code: entry.value + 42,
           abi: entry.key,
         );
         final release = AppRelease.parse(stableData, installed);
         expect(release, isNotNull);
         expect(release!.version, expected[1]);
         expect(release.code, entry.value + int.parse(expected[2]!));
+        for (final previous in {
+          '0.1.17': 42,
+          '0.1.18': 43,
+          '0.1.19': 44,
+        }.entries) {
+          final upgrade = AppRelease.parse(
+            stableData,
+            InstalledApp(
+              version: previous.key,
+              code: entry.value + previous.value,
+              abi: entry.key,
+            ),
+          );
+          expect(upgrade?.code, release.code);
+          expect(upgrade?.sha256, release.sha256);
+        }
         expect(
           AppRelease.parse(
             stableData,

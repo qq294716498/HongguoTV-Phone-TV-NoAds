@@ -1,8 +1,8 @@
-name: Validate 0.1.9 candidate
+name: Validate playback release candidate
 
 on:
   push:
-    branches: [candidate/viewing-reminders-0.1.9-31]
+    branches: [candidate/viewing-reminders-0.1.9-31, fix/hongguo-playback-release-0.1.22-47, release/windows-android-0.1.22-47]
   workflow_dispatch:
 
 permissions:

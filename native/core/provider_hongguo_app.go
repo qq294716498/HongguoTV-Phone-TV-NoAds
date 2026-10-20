@@ -212,7 +212,7 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 			continue
 		}
 		if response.StatusCode != http.StatusOK {
-			lastErr = fmt.Errorf("红果 App 接口 HTTP %d", response.StatusCode)
+			lastErr = downloader.catalogResponseError(request, response, content)
 			if response.StatusCode >= 400 && response.StatusCode < 500 {
 				return nil, lastErr
 			}

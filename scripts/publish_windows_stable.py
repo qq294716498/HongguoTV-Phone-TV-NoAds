@@ -12,9 +12,10 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[1]
 output = root / 'dist/windows'
 repository = 'qq294716498/HongguoTV-Phone-TV-NoAds'
-release_branch = 'release/windows-android-0.1.19-44'
-approved_source = '8ff55a1fe9f559b823a6b19be3a4a51dfbf4d429'
-previous_windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42')
+release_branch = 'release/windows-android-0.1.22-47'
+approved_source = 'PIN_FINAL_RUNTIME_COMMIT_BEFORE_RELEASE'
+previous_windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44')
+previous_android_tag = 'app-v0.1.19-44'
 release_only_paths = frozenset({
     'README.md', '.github/workflows/android-stable.yml',
     '.github/workflows/windows-preview.yml',
@@ -26,6 +27,8 @@ release_only_paths = frozenset({
 
 
 def validate_release_source(commit):
+    if not re.fullmatch(r'[0-9a-f]{40}', approved_source):
+        raise ValueError('Final approved runtime source must be pinned before release')
     ancestor = subprocess.check_output(['git', 'merge-base', approved_source, commit], cwd=root, text=True).strip()
     if ancestor != approved_source:
         raise ValueError('Release must descend from the approved runtime source')
@@ -125,10 +128,14 @@ def main():
     version, build = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(encoding='utf-8'), re.MULTILINE).group(1).split('+')
     if not re.fullmatch(r'\d+\.\d+\.\d+', version):
         raise ValueError('Only Windows stable releases are allowed')
+    if version != '0.1.22' or build != '47':
+        raise ValueError('This workflow only publishes Windows 0.1.22+47')
     tag = f'windows-v{version}-{build}'
     package = output / f'HongguoTV-{version}-windows-x64.zip'
     if sys.argv[1] == 'stage':
         validate_release_source(os.environ['GITHUB_SHA'])
+        if os.environ.get('WINDOWS_BINARY_COMMIT') != os.environ['GITHUB_SHA'] or os.environ.get('WINDOWS_BINARY_RUN') != os.environ['GITHUB_RUN_ID']:
+            raise ValueError('Windows release requires fresh compilation in this workflow run')
         current_head = json.loads(github('api', f'repos/{repository}/git/ref/heads/{release_branch}'))['object']['sha']
         if current_head != os.environ['GITHUB_SHA']:
             raise ValueError('A newer source commit superseded this release candidate')
@@ -167,10 +174,10 @@ def main():
             raise ValueError('Release exists; never replace published assets')
         write_json('Windows-previous-release.json', {name: release_identity(json.loads(github('api', f'repos/{repository}/releases/tags/{name}'))) for name in previous_windows_tags})
         android = metadata()
-        if not android['tag'].startswith('app-v'):
-            raise ValueError('Android latest is not an Android release')
-        subprocess.run(['git', 'fetch', '--depth=1', 'origin', 'tag', 'app-v0.1.16-41'], check=True)
-        original = subprocess.check_output(['git', 'show', 'app-v0.1.16-41:lib/app_updates.dart'], text=True)
+        if android['tag'] != previous_android_tag:
+            raise ValueError('Android latest changed beyond the approved stable baseline')
+        subprocess.run(['git', 'fetch', '--depth=1', 'origin', 'tag', previous_android_tag], check=True)
+        original = subprocess.check_output(['git', 'show', f'{previous_android_tag}:lib/app_updates.dart'], text=True)
         current = (root / 'lib/app_updates.dart').read_text(encoding='utf-8')
         start = '  static AppRelease? parse('
         old_end = '  static AppRelease? parseWindows(' if '  static AppRelease? parseWindows(' in original else '  Map<String, Object> get validation'
@@ -181,7 +188,7 @@ def main():
         write_json('Android-isolation.json', {'before': android, 'androidParserUnchanged': True,
                                               'parserSha256': hashlib.sha256(old.encode()).hexdigest()})
         subprocess.run([sys.executable, 'scripts/finish_task.py', '--message',
-                        '完成 Windows x64 正式版界面、托盘、迷你窗及更新事务验证'], check=True)
+                        '完成 Windows 0.1.22 x64 播放恢复修复的新构建、完整包、托盘、迷你窗及更新事务验证'], check=True)
         subprocess.run([sys.executable, 'scripts/sync_source.py', '--check'], check=True)
         source = max(root.parent.glob('真果·鉴-*.zip'), key=lambda file: file.stat().st_mtime_ns)
         source_package = output / f'HongguoTV-{version}-source.zip'
@@ -190,10 +197,11 @@ def main():
         ci = f'https://github.com/{repository}/actions/runs/{os.environ["GITHUB_RUN_ID"]}'
         write_json('Source-and-checks.json', {
             'version': version, 'build': int(build), 'sourceCommit': commit,
-            'baselineTag': 'app-v0.1.18-43', 'baselineCommit': '7544a0566b34aff5d853bd1b6f64c6a7cb3a1701',
+            'baselineTag': previous_android_tag, 'baselineCommit': 'b72bb2987b1b98deadeaecdbf0255dbee59f4506',
+            'runtimeBaselineCommit': approved_source, 'runtimeChangesBeyondApprovedCommit': False,
             'workflowRun': ci,
-            'binaryBuildCommit': os.environ.get('WINDOWS_BINARY_COMMIT', commit),
-            'binaryBuildRun': os.environ.get('WINDOWS_BINARY_RUN', os.environ['GITHUB_RUN_ID']),
+            'binaryBuildCommit': os.environ['WINDOWS_BINARY_COMMIT'],
+            'binaryBuildRun': os.environ['WINDOWS_BINARY_RUN'],
             'formatAndAnalysisPassed': True, 'pythonTestsPassed': True,
             'flutterDefaultAndAllSourceTestsPassed': True, 'goRaceDefaultAndAllSourcesPassed': True,
             'windowsCompileAndPackageValidationPassed': True, 'nativeUpdateTransactionsPassed': True,
@@ -204,7 +212,7 @@ def main():
                           'audio device output']})
         readme = (root / 'README.md').read_text(encoding='utf-8')
         notes = readme.split('## Windows 正式版：', 1)[1].split('\n## ', 1)[0]
-        notes += f'\n构建及静态回归、Windows 完整包与合成媒体启动验证已通过。\n\n源码提交：https://github.com/{repository}/commit/{commit}\n\nCI：{ci}\n\n校验：SHA256SUMS.txt。Windows 正式渠道发布后继续验证实际更新下载和 Android Latest 隔离。\n'
+        notes += f'\n构建及静态回归、Windows 完整包与合成媒体启动验证已通过。Windows 10 / 11 x64 版本仍未签名；真实站源、长时间连播、用户旧版原地替换和消费级 GPU / 音频设备仍未实测。\n\n源码提交：https://github.com/{repository}/commit/{commit}\n\nCI：{ci}\n\n校验：SHA256SUMS.txt。Windows 正式渠道发布后继续验证实际更新下载和 Android Latest 隔离。\n'
         notes_file = Path(os.environ['RUNNER_TEMP']) / 'windows-release-notes.md'
         notes_file.write_text(notes, encoding='utf-8')
         assets = [package, source_package] + [output / name for name in

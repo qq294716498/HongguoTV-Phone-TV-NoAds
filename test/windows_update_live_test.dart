@@ -51,6 +51,22 @@ void main() {
       )!;
       expect(fallbackRelease.validation, release.validation);
       expect(release.code, int.parse(expectedTag.split('-').last));
+      for (final previous in {
+        '0.1.15': 40,
+        '0.1.17': 42,
+        '0.1.19': 44,
+      }.entries) {
+        final upgrade = AppRelease.parseWindows(
+          metadata,
+          InstalledApp(
+            version: previous.key,
+            code: previous.value,
+            abi: 'windows-x64',
+          ),
+        );
+        expect(upgrade?.code, release.code);
+        expect(upgrade?.sha256, release.sha256);
+      }
       expect(metadata['prerelease'], false);
       expect(
         AppRelease.parseWindows(

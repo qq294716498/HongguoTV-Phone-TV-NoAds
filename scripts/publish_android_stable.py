@@ -12,11 +12,12 @@ root = Path(__file__).resolve().parents[1]
 output = root / 'dist/android'
 repository = 'qq294716498/HongguoTV-Phone-TV-NoAds'
 certificate = '55c3c3395a00e56e99b8bfd580b14c99618da74db19692a2e42606eb05c47ba9'
-windows_tag = 'windows-v0.1.19-44'
-windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', windows_tag)
+windows_tag = 'windows-v0.1.22-47'
+windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', windows_tag)
+previous_android_tag = 'app-v0.1.19-44'
 offsets = {'arm64-v8a': 2000, 'armeabi-v7a': 1000, 'x86_64': 4000}
-release_branch = 'release/windows-android-0.1.19-44'
-approved_source = '8ff55a1fe9f559b823a6b19be3a4a51dfbf4d429'
+release_branch = 'release/windows-android-0.1.22-47'
+approved_source = 'PIN_FINAL_RUNTIME_COMMIT_BEFORE_RELEASE'
 release_only_paths = frozenset({
     'README.md', '.github/workflows/android-stable.yml',
     '.github/workflows/windows-preview.yml',
@@ -28,6 +29,8 @@ release_only_paths = frozenset({
 
 
 def validate_release_source(commit):
+    if not re.fullmatch(r'[0-9a-f]{40}', approved_source):
+        raise ValueError('Final approved runtime source must be pinned before release')
     ancestor = subprocess.check_output(['git', 'merge-base', approved_source, commit], cwd=root, text=True).strip()
     if ancestor != approved_source:
         raise ValueError('Release must descend from the approved runtime source')
@@ -109,8 +112,8 @@ def main():
     os.chdir(root)
     version, raw_build = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(), re.M).group(1).split('+')
     build = int(raw_build)
-    if version != '0.1.19' or build != 44:
-        raise ValueError('This workflow only publishes Android 0.1.19+44')
+    if version != '0.1.22' or build != 47:
+        raise ValueError('This workflow only publishes Android 0.1.22+47')
     validate_release_source(os.environ['GITHUB_SHA'])
     tag = f'app-v{version}-{build}'
     phase = sys.argv[1]
@@ -127,7 +130,7 @@ def main():
         if exists.returncode == 0:
             raise ValueError('Release exists; never replace published APK assets')
         latest = json.loads(github('api', f'repos/{repository}/releases/latest'))
-        if latest['tag_name'] != 'app-v0.1.18-43' or int(latest['tag_name'].rsplit('-', 1)[1]) >= build:
+        if latest['tag_name'] != previous_android_tag or int(latest['tag_name'].rsplit('-', 1)[1]) >= build:
             raise ValueError('Android version must increase beyond current stable')
         listed = json.loads(github('api', f'repos/{repository}/releases?per_page=100'))
         for item in listed:
@@ -135,13 +138,13 @@ def main():
             if match and int(match[1]) >= build:
                 raise ValueError('A newer or reserved Android build already exists')
         write('Release-before.json', {'android': snapshot(latest), 'windows': validated_windows_snapshots(os.environ['GITHUB_SHA'])})
-        subprocess.run([sys.executable, 'scripts/finish_task.py', '--message', 'Android 0.1.19 TV全局持久解码模式与失败恢复入口；Windows更新事务、诊断及托盘暂停；三ABI既有正式签名构建及集中回归通过，未实测实体TV'], check=True)
+        subprocess.run([sys.executable, 'scripts/finish_task.py', '--message', 'Android 0.1.22 手机与TV播放请求恢复修复；三ABI既有正式签名新构建及集中回归通过，未实测实体手机或TV'], check=True)
         subprocess.run([sys.executable, 'scripts/sync_source.py', '--check'], check=True)
         source = max(root.parent.glob('真果·鉴-*.zip'), key=lambda p: p.stat().st_mtime_ns)
         source_package = output / f'HongguoTV-{version}-source.zip'
         shutil.copy2(source, source_package)
         write('Source-and-checks.json', {'version': version, 'build': build, 'sourceCommit': head,
-              'androidBaseline': 'app-v0.1.18-43', 'preservedWindowsBaseline': windows_tag,
+              'androidBaseline': previous_android_tag, 'preservedWindowsBaseline': windows_tag,
               'runtimeBaselineCommit': approved_source, 'runtimeChangesBeyondApprovedCommit': False,
               'workflowRun': f'https://github.com/{repository}/actions/runs/{os.environ["GITHUB_RUN_ID"]}',
               'sourceArchiveSha256': digest(source_package), 'expectedCertificate': certificate,
@@ -149,7 +152,7 @@ def main():
               'realPhoneOrTvPerformanceMeasured': False, 'realDevicePlaybackVerified': False})
         readme = (root / 'README.md').read_text()
         notes = readme.split('## Android 最近更新：', 1)[1].split('\n## ', 1)[0]
-        notes += f'\n源码：https://github.com/{repository}/commit/{head}\n\nCI：https://github.com/{repository}/actions/runs/{os.environ["GITHUB_RUN_ID"]}\n\n现有正式证书签名；三ABI公网下载、SHA-256与签名版本校验完成后才转正式Latest。真实手机/TV流畅度、解码与长时间连播仍未实测。\n'
+        notes += f'\n源码：https://github.com/{repository}/commit/{head}\n\nCI：https://github.com/{repository}/actions/runs/{os.environ["GITHUB_RUN_ID"]}\n\n手机 / TV 继续共用 com.hongguo.tv、既有正式证书和 Android 8.0 最低版本；三 ABI 公网下载、SHA-256 与签名版本校验完成后才转正式 Latest。真实手机 / TV 覆盖安装、流畅度、解码和长时间连播仍未实测。\n'
         notes_file = Path(os.environ['RUNNER_TEMP']) / 'android-release-notes.md'
         notes_file.write_text(notes, encoding='utf-8')
         assets = [output / f'HongguoTV-{version}-{abi}.apk' for abi in offsets] + [source_package, output / 'APK-validation.json', output / 'Source-and-checks.json', output / 'Signing-availability.json']

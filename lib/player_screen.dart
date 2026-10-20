@@ -1,4 +1,5 @@
 import 'tv_decoder_settings.dart';
+
 import 'dart:async';
 import 'dart:io';
 
@@ -26,6 +27,7 @@ import 'models.dart';
 import 'next_season_resolver.dart';
 import 'series_browser_screen.dart';
 import 'playback_loader.dart';
+import 'playback_attempt.dart';
 import 'playback_preloader.dart';
 import 'playback_recovery.dart';
 import 'playback_preferences.dart';
@@ -122,6 +124,9 @@ class _PlayerScreenState extends State<PlayerScreen>
   Timer? _errorTimer;
   Timer? _pictureInPictureExitTimer;
   Future<void> _operations = Future<void>.value();
+  Completer<void> _operationCancellation = Completer<void>();
+  PlaybackAttempt? _attempt;
+  Duration _attemptPosition = Duration.zero;
   late int _index;
   late final int _profileEpoch;
   int _openedIndex = -1;
@@ -422,6 +427,11 @@ class _PlayerScreenState extends State<PlayerScreen>
       _player.stream.position.listen((position) {
         if (!_closed && _openedCurrent && position > Duration.zero) {
           _resumePosition = position.inMilliseconds / 1000;
+          if (!_loading &&
+              !_player.state.buffering &&
+              position > _attemptPosition + const Duration(milliseconds: 500)) {
+            _attempt?.stable();
+          }
         }
         _syncDanmaku();
         _syncPreload();
@@ -520,6 +530,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         _cancelSeasonAdvance();
         _interactions.cancel();
         _playIntent = false;
+        if (!_loading) _attempt?.stable();
         _syncScreenOn();
         await _player.pause();
         await _saveWindowsVolume();
@@ -596,6 +607,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       _enhancement.suspend();
       _handoffOwned = false;
       _playIntent = false;
+      if (!_loading) _attempt?.stable();
       widget.handoff?.fail('接收端用户已变更');
       unawaited(_player.pause());
     }
@@ -777,6 +789,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             _lifecycleState == AppLifecycleState.inactive ||
             _lifecycleState == AppLifecycleState.hidden)) {
       _playIntent = false;
+      if (!_loading) _attempt?.stable();
       unawaited(_player.pause());
       unawaited(_saveProgress(flush: true));
     }
@@ -987,18 +1000,22 @@ class _PlayerScreenState extends State<PlayerScreen>
   Future<void> _stopForLan() async {
     _cancelSeasonAdvance();
     final generation = _generation;
-    await _serialize(() async {
-      if (_closed ||
-          generation != _generation ||
-          widget.store.profileEpoch != _profileEpoch)
-        return;
-      _playIntent = false;
-      _interactions.cancel();
-      _enhancement.suspend();
-      _health.reset();
-      await _player.pause();
-      await _saveProgress(flush: true);
-    });
+    try {
+      await _serialize(() async {
+        if (_closed ||
+            generation != _generation ||
+            widget.store.profileEpoch != _profileEpoch)
+          return;
+        _playIntent = false;
+        if (!_loading) _attempt?.stable();
+        _interactions.cancel();
+        _enhancement.suspend();
+        _health.reset();
+        await _player.pause();
+        if (_closed || generation != _generation) return;
+        await _saveProgress(flush: true);
+      });
+    } on PlaybackAttemptCancelled {}
   }
 
   Future<void> _pushToDevice() async {
@@ -1294,6 +1311,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       '[Recovery] episode=${_detail.episodes[_index].number}, action=${action.name}, position=$position, playing=${_player.state.playing}, intent=$_playIntent',
     );
     if (action == PlaybackRecoveryAction.stop) {
+      _attempt?.stable();
       if (_decoderFailure) {
         _playIntent = false;
         _preloader.clear();
@@ -1308,10 +1326,14 @@ class _PlayerScreenState extends State<PlayerScreen>
           }
           try {
             await _saveProgress();
+            if (_closed || ticket != _generation) return;
             _openedIndex = -1;
             await _player.stop();
           } finally {
-            if (!_decoderFailure) await _releaseSession(current.session);
+            if (!_decoderFailure &&
+                (ticket == _generation || _plan?.session != current.session)) {
+              await _releaseSession(current.session);
+            }
           }
         });
       } catch (_) {}
@@ -1399,6 +1421,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         current();
     _findingNextSeason = canContinue;
     _playIntent = false;
+    _attempt?.stable();
     _syncScreenOn();
     _interactions.cancel();
     try {
@@ -1469,6 +1492,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     widget.handoff?.fail('接收端已操作播放');
     _interactions.cancel();
     _playIntent = !_player.state.playing;
+    if (!_playIntent) _attempt?.stable();
     _syncScreenOn();
     if (_playIntent) _enhancement.mediaReady();
     _health.reset();
@@ -1538,10 +1562,78 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
-  Future<void> _serialize(Future<void> Function() operation) {
-    final next = _operations.catchError((Object _) {}).then((_) => operation());
+  Future<void> _serialize(
+    Future<void> Function() operation, {
+    PlaybackAttempt? attempt,
+  }) {
+    final cancellation = _operationCancellation;
+    final owner = attempt ?? _attempt;
+    final pending = _operations.catchError((Object _) {}).then((_) {
+      if (cancellation.isCompleted ||
+          owner?.cancelled == true ||
+          owner?.expired == true) {
+        throw PlaybackAttemptCancelled();
+      }
+      final executing = operation();
+      return owner == null ? executing : owner.guard(executing);
+    });
+    final next = Future.any<void>([
+      pending,
+      cancellation.future.then<void>((_) => throw PlaybackAttemptCancelled()),
+    ]);
     _operations = next;
     return next;
+  }
+
+  void _cancelOperations() {
+    if (!_operationCancellation.isCompleted) _operationCancellation.complete();
+    _operationCancellation = Completer<void>();
+  }
+
+  void _failAttempt(PlaybackAttempt attempt, AppFailure failure) {
+    if (_closed || !mounted || !identical(attempt, _attempt)) return;
+    ++_generation;
+    _cancelOperations();
+    attempt.cancel();
+    _attempt = null;
+    _acceptErrors = false;
+    _pendingError = false;
+    _playIntent = false;
+    _errorTimer?.cancel();
+    _transitionWaitTimer?.cancel();
+    _preloader.clear();
+    unawaited(_loader.cancel().catchError((Object _) {}));
+    if (_player is LunaExoPlayer) {
+      unawaited(_player.cancelPending().catchError((Object _) {}));
+      _player.clearRetainedFrame();
+    }
+    unawaited(
+      _player
+          .stop()
+          .timeout(const Duration(seconds: 2))
+          .catchError((Object _) {}),
+    );
+    final previous = _plan;
+    _plan = null;
+    _openedIndex = -1;
+    _openedDetail = null;
+    if (previous != null) unawaited(_releaseSession(previous.session));
+    var message = failure.message;
+    if (failure.code == 'source_blocked' && failure.retryAt != null) {
+      final seconds = failure.retryAt!.difference(DateTime.now()).inSeconds;
+      if (seconds > 0) {
+        message = '$message 请等待约 ${seconds + 1} 秒后手动重试，也可换一集。';
+      }
+    }
+    setState(() {
+      _loading = false;
+      _smoothTransition = false;
+      _transitionWaitVisible = false;
+      _error = message;
+      _localFailure = false;
+    });
+    widget.handoff?.fail(message);
+    _syncScreenOn();
   }
 
   bool get _hasRetainedFrame =>
@@ -1581,6 +1673,24 @@ class _PlayerScreenState extends State<PlayerScreen>
         index >= detail.episodes.length) {
       return;
     }
+    final previousDeadline = recoveryAction == null ? null : _attempt?.deadline;
+    _cancelOperations();
+    _attempt?.cancel();
+    unawaited(_loader.cancel().catchError((Object _) {}));
+    if (_player is LunaExoPlayer) {
+      unawaited(_player.cancelPending().catchError((Object _) {}));
+    }
+    final ticket = ++_generation;
+    late final PlaybackAttempt attempt;
+    attempt = PlaybackAttempt(
+      deadline:
+          detail.drama.source == SourceSite.hongguo.id && !widget.localOnly
+          ? previousDeadline ?? DateTime.now().add(const Duration(seconds: 45))
+          : null,
+      onTimeout: () => _failAttempt(attempt, PlaybackAttempt.timeoutFailure),
+    );
+    _attempt = attempt;
+    _attemptPosition = Duration(milliseconds: (position * 1000).round());
     _cancelSeasonAdvance();
     _completedSeasonKey = null;
     _dismissSeasonNotice();
@@ -1626,7 +1736,6 @@ class _PlayerScreenState extends State<PlayerScreen>
                 )
         : Future<PlaybackPlan?>.value();
     _preloader.clear();
-    final ticket = ++_generation;
     _transitionWaitTimer?.cancel();
     _smoothTransition = smooth;
     _transitionWaitVisible = false;
@@ -1684,7 +1793,15 @@ class _PlayerScreenState extends State<PlayerScreen>
             ? 'automatic'
             : 'selection'}, reuse=$smooth',
       );
-      warmed = await warmedFuture;
+      warmed = await attempt.guard(
+        warmedFuture.then((plan) {
+          if (plan != null && (_closed || ticket != _generation)) {
+            unawaited(_releaseSession(plan.session));
+            return null;
+          }
+          return plan;
+        }),
+      );
       DiaryService.add(
         '[Switch] episode=${detail.episodes[index].number}, phase=preload, elapsedMs=${switchClock.elapsedMilliseconds}, hit=${warmed != null}, startup=${warmed?.startupReady ?? false}, complete=${warmed?.preloadComplete ?? false}',
       );
@@ -1693,15 +1810,16 @@ class _PlayerScreenState extends State<PlayerScreen>
         if (_closed || ticket != _generation) {
           return;
         }
-        await pausedPrevious;
-        await frameReady;
+        await attempt.guard(pausedPrevious);
+        await attempt.guard(frameReady);
         if (_closed || ticket != _generation) return;
         if (smooth) {
           unawaited(_saveProgress(flush: true));
         } else {
-          await _saveProgress(flush: true);
+          await attempt.guard(_saveProgress(flush: true));
         }
-        await _enhancement.beforeMedia();
+        if (_closed || ticket != _generation) return;
+        await attempt.guard(_enhancement.beforeMedia());
         if (_closed || ticket != _generation) return;
         _openedIndex = -1;
         _openedDetail = null;
@@ -1711,7 +1829,8 @@ class _PlayerScreenState extends State<PlayerScreen>
             tags: detail.drama.tags,
           );
         }
-        if (!smooth) await _player.stop();
+        if (!smooth) await attempt.guard(_player.stop());
+        if (_closed || ticket != _generation) return;
         final previous = _plan;
         _plan = null;
         if (recoveryAction == PlaybackRecoveryAction.alternative) {
@@ -1721,7 +1840,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         } else if (previous != null) {
           await _releaseSession(previous.session);
         }
-      });
+      }, attempt: attempt);
       if (_closed || ticket != _generation) {
         return;
       }
@@ -1733,17 +1852,19 @@ class _PlayerScreenState extends State<PlayerScreen>
             ? 'preloaded'
             : 'fresh'}',
       );
-      prepared = retained != null
-          ? await _loader.fallback(retained!)
-          : warmed != null
-          ? await _loader.use(warmed)
-          : await _loader.load(
-              detail.drama,
-              detail.episodes[index],
-              quality: _requestedQuality,
-              localOnly: widget.localOnly,
-              online: _forceOnline,
-            );
+      prepared = await attempt.guard(
+        retained != null
+            ? _loader.fallback(retained!)
+            : warmed != null
+            ? _loader.use(warmed)
+            : _loader.load(
+                detail.drama,
+                detail.episodes[index],
+                quality: _requestedQuality,
+                localOnly: widget.localOnly,
+                online: _forceOnline,
+              ),
+      );
       if (prepared == null) {
         if (!_closed && ticket == _generation) {
           throw AppFailure('播放准备已中断，请重试');
@@ -1764,39 +1885,35 @@ class _PlayerScreenState extends State<PlayerScreen>
         }
         final platform = _player.platform;
         if (platform is NativePlayer) {
+          Future<void> setProperty(String name, String value) =>
+              attempt.guard(platform.setProperty(name, value));
           if (Platform.isAndroid) {
             if (_television) {
-              await platform.setProperty('hwdec', 'mediacodec');
-              await platform.setProperty('hwdec-codecs', 'all');
-              await platform.setProperty('opengl-pbo', 'yes');
-              await platform.setProperty('video-latency-hacks', 'yes');
-              await platform.setProperty('scale', 'bilinear');
-              await platform.setProperty('cscale', 'bilinear');
-              await platform.setProperty('dscale', 'bilinear');
-              await platform.setProperty('correct-downscaling', 'no');
-              await platform.setProperty('vd-lavc-skiploopfilter', 'all');
-              await platform.setProperty('vd-lavc-skipidct', 'all');
-              await platform.setProperty('vd-lavc-threads', '2');
-              await platform.setProperty(
-                'demuxer-max-bytes',
-                '${4 * 1024 * 1024}',
-              );
-              await platform.setProperty(
-                'demuxer-max-back-bytes',
-                '${1 * 1024 * 1024}',
-              );
-              await platform.setProperty('demuxer-readahead-secs', '5');
+              await setProperty('hwdec', 'mediacodec');
+              await setProperty('hwdec-codecs', 'all');
+              await setProperty('opengl-pbo', 'yes');
+              await setProperty('video-latency-hacks', 'yes');
+              await setProperty('scale', 'bilinear');
+              await setProperty('cscale', 'bilinear');
+              await setProperty('dscale', 'bilinear');
+              await setProperty('correct-downscaling', 'no');
+              await setProperty('vd-lavc-skiploopfilter', 'all');
+              await setProperty('vd-lavc-skipidct', 'all');
+              await setProperty('vd-lavc-threads', '2');
+              await setProperty('demuxer-max-bytes', '${4 * 1024 * 1024}');
+              await setProperty('demuxer-max-back-bytes', '${1 * 1024 * 1024}');
+              await setProperty('demuxer-readahead-secs', '5');
             } else {
-              await platform.setProperty('hwdec', 'auto-safe');
-              await platform.setProperty('hwdec-codecs', 'all');
-              await platform.setProperty('vd-lavc-skiploopfilter', 'nonkey');
-              await platform.setProperty('vd-lavc-threads', '4');
+              await setProperty('hwdec', 'auto-safe');
+              await setProperty('hwdec-codecs', 'all');
+              await setProperty('vd-lavc-skiploopfilter', 'nonkey');
+              await setProperty('vd-lavc-threads', '4');
             }
-            await platform.setProperty('vd-lavc-fast', 'yes');
-            await platform.setProperty('video-sync', 'audio');
-            await platform.setProperty('framedrop', 'vo');
+            await setProperty('vd-lavc-fast', 'yes');
+            await setProperty('video-sync', 'audio');
+            await setProperty('framedrop', 'vo');
           }
-          await platform.setProperty(
+          await setProperty(
             'demuxer-lavf-o',
             [
               'seg_max_retry=3',
@@ -1809,8 +1926,9 @@ class _PlayerScreenState extends State<PlayerScreen>
                 'decryption_key=${plan.decryptionKey}',
             ].join(','),
           );
-          await platform.setProperty('network-timeout', '20');
+          await setProperty('network-timeout', '20');
         }
+        if (_closed || ticket != _generation) return;
         _plan = plan;
         installed = true;
         _acceptErrors = true;
@@ -1844,13 +1962,19 @@ class _PlayerScreenState extends State<PlayerScreen>
             mediaType: plan.mediaType,
           );
         } else {
-          await _player.open(media, play: _foreground && _playIntent);
+          await _player.open(media, play: false);
+          if (_closed || ticket != _generation) return;
+          if (_foreground && _playIntent) {
+            await attempt.guard(_player.play());
+          }
         }
         if (_closed || ticket != _generation) {
           return;
         }
-        if (_windowsDesktop && !_playIntent && _player.state.playing) {
-          await _player.pause();
+        if ((!_foreground || !_playIntent) && _player.state.playing) {
+          await attempt.guard(
+            _player.pause().timeout(const Duration(seconds: 3)),
+          );
           if (_closed || ticket != _generation) return;
         }
         _openedIndex = index;
@@ -1858,13 +1982,14 @@ class _PlayerScreenState extends State<PlayerScreen>
         _enhancement.mediaReady();
         _attachLanPlayback();
         _health.reset();
-        await _interactions.applySpeed();
+        await attempt.guard(_interactions.applySpeed());
         if (mounted && !_closed && ticket == _generation) {
           if (!_hasRetainedFrame) _transitionWaitTimer?.cancel();
           setState(() {
             _loading = false;
             _smoothTransition = _hasRetainedFrame;
           });
+          if (!_playIntent) attempt.stable();
           if (_pendingError) _queueRecovery();
           DiaryService.add(
             '[Switch] episode=${detail.episodes[index].number}, phase=ready, requestToReadyMs=${switchClock.elapsedMilliseconds}, prepared=${smooth && _player.lastTransitionUsedPrepared}, firstFrame=${smooth && _player.lastTransitionFirstFrame}',
@@ -1877,8 +2002,23 @@ class _PlayerScreenState extends State<PlayerScreen>
             _showSeasonNotice(detail, index);
           }
         }
-      });
+      }, attempt: attempt);
     } catch (error) {
+      if (error is PlaybackAttemptCancelled) {
+        if (prepared != null && !installed) {
+          unawaited(_releaseSession(prepared.session));
+        }
+        return;
+      }
+      if (error is AppFailure &&
+          (error.code == 'source_blocked' ||
+              error.code == 'playback_timeout')) {
+        if (prepared != null && !installed) {
+          unawaited(_releaseSession(prepared.session));
+        }
+        _failAttempt(attempt, error);
+        return;
+      }
       DiaryService.add('[Play] 捕获播放流程错误: $error');
       if (ticket == _generation && _player is LunaExoPlayer) {
         _player.clearRetainedFrame();
@@ -1893,6 +2033,7 @@ class _PlayerScreenState extends State<PlayerScreen>
           _acceptErrors = true;
           _queueRecovery(error: error.toString());
         } else {
+          attempt.stable();
           if (prepared != null) {
             await _releaseSession(prepared.session);
           }
@@ -2515,6 +2656,12 @@ class _PlayerScreenState extends State<PlayerScreen>
     _watchReminders?.removeListener(_reminderChanged);
     _watchReminders?.detachPlayback(this);
     _closed = true;
+    _cancelOperations();
+    _attempt?.cancel();
+    _attempt = null;
+    if (_player is LunaExoPlayer) {
+      unawaited(_player.cancelPending().catchError((Object _) {}));
+    }
     if (_player is LunaExoPlayer) {
       _player.frameHold.removeListener(_retainedFrameChanged);
       _player.clearRetainedFrame();
@@ -2548,11 +2695,19 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
     unawaited(_releaseSession(_session));
     unawaited(_loader.close().catchError((Object _) {}));
-    final disposal = _operations.catchError((Object _) {}).then((_) async {
-      await _interactions.pendingRates.catchError((Object _) {});
-      await enhancementClosed.catchError((Object _) {});
-      await _player.dispose();
-    });
+    final disposal = () async {
+      await _interactions.pendingRates
+          .timeout(const Duration(seconds: 2))
+          .catchError((Object _) {});
+      await enhancementClosed
+          .timeout(const Duration(seconds: 2))
+          .catchError((Object _) {});
+      try {
+        await _player.dispose().timeout(const Duration(seconds: 5));
+      } catch (error) {
+        DiaryService.add('[Player] cleanup incomplete: $error');
+      }
+    }();
     if (_windowsDesktop) WindowsDesktop.current?.playbackDisposal = disposal;
     unawaited(disposal);
     if (Platform.isWindows) {

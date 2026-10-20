@@ -198,25 +198,17 @@ func (d *Downloader) resolveHongguoMedia(ctx context.Context, task Task) (provid
 	if !hongguoNumericID.MatchString(videoID) || !hongguoNumericID.MatchString(seriesID) {
 		return providerMedia{}, fmt.Errorf("红果章节 ID 无效，请重新获取章节")
 	}
-	media, nativeErr := d.resolveHongguoAppMedia(ctx, videoID, task.Chapter.ContentType)
-	if nativeErr == nil {
-		return media, nil
-	}
-	if err := ctx.Err(); err != nil {
-		return providerMedia{}, err
-	}
-	media, pageErr := d.resolveHongguoWebMedia(ctx, seriesID, videoID)
-	if pageErr == nil {
-		return media, nil
-	}
-	if err := ctx.Err(); err != nil {
-		return providerMedia{}, err
-	}
-	media, apiErr := d.resolveHongguoPlaybackAPI(ctx, seriesID, videoID)
-	if apiErr == nil {
-		return media, nil
-	}
-	return providerMedia{}, fmt.Errorf("红果 App 取流失败：%v；网页取流失败：%v；备用取流失败：%w", publicError(nativeErr), publicError(pageErr), apiErr)
+	return resolveHongguoMediaRoutes(ctx, []hongguoMediaRoute{
+		{name: "红果 App 取流失败", resolve: func(stage context.Context) (providerMedia, error) {
+			return d.resolveHongguoAppMedia(stage, videoID, task.Chapter.ContentType)
+		}},
+		{name: "网页取流失败", resolve: func(stage context.Context) (providerMedia, error) {
+			return d.resolveHongguoWebMedia(stage, seriesID, videoID)
+		}},
+		{name: "备用取流失败", resolve: func(stage context.Context) (providerMedia, error) {
+			return d.resolveHongguoPlaybackAPI(stage, seriesID, videoID)
+		}},
+	})
 }
 
 func (d *Downloader) resolveHongguoWebMedia(ctx context.Context, seriesID, videoID string) (providerMedia, error) {

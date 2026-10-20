@@ -27,12 +27,20 @@ class ReleaseSourceGateTests(unittest.TestCase):
             reuse.validate_original_run(original, '1')
 
     def test_windows_publication_requires_approved_runtime_ancestor_and_only_release_changes(self):
-        with mock.patch.object(windows.subprocess, 'check_output', side_effect=[windows.approved_source, 'README.md\n']):
+        approved = 'a' * 40
+        with mock.patch.object(windows, 'approved_source', approved), mock.patch.object(windows.subprocess, 'check_output', side_effect=[approved, 'README.md\n']):
             windows.validate_release_source('candidate')
-        with mock.patch.object(windows.subprocess, 'check_output', return_value='other'), self.assertRaisesRegex(ValueError, 'approved runtime source'):
+        with mock.patch.object(windows, 'approved_source', approved), mock.patch.object(windows.subprocess, 'check_output', return_value='other'), self.assertRaisesRegex(ValueError, 'approved runtime source'):
             windows.validate_release_source('candidate')
-        with mock.patch.object(windows.subprocess, 'check_output', side_effect=[windows.approved_source, 'windows/updater/updater.cpp']), self.assertRaisesRegex(ValueError, 'Runtime source changed'):
+        with mock.patch.object(windows, 'approved_source', approved), mock.patch.object(windows.subprocess, 'check_output', side_effect=[approved, 'windows/updater/updater.cpp']), self.assertRaisesRegex(ValueError, 'Runtime source changed'):
             windows.validate_release_source('candidate')
+
+    def test_unpinned_windows_runtime_blocks_release_before_git(self):
+        with mock.patch.object(windows, 'approved_source', 'PIN_FINAL_RUNTIME_COMMIT_BEFORE_RELEASE'), \
+                mock.patch.object(windows.subprocess, 'check_output') as commands:
+            with self.assertRaisesRegex(ValueError, 'must be pinned'):
+                windows.validate_release_source('candidate')
+            commands.assert_not_called()
 
 
 if __name__ == '__main__':
