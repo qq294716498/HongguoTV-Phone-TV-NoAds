@@ -159,7 +159,7 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 	if attempts > 3 {
 		attempts = 3
 	}
-	playbackModel := method == http.MethodPost && path == "/novel/player/video_model/v1/"
+	playbackModel := method == http.MethodPost && path == hongguoVideoModelPath
 	if playbackModel && attempts > 2 {
 		attempts = 2
 	}

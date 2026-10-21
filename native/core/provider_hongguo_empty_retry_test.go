@@ -44,8 +44,11 @@ func TestHongguoEmptyModelRetriesOnceWithSameIdentity(t *testing.T) {
 			device: request.URL.Query().Get("device_id"), install: request.URL.Query().Get("iid"),
 			ticket: request.URL.Query().Get("_rticket"), body: sha256.Sum256(body), at: time.Now(),
 		})
-		if request.Header.Get("X-Gorgon") != "" || request.Header.Get("X-Khronos") != "" {
-			t.Error("model retry changed the signature policy")
+		// 播放模型请求现在必须带齐签名头；重试沿用同一设备身份而不是同一签名值。
+		for _, header := range []string{"X-Gorgon", "X-Khronos", "X-Ladon", "X-Argus", "X-Helios", "X-Medusa"} {
+			if request.Header.Get(header) == "" {
+				t.Errorf("model request lost signature header %s", header)
+			}
 		}
 		if len(requests) == 1 {
 			return sourceFixtureResponse(request, http.StatusOK, ""), nil

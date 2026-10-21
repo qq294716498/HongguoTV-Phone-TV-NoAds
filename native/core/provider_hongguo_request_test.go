@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -37,43 +38,40 @@ func TestHongguoEpisodeContentTypeSurvivesDetailAndSerialization(t *testing.T) {
 	}
 }
 
-func TestHongguoPlaybackUsesRequestedEpisodeContentType(t *testing.T) {
-	for _, scenario := range []struct {
-		name        string
-		contentType int
-		expected    int
-	}{
-		{"short-drama", 1, 1},
-		{"motion-comic", 1004, 1004},
-		{"ai-comic", 1007, 1007},
-		{"legacy", 0, 1},
-		{"invalid", -1, 1},
-	} {
-		t.Run(scenario.name, func(t *testing.T) {
+func TestHongguoPlaybackRoutesEpisodeIntoMixedVideoIDMap(t *testing.T) {
+	// 播放模型接口已迁到 multi_video_model/v1：分集 ID 通过 mixed_video_id_map 的
+	// 1004 槽位传递，biz_param.video_platform 固定 1024，且必须带齐六个签名头。
+	for _, contentType := range []int{1, 1004, 1007, 0, -1} {
+		t.Run(fmt.Sprintf("content-type-%d", contentType), func(t *testing.T) {
 			d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
-				if request.URL.Path != "/novel/player/video_model/v1/" {
+				if request.URL.Path != hongguoVideoModelPath {
 					t.Fatalf("unexpected route: %s", request.URL.Path)
 				}
-				for _, header := range []string{"X-Gorgon", "X-Khronos", "X-SS-STUB", "X-SS-Req-Ticket"} {
-					if request.Header.Get(header) != "" {
-						t.Fatalf("playback model request retained incompatible header %s", header)
+				for _, header := range []string{"X-Gorgon", "X-Khronos", "X-Ladon", "X-Argus", "X-Helios", "X-Medusa", "X-SS-STUB", "X-SS-Req-Ticket"} {
+					if request.Header.Get(header) == "" {
+						t.Fatalf("playback model request lost required header %s", header)
 					}
 				}
 				var payload struct {
-					VideoID     string `json:"video_id"`
-					ContentType int    `json:"content_type"`
+					BizParam struct {
+						VideoPlatform int `json:"video_platform"`
+					} `json:"biz_param"`
+					MixedVideoIDMap map[string][]string `json:"mixed_video_id_map"`
 				}
 				if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
 					t.Fatal(err)
 				}
-				if payload.VideoID != "9001" || payload.ContentType != scenario.expected {
-					t.Fatalf("wrong episode identity or content type: %+v", payload)
+				if payload.BizParam.VideoPlatform != 1024 {
+					t.Fatalf("wrong video platform: %d", payload.BizParam.VideoPlatform)
 				}
-				return sourceFixtureResponse(request, http.StatusOK, `{"code":0,"data":{"video_model":{"video_list":[{"main_url":"https://media.example.test/episode.mp4","video_meta":{"codec_type":"h264","definition":"720p"}}]}}}`), nil
+				if len(payload.MixedVideoIDMap["1004"]) != 1 || payload.MixedVideoIDMap["1004"][0] != "9001" {
+					t.Fatalf("episode was not routed into the 1004 slot: %+v", payload.MixedVideoIDMap)
+				}
+				return sourceFixtureResponse(request, http.StatusOK, `{"code":0,"data":{"9001":{"video_model":{"video_list":[{"main_url":"https://media.example.test/episode.mp4","video_meta":{"codec_type":"h264","definition":"720p"}}]}}}}`), nil
 			})
 			media, err := d.resolveHongguoMedia(context.Background(), Task{
 				DramaID: providerDramaID(sourceHongguo, "12345"),
-				Chapter: Chapter{VideoURL: "hongguo-cenc://9001", ContentType: scenario.contentType},
+				Chapter: Chapter{VideoURL: "hongguo-cenc://9001", ContentType: contentType},
 			})
 			if err != nil || media.URL != "https://media.example.test/episode.mp4" {
 				t.Fatalf("matching episode media was not selected: %v", err)
@@ -123,7 +121,7 @@ func TestHongguoPlaybackHTTPBackoffSurvivesFallback(t *testing.T) {
 			calls := 0
 			d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
 				calls++
-				if request.URL.Path != "/novel/player/video_model/v1/" {
+				if request.URL.Path != hongguoVideoModelPath {
 					if status == http.StatusTooManyRequests {
 						t.Fatalf("429 issued another route: %s", request.URL)
 					}
@@ -152,7 +150,7 @@ func TestHongguoSlowHTTPRoutesReachBackupWithinCallerBudget(t *testing.T) {
 	appCalls, webCalls, apiCalls := 0, 0, 0
 	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
 		switch request.URL.Path {
-		case "/novel/player/video_model/v1/":
+		case hongguoVideoModelPath:
 			appCalls++
 			<-request.Context().Done()
 			return nil, request.Context().Err()
@@ -185,7 +183,7 @@ func TestHongguoHTTPForbiddenAllowsIndependentWebPlayback(t *testing.T) {
 	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
 		calls++
 		switch request.URL.Path {
-		case "/novel/player/video_model/v1/":
+		case hongguoVideoModelPath:
 			return sourceFixtureResponse(request, http.StatusForbidden, "{}"), nil
 		case "/player/12345/9001":
 			return sourceFixtureResponse(request, http.StatusOK, `<script>_ROUTER_DATA = {"loaderData":{"player_page":{"series_id":"12345","vid":"9001","video_player_info":{"main_url":"https://media.example.test/fallback.mp4"}}}}};</script>`), nil
