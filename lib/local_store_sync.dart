@@ -47,13 +47,21 @@ extension LocalStoreSync on LocalStore {
     final document = raw == null
         ? LanDocument.empty()
         : LanDocument.fromJson(jsonDecode(raw));
-    if (raw == null) {
+    if (raw == null ||
+        lanMap(jsonDecode(raw))['schema'] == 1 ||
+        document.records.values.any(
+          (record) =>
+              !record.progress.conflict &&
+              record.progress.value != null &&
+              !lanMap(record.progress.value).containsKey('drama'),
+        )) {
       document.reconcile(
-        previous: const {},
+        previous: raw == null ? const {} : _favorites,
         favorites: _favorites,
         states: _followStates,
         history: _history,
         oldHistory: const {},
+        migrate: raw != null,
       );
     }
     _lanDocumentCache = document;
@@ -172,11 +180,7 @@ extension LocalStoreSync on LocalStore {
             seriesSeasons: states[checked.id]?.seriesSeasons ?? const {},
           );
           final watch = checked.watch;
-          if (watch == null) {
-            history.remove(checked.id);
-          } else {
-            history[checked.id] = watch;
-          }
+          _applyLanWatch(history, checked, watch);
         } else {
           favorites.remove(checked.id);
           states.remove(checked.id);
@@ -245,11 +249,7 @@ extension LocalStoreSync on LocalStore {
         states[id] = next.following.copyWith(
           seriesSeasons: states[id]?.seriesSeasons ?? const {},
         );
-        if (next.watch case final watch?) {
-          history[id] = watch;
-        } else {
-          history.remove(id);
-        }
+        _applyLanWatch(history, next, next.watch);
       } else {
         favorites.remove(id);
         states.remove(id);
@@ -271,5 +271,25 @@ extension LocalStoreSync on LocalStore {
       _loadLibrary();
       _notify();
     });
+  }
+
+  void _applyLanWatch(
+    Map<String, WatchEntry> history,
+    LanRecord record,
+    WatchEntry? watch,
+  ) {
+    if (record.progress.conflict) return;
+    if (watch == null) {
+      history.removeWhere(
+        (_, entry) => lanSameSeries(record.drama, entry.drama),
+      );
+    } else {
+      for (final id in record.clearedProgressIds) {
+        final existing = history[id];
+        if (existing != null && lanSameSeries(record.drama, existing.drama))
+          history.remove(id);
+      }
+      history[watch.drama.id] = watch;
+    }
   }
 }

@@ -72,32 +72,29 @@ void main() {
     }
   }
 
-  test(
-    'emoji conversion is measured and displayed once without altering raw text',
-    () {
-      final measured = <String>[];
-      final flights = planDanmaku(
-        [const DanmakuItem(id: 'emoji', text: '好看[偷笑][笑哭]👍[未知表情]', timeMs: 0)],
-        width: 800,
-        rows: 2,
-        measure: (text) {
-          measured.add(text);
-          return 180;
-        },
-      );
-      expect(flights.single.text, '好看🤭😂👍[未知表情]');
-      expect(measured, ['好看🤭😂👍[未知表情]']);
-      expect(flights.single.item.text, '好看[偷笑][笑哭]👍[未知表情]');
-      final compound = '${List.filled(99, '字').join()}👩🏽‍💻尾';
-      final clipped = planDanmaku(
-        [DanmakuItem(id: 'long', text: compound, timeMs: 0)],
-        width: 800,
-        rows: 2,
-        measure: (_) => 400,
-      );
-      expect(clipped.single.text.endsWith('👩🏽‍💻…'), isTrue);
-    },
-  );
+  test('emoji expressions retain raw text for lossless image fallback', () {
+    final measured = <String>[];
+    final flights = planDanmaku(
+      [const DanmakuItem(id: 'emoji', text: '好看[偷笑][笑哭]👍[未知表情]', timeMs: 0)],
+      width: 800,
+      rows: 2,
+      measure: (text) {
+        measured.add(text);
+        return 180;
+      },
+    );
+    expect(flights.single.text, '好看[偷笑][笑哭]👍[未知表情]');
+    expect(measured, ['好看[偷笑][笑哭]👍[未知表情]']);
+    expect(flights.single.item.text, '好看[偷笑][笑哭]👍[未知表情]');
+    final compound = '${List.filled(99, '字').join()}👩🏽‍💻尾';
+    final clipped = planDanmaku(
+      [DanmakuItem(id: 'long', text: compound, timeMs: 0)],
+      width: 800,
+      rows: 2,
+      measure: (_) => 400,
+    );
+    expect(clipped.single.text.endsWith('👩🏽‍💻…'), isTrue);
+  });
 
   test('next season search finds the exact consecutive season only', () async {
     final repository = SeasonRepository();

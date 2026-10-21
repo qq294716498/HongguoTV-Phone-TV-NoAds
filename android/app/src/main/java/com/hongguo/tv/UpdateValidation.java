@@ -12,6 +12,11 @@ public final class UpdateValidation {
         require(expectedHash != null && expectedHash.matches("[a-f0-9]{64}") && expectedHash.equals(actualHash), "安装包 SHA-256 校验失败");
     }
 
+    public static void verifyVersionName(String expected, String actual) {
+        require(expected != null && expected.matches("[0-9]+[.][0-9]+[.][0-9]+")
+                && expected.equals(actual), "安装包版本名称与更新信息不一致");
+    }
+
     public static void verifyIdentity(String installedPackage, String archivePackage,
             Set<String> installedSigners, Set<String> archiveSigners,
             long installedCode, long archiveCode, long expectedCode,

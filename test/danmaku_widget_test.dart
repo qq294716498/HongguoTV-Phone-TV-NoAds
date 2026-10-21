@@ -10,7 +10,9 @@ import 'package:duanju_app/player_menu.dart';
 import 'package:duanju_app/player_screen.dart';
 import 'package:duanju_app/playback_preferences.dart';
 import 'package:duanju_app/television_controls.dart';
+import 'package:duanju_app/settings_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -55,7 +57,7 @@ void main() {
       expect(
         find.byWidgetPredicate(
           (widget) =>
-              widget is DanmakuEmojiText && widget.text == '合成弹幕🤭  ♥ 3',
+              widget is DanmakuEmojiText && widget.text == '合成弹幕[偷笑]  ♥ 3',
         ),
         findsOneWidget,
       );
@@ -219,6 +221,110 @@ void main() {
     expect(tester.takeException(), isNull);
   }
 
+  for (final landscape in [false, true]) {
+    testWidgets(
+      'mobile ${landscape ? 'landscape' : 'portrait'} short tap and long press share global danmaku settings',
+      (tester) async {
+        final repository = DanmakuFixtureRepository();
+        final platform = ScriptedPlayer();
+        final store = await mount(tester, repository, platform);
+        if (landscape) {
+          tester.view.physicalSize = const Size(880, 420);
+          await settle(tester);
+        }
+        final beforePlaying = platform.state.playing;
+        final opened = platform.opened.length;
+        final settings = find.byKey(const ValueKey('player-danmaku-toggle'));
+        expect(find.byTooltip('播放设置'), findsNothing);
+        expect(settings, findsOneWidget);
+        await tester.tap(settings);
+        await settle(tester);
+        expect(store.playbackPreferences.danmaku, false);
+        expect(find.byType(PlayerMenu), findsNothing);
+        await tester.longPress(settings);
+        await settle(tester);
+        expect(store.playbackPreferences.danmaku, false);
+        expect(find.byType(PlayerMenu), findsOneWidget);
+        expect(
+          tester.widget<PlayerMenu>(find.byType(PlayerMenu)).section,
+          PlayerMenuSection.danmaku,
+        );
+        final speed = find.byKey(const ValueKey('menu-danmaku-speed-1.5'));
+        await tester.ensureVisible(speed);
+        await tester.tap(speed);
+        await settle(tester);
+        final opacity = find.byKey(const ValueKey('menu-danmaku-opacity-0.35'));
+        await tester.ensureVisible(opacity);
+        await tester.tap(opacity);
+        await settle(tester);
+        expect(store.playbackPreferences.danmakuSpeed, 1.5);
+        expect(store.playbackPreferences.danmakuOpacity, .35);
+        Navigator.of(tester.element(find.byType(PlayerMenu))).pop();
+        await settle(tester);
+        final overlay = tester.widget<DanmakuOverlay>(
+          find.byType(DanmakuOverlay),
+        );
+        expect(overlay.speed, 1.5);
+        expect(overlay.opacity, .35);
+        expect(platform.opened, hasLength(opened));
+        expect(platform.state.playing, beforePlaying);
+        await tester.tap(settings);
+        await settle(tester);
+        expect(store.playbackPreferences.danmaku, true);
+        final context = tester.element(find.byType(PlayerScreen));
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) =>
+                SettingsScreen(repository: repository, store: store),
+          ),
+        );
+        await settle(tester);
+        expect(find.byType(SettingsScreen), findsOneWidget);
+        final global = find.byKey(const ValueKey('global-danmaku-settings'));
+        await tester.ensureVisible(global);
+        await tester.tap(global);
+        await settle(tester);
+        expect(
+          tester.widget<PlayerMenu>(find.byType(PlayerMenu)).section,
+          PlayerMenuSection.danmaku,
+        );
+        final globalOpacity = find.byKey(
+          const ValueKey('menu-danmaku-opacity-0.8'),
+        );
+        await tester.ensureVisible(globalOpacity);
+        await tester.tap(globalOpacity);
+        await settle(tester);
+        Navigator.of(tester.element(find.byType(PlayerMenu))).pop();
+        await settle(tester);
+        Navigator.of(tester.element(find.byType(SettingsScreen))).pop();
+        await settle(tester);
+        expect(
+          tester.widget<DanmakuOverlay>(find.byType(DanmakuOverlay)).opacity,
+          .8,
+        );
+        expect(
+          tester.widget<DanmakuOverlay>(find.byType(DanmakuOverlay)).speed,
+          1.5,
+        );
+        expect(platform.opened, hasLength(opened));
+        await store.flushPendingWrites();
+        final restored = LocalStore(store.preferences);
+        expect(restored.playbackPreferences.danmakuSpeed, 1.5);
+        expect(restored.playbackPreferences.danmakuOpacity, .8);
+        restored.dispose();
+        await tester.tap(find.byTooltip('锁定屏幕'));
+        await settle(tester);
+        await tester.longPress(settings, warnIfMissed: false);
+        await settle(tester);
+        expect(find.byType(PlayerMenu), findsNothing);
+        expect(platform.state.playing, beforePlaying);
+        await tester.tap(find.byTooltip('解锁屏幕'));
+        await settle(tester);
+        await unmount(tester, platform);
+      },
+    );
+  }
+
   testWidgets(
     'danmaku uses continuous linear motion and synchronizes pause, buffering, speed and seek',
     (tester) async {
@@ -299,6 +405,10 @@ void main() {
       expect(player.opened.length, 1);
       expect(player.state.playing, isTrue);
       expect(find.text('正在准备播放'), findsNothing);
+      expect(
+        tester.widget<DanmakuOverlay>(find.byType(DanmakuOverlay)).mobile,
+        isTrue,
+      );
       final old = repository.danmakuCalls.single;
       await tester.tap(find.byKey(const ValueKey('player-portrait-episodes')));
       await settle(tester);
@@ -438,6 +548,19 @@ void main() {
       await settle(tester);
       expect(chosen?.danmaku, isFalse);
       expect(tester.takeException(), isNull);
+      final faster = find.byKey(const ValueKey('menu-danmaku-speed-2.0'));
+      await tester.ensureVisible(faster);
+      await tester.tap(faster);
+      await settle(tester);
+      expect(chosen?.danmakuSpeed, 2);
+      final opacity = find.byKey(const ValueKey('menu-danmaku-opacity-0.35'));
+      await tester.ensureVisible(opacity);
+      await tester.tap(opacity);
+      await settle(tester);
+      expect(chosen?.danmakuOpacity, .35);
+
+      expect(chosen?.speed, 1);
+      expect(tester.takeException(), isNull);
       TelevisionPlaybackSetting? selected;
       await tester.pumpWidget(
         MaterialApp(
@@ -473,6 +596,39 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('tv-danmaku-enabled')));
       await settle(tester);
       expect(selected?.danmaku, isFalse);
+      await tester.tap(find.text('打开电视设置'));
+      await settle(tester);
+      final tvFaster = find.byKey(const ValueKey('tv-danmaku-speed-1.5'));
+      await tester.ensureVisible(tvFaster);
+      Focus.of(
+        tester.element(
+          find
+              .descendant(of: tvFaster, matching: find.byType(GestureDetector))
+              .first,
+        ),
+      ).requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await settle(tester);
+      expect(selected?.danmakuSpeed, 1.5);
+      await tester.tap(find.text('打开电视设置'));
+      await settle(tester);
+      final tvOpacity = find.byKey(const ValueKey('tv-danmaku-opacity-0.35'));
+      await tester.ensureVisible(tvOpacity);
+      Focus.of(
+        tester.element(
+          find
+              .descendant(of: tvOpacity, matching: find.byType(GestureDetector))
+              .first,
+        ),
+      ).requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await settle(tester);
+      expect(selected?.danmakuOpacity, .35);
+
+      expect(selected?.speed, isNull);
+
       expect(tester.takeException(), isNull);
     },
   );

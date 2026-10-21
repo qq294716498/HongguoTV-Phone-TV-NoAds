@@ -126,8 +126,17 @@ func TestNativeDownloadRangeResumeAndAddressIsolation(t *testing.T) {
 		mu.Lock()
 		ranges = append(ranges, r.Header.Get("Range"))
 		validators = append(validators, r.Header.Get("If-Range"))
+		initialRequest := len(ranges) == 1
 		mu.Unlock()
 		w.Header().Set("ETag", "\"v1\"")
+		if initialRequest {
+			w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+			w.Header().Set("Content-Type", "video/mp4")
+			_, _ = w.Write(data[:32<<10])
+			w.(http.Flusher).Flush()
+			<-r.Context().Done()
+			return
+		}
 		http.ServeContent(w, r, "media.mp4", time.Time{}, bytes.NewReader(data))
 	}))
 	t.Cleanup(upstream.Close)

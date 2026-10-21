@@ -1,4 +1,8 @@
 const _danmakuEmoji = <String, String>{
+  '笑': '😄',
+  '哭': '😢',
+  '什么': '❓',
+  '敬礼': '🫡',
   '偷笑': '🤭',
   '捂嘴笑': '🤭',
   '笑哭': '😂',
@@ -155,6 +159,7 @@ const _danmakuEmoji = <String, String>{
   '阴险': '😏',
   '悠闲': '😌',
   '咒骂': '🤬',
+  '吃瓜': '🍉',
   '吃瓜群众': '🍉',
   '绿帽子': '🧢',
   '敢怒不敢言': '😤',
@@ -238,11 +243,41 @@ final _danmakuEmojiTag = RegExp(
   r'［([^\[\]【】［］\r\n]{1,16})］',
 );
 
-String danmakuDisplayText(String text) =>
-    text.replaceAllMapped(_danmakuEmojiTag, (match) {
-      final name = match[1] ?? match[2] ?? match[3]!;
-      return _danmakuEmoji[name] ??
-          _danmakuEmoji[name.toLowerCase()] ??
-          _danmakuEmoji[name.toUpperCase()] ??
-          match[0]!;
-    });
+String? danmakuEmojiForName(String name) =>
+    _danmakuEmoji[name] ??
+    _danmakuEmoji[name.toLowerCase()] ??
+    _danmakuEmoji[name.toUpperCase()];
+
+Iterable<({String original, String? glyphs, bool expression})>
+danmakuExpressionParts(String text) sync* {
+  var offset = 0;
+  for (final match in _danmakuEmojiTag.allMatches(text)) {
+    if (match.start > offset) {
+      yield (
+        original: text.substring(offset, match.start),
+        glyphs: null,
+        expression: false,
+      );
+    }
+    yield (
+      original: match[0]!,
+      glyphs: danmakuEmojiForName(match[1] ?? match[2] ?? match[3]!),
+      expression: true,
+    );
+    offset = match.end;
+  }
+  if (offset < text.length) {
+    yield (original: text.substring(offset), glyphs: null, expression: false);
+  }
+}
+
+String danmakuDisplayText(String text) => danmakuExpressionParts(
+  text,
+).map((part) => part.glyphs ?? part.original).join();
+
+String? danmakuGlyphName(String glyph) {
+  for (final entry in _danmakuEmoji.entries) {
+    if (entry.value == glyph) return entry.key;
+  }
+  return glyph == '🫡' ? '敬礼' : null;
+}

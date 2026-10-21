@@ -59,9 +59,20 @@ String _nativeRequest(String body) {
 }
 
 class AppFailure implements Exception {
-  AppFailure(this.message, {this.code = ''});
+  AppFailure(this.message, {this.code = '', this.retryAt});
+
+  factory AppFailure.fromResponse(Map<String, dynamic> response) {
+    final retryAt = response['retryAt'];
+    return AppFailure(
+      response['error'] as String? ?? '读取失败，请重试',
+      code: response['code'] as String? ?? '',
+      retryAt: retryAt is String ? DateTime.tryParse(retryAt) : null,
+    );
+  }
+
   final String message;
   final String code;
+  final DateTime? retryAt;
   @override
   String toString() => message;
 }
@@ -598,10 +609,7 @@ class NativeRepository extends AppRepository {
       );
       final response = jsonDecode(encoded) as Map<String, dynamic>;
       if (response['ok'] != true) {
-        throw AppFailure(
-          response['error'] as String? ?? '读取失败，请重试',
-          code: response['code'] as String? ?? '',
-        );
+        throw AppFailure.fromResponse(response);
       }
       final data = response['data'];
       if (!unrestricted && epoch != access?.profileEpoch) {
@@ -617,6 +625,10 @@ class NativeRepository extends AppRepository {
     } on AppFailure {
       rethrow;
     } on TimeoutException {
+      if ({'resolve', 'fallback'}.contains(input['action']) &&
+          input['sequence'] == _playbackSequence) {
+        unawaited(cancelPlayback().catchError((Object _) {}));
+      }
       if (input['session'] is String &&
           input['sequence'] is int &&
           {

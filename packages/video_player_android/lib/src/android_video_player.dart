@@ -11,6 +11,12 @@ import 'messages.g.dart' hide videoEvents;
 import 'messages.g.dart' as pigeon show videoEvents;
 import 'platform_view_player.dart';
 
+class AndroidDecoderOptions extends VideoPlayerOptions {
+  AndroidDecoderOptions({required this.decoderMode}) : super(mixWithOthers: true);
+
+  final String decoderMode;
+}
+
 /// The non-test implementation of `_apiProvider`.
 VideoPlayerInstanceApi _productionApiProvider(int playerId) {
   return VideoPlayerInstanceApi(messageChannelSuffix: playerId.toString());
@@ -104,6 +110,9 @@ class AndroidVideoPlayer extends VideoPlayerPlatform {
       userAgent: userAgent,
       formatHint: formatHint,
       backBufferDurationMs: options.videoPlayerOptions?.backBufferDurationMs,
+      decoderMode: options.videoPlayerOptions is AndroidDecoderOptions
+          ? (options.videoPlayerOptions! as AndroidDecoderOptions).decoderMode
+          : null,
     );
 
     final int playerId;

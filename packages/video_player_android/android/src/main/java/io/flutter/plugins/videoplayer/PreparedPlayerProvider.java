@@ -18,6 +18,7 @@ final class PreparedPlayerProvider implements VideoPlayer.ExoPlayerProvider {
   PreparedPlayerProvider(Context context, VideoAsset asset, VideoPlayerOptions options) {
     this(context, asset, options, new DefaultRenderersFactory(context)
         .setEnableDecoderFallback(true)
+        .setMediaCodecSelector(DecoderPolicy.selector(options.decoderMode))
         .experimentalSetEnableMediaCodecVideoRendererPrewarming(false));
   }
 

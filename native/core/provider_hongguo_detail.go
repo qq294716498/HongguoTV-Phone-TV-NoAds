@@ -90,8 +90,9 @@ func parseHongguoAppDetail(result map[string]any, seriesID string) (hongguoDetai
 			return entry, errors.New("红果 App 返回了重复分集")
 		}
 		seen[videoID], episodes[index] = true, true
+		contentType, _ := strconv.Atoi(firstNonEmpty(mapString(video, "content_type"), mapString(detail, "content_type")))
 		entry.Chapters = append(entry.Chapters, Chapter{
-			ID: providerChapterID(sourceHongguo, seriesID, videoID), Source: sourceHongguo,
+			ID: providerChapterID(sourceHongguo, seriesID, videoID), Source: sourceHongguo, ContentType: contentType,
 			Title: fmt.Sprintf("第%d集", index), VideoURL: "hongguo-cenc://" + videoID, CurrentEpisode: rawEpisode(index),
 		})
 	}

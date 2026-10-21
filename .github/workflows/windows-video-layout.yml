@@ -1,0 +1,63 @@
+name: Windows video layout diagnostics
+
+on:
+  push:
+    branches: [fix/windows-layout-description-skip-0.1.20-45, fix/windows-client-viewport-0.1.21-46, fix/hongguo-playback-release-0.1.22-47, release/windows-android-0.1.22-47, release/windows-android-0.1.23-48, candidate/hongguo-retry-single-instance-0.1.23-48]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-video-layout-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows-layout:
+    runs-on: windows-2022
+    timeout-minutes: 40
+    env:
+      GOPROXY: https://proxy.golang.org,direct
+      GOSUMDB: sum.golang.org
+      HG_VIDEO_LAYOUT_CAPTURE_DIR: ${{ github.workspace }}\dist\windows-video-layout
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: native/go.mod
+          cache-dependency-path: native/go.sum
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - name: Use x64 MinGW
+        shell: pwsh
+        run: |
+          $compiler = (Get-Command gcc.exe -ErrorAction Stop).Source
+          if ((& $compiler -dumpmachine) -notmatch '^x86_64-w64-mingw32$') { throw 'x64 compiler required' }
+          (Split-Path $compiler) | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - run: flutter pub get --enforce-lockfile
+      - run: python scripts/build_native.py --platform windows --all-sources
+      - name: Request the user's screenshot resolution when supported by the runner
+        shell: pwsh
+        run: |
+          try {
+            Set-DisplayResolution -Width 1920 -Height 1080 -Force -ErrorAction Stop
+          } catch {
+            Write-Host "Display resolution unchanged: $($_.Exception.Message)"
+          }
+      - name: Capture real PlayerScreen video texture geometry and pixels
+        run: flutter test -d windows integration_test/windows_video_layout_test.dart --no-pub --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true --reporter=expanded
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-video-layout
+          path: dist/windows-video-layout/*
+          if-no-files-found: warn
+          retention-days: 14

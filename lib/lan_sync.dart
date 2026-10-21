@@ -50,13 +50,13 @@ extension LanSynchronization on LanController {
         !_foreground ||
         store.locked ||
         store.profileEpoch != _sessionEpoch) {
-      throw StateError('同步已取消，已经保存的记录会保留');
+      throw LanSyncCancelled(_syncCancellationReason);
     }
   }
 
   Future<void> beginManual() async {
     _manual = true;
-    await cancelSync();
+    await cancelSync(reason: '已切换到手动同步');
     _manual = true;
     _notify();
   }
@@ -67,9 +67,8 @@ extension LanSynchronization on LanController {
     flush();
   }
 
-  Future<void> cancelSync() async {
-    _syncTicket++;
-    if (_syncing) syncMessage = '正在取消，已经保存的记录会保留';
+  Future<void> cancelSync({String reason = '已主动取消本次同步'}) async {
+    _invalidateSync(reason);
     _notify();
     final requests = _syncRequests.toList();
     for (final request in requests) {
@@ -93,6 +92,7 @@ extension LanSynchronization on LanController {
     if (_syncing || _incomingSync != null) throw StateError('正在同步，请稍候');
     _syncing = true;
     final ticket = ++_syncTicket;
+    _syncPhase = 'planning';
     final run = _run;
     final epoch = store.profileEpoch;
     final completed = Completer<void>();
@@ -101,11 +101,13 @@ extension LanSynchronization on LanController {
     try {
       return await operation(ticket);
     } catch (failure) {
+      DiaryService.add('[LAN] sync-ended phase=$_syncPhase result=$failure');
       if (run == _run && epoch == store.profileEpoch)
         syncMessage = failure.toString();
       rethrow;
     } finally {
       _syncing = false;
+      _syncPhase = 'idle';
       _syncWork = null;
       completed.complete();
       _notify();
@@ -155,6 +157,8 @@ extension LanSynchronization on LanController {
         if (remoteBase.isNotEmpty) 'base': remoteBase,
       }, owner: 'sync');
       _checkSync(ticket, remote);
+      if (summary['schema'] != lanSyncSchema)
+        throw StateError(lanSyncUpgradeMessage);
       final base = lanText(summary['base'], 64);
       if (remoteBase.isNotEmpty && remoteBase != base) {
         throw StateError('对方记录已更新，请重新同步');
@@ -350,6 +354,7 @@ extension LanSynchronization on LanController {
         }
       }
       _checkSync(ticket, remote);
+      _syncPhase = 'local-save';
       syncMessage = remoteSaved ? '对方已保存，正在保存本机' : '正在保存本机记录';
       _notify();
       if (preview.localChanges.isNotEmpty) {
@@ -375,7 +380,9 @@ extension LanSynchronization on LanController {
         0,
         (count, record) => count + record.conflicts,
       );
-      syncMessage = conflicts == 0 ? '双方记录已同步' : '记录已同步 · $conflicts 项冲突待处理';
+      syncMessage = conflicts == 0
+          ? '追剧及其续播进度已同步'
+          : '记录已同步 · $conflicts 项冲突待处理';
       error = null;
       unawaited(
         _request('status', {
@@ -415,6 +422,8 @@ extension LanSynchronization on LanController {
     Map<String, dynamic> body,
     LanConnection remote,
   ) async {
+    if (body['schema'] != lanSyncSchema)
+      throw StateError(lanSyncUpgradeMessage);
     final document = store.lanDocument;
     if (path == 'sync/summary') {
       final sources = _receiveScope(body, remote);
@@ -431,6 +440,7 @@ extension LanSynchronization on LanController {
         throw const FormatException('同步分页无效');
       final end = min(offset + 128, records.length);
       return {
+        'schema': lanSyncSchema,
         'base': base,
         'items': {
           for (final record in records.sublist(offset, end))

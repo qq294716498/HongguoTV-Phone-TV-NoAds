@@ -26,12 +26,16 @@ class TransportFixture {
   var forwardCalls = 0;
   var toggleCalls = 0;
   var unmounted = false;
+  bool? fullscreenValue;
+  Future<void> Function()? openMenu;
+  Color background = const Color(0xFF17212A);
 
   Future<void> mount(
     WidgetTester tester, {
     Size size = const Size(960, 540),
     bool fullscreen = true,
     bool showOnPlaybackReady = true,
+    bool mobile = true,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
@@ -77,7 +81,7 @@ class TransportFixture {
           body: RepaintBoundary(
             key: const ValueKey('transport-capture'),
             child: ColoredBox(
-              color: const Color(0xFF17212A),
+              color: background,
               child: StatefulBuilder(
                 builder: (context, setState) {
                   rebuild = setState;
@@ -85,9 +89,9 @@ class TransportFixture {
                     player: player,
                     interactions: interactions,
                     enabled: enabled,
-                    fullscreen: fullscreen,
+                    fullscreen: fullscreenValue ?? fullscreen,
                     showOnPlaybackReady: showOnPlaybackReady,
-                    swipeEnabled: true,
+                    swipeEnabled: mobile,
                     title: '合成视频 · 播放按钮验证',
                     episodeLabel: '第 1 集',
                     onFullscreen: () {},
@@ -114,7 +118,7 @@ class TransportFixture {
                     },
                     onEpisodes: () async {},
                     onSpeed: () async {},
-                    onQuality: () async {},
+                    onQuality: () async => openMenu?.call(),
                     onPictureInPicture: () async {},
                     speed: 1.25,
                     qualityLabel: '自动',
@@ -146,6 +150,27 @@ void main() {
   setUp(mockPlayerDevice);
   final forward = find.byKey(const ValueKey('player-mobile-forward'));
   final next = find.byKey(const ValueKey('player-mobile-next'));
+
+  testWidgets(
+    'desktop forward button seeks fifteen seconds and resumes playback',
+    (tester) async {
+      final fixture = TransportFixture();
+      await fixture.mount(
+        tester,
+        size: const Size(800, 600),
+        fullscreen: false,
+        mobile: false,
+      );
+      final forward = find.byKey(const ValueKey('player-desktop-forward'));
+      expect(forward, findsOneWidget);
+      await tester.tap(forward);
+      await tester.pumpAndSettle();
+      expect(fixture.forwardCalls, 1);
+      expect(fixture.platform.state.position, const Duration(seconds: 44));
+      expect(fixture.platform.state.playing, isTrue);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'fullscreen play, forward fifteen and next keep order and seek bounds',

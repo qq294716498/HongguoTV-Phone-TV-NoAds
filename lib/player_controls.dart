@@ -1,10 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/gestures.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
 import 'lan_controller.dart';
+import 'windows_player_controls.dart';
 import 'player_device_status.dart';
 import 'player_interactions.dart';
 import 'widgets.dart';
@@ -39,6 +41,14 @@ class PlayerControls extends StatefulWidget {
     this.panelOpen = false,
     this.onSeek,
     this.onDanmaku,
+    this.onSettings,
+    this.onDanmakuSettings,
+    this.desktopEpisodesExpanded,
+    this.episodesTooltip,
+    this.onSidebar,
+    this.onMini,
+    this.desktopMini = false,
+    this.desktopActivityRevision = 0,
     this.onRetryDanmaku,
     this.onPush,
     this.onPictureInPicture,
@@ -48,6 +58,8 @@ class PlayerControls extends StatefulWidget {
   });
 
   final Player player;
+  final Future<void> Function()? onMini;
+  final bool desktopMini;
   final PlayerInteractions interactions;
   final bool enabled;
   final bool fullscreen;
@@ -74,6 +86,12 @@ class PlayerControls extends StatefulWidget {
   final bool panelOpen;
   final Future<void> Function(Duration)? onSeek;
   final Future<void> Function()? onDanmaku;
+  final Future<void> Function()? onSettings;
+  final Future<void> Function()? onDanmakuSettings;
+  final bool? desktopEpisodesExpanded;
+  final String? episodesTooltip;
+  final Future<void> Function()? onSidebar;
+  final int desktopActivityRevision;
   final Future<void> Function()? onRetryDanmaku;
   final Future<void> Function()? onPush;
   final Future<void> Function()? onPictureInPicture;
@@ -179,6 +197,8 @@ class _PlayerControlsState extends State<PlayerControls> {
 
   void _scheduleHide() {
     _hideTimer?.cancel();
+    if (defaultTargetPlatform == TargetPlatform.windows && !widget.swipeEnabled)
+      return;
     if (!widget.enabled ||
         widget.panelOpen ||
         !widget.player.state.playing ||
@@ -256,6 +276,10 @@ class _PlayerControlsState extends State<PlayerControls> {
 
   @override
   Widget build(BuildContext context) {
+    if (defaultTargetPlatform == TargetPlatform.windows &&
+        !widget.swipeEnabled) {
+      return WindowsPlayerControls(controls: widget);
+    }
     final state = widget.player.state;
     final duration = state.duration.inMilliseconds / 1000;
     final position = state.position.inMilliseconds / 1000;
@@ -464,6 +488,7 @@ class _PlayerControlsState extends State<PlayerControls> {
                         widget.episodeLabel,
                         key: const ValueKey('player-header-episode'),
                         maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: compact ? 14 : 17,
@@ -751,6 +776,7 @@ class _PlayerControlsState extends State<PlayerControls> {
     required VoidCallback? onPressed,
     bool selected = false,
     double visualWidth = 36,
+    VoidCallback? onLongPress,
   }) {
     final scheme = Theme.of(context).colorScheme;
     final enabled = onPressed != null;
@@ -770,10 +796,13 @@ class _PlayerControlsState extends State<PlayerControls> {
         button: true,
         enabled: enabled,
         label: tooltip,
+        hint: onLongPress == null ? null : '长按打开弹幕设置',
+        onLongPress: onLongPress,
         child: GestureDetector(
           key: key,
           behavior: HitTestBehavior.opaque,
           onTap: onPressed,
+          onLongPress: onLongPress,
           child: SizedBox(
             width: targetWidth,
             height: 48,
@@ -866,6 +895,9 @@ class _PlayerControlsState extends State<PlayerControls> {
     onPressed: widget.enabled
         ? () => _panel(widget.onRetryDanmaku ?? widget.onDanmaku!)
         : null,
+    onLongPress: widget.enabled && !_locked && widget.onDanmakuSettings != null
+        ? () => _panel(widget.onDanmakuSettings!)
+        : null,
     child: widget.onRetryDanmaku != null
         ? const Icon(Icons.refresh_rounded, size: 21)
         : Text(
@@ -891,6 +923,19 @@ class _PlayerControlsState extends State<PlayerControls> {
     required double volume,
   }) {
     final tools = [
+      _toolText(
+        key: const ValueKey('player-desktop-forward'),
+        tooltip: '快进15秒',
+        label: '+15s',
+        width: 42,
+        onPressed:
+            widget.enabled && widget.player.state.duration > Duration.zero
+            ? () {
+                widget.onForward();
+                _show();
+              }
+            : null,
+      ),
       if (showSpeedQuality) ...[
         _toolText(
           key: const ValueKey('player-speed'),

@@ -5,6 +5,9 @@ import 'package:duanju_app/luna_exo_player.dart';
 import 'package:duanju_app/local_store.dart';
 import 'package:duanju_app/playback_preferences.dart';
 import 'package:duanju_app/television_controls.dart';
+import 'package:duanju_app/tv_decoder_settings.dart';
+import 'package:video_player_android/video_player_android.dart';
+import 'package:video_player_android/src/messages.g.dart' as messages;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -20,11 +23,14 @@ class DiagnosticVideoPlatform extends VideoPlayerPlatform {
   int peakLive = 0;
   bool initialize = true;
   final views = <VideoViewType>[];
+  final decoders = <String?>[];
   @override
   Future<void> init() async {}
   @override
   Future<int?> createWithOptions(VideoCreationOptions options) async {
     views.add(options.viewType);
+    final decoder = options.videoPlayerOptions;
+    decoders.add(decoder is AndroidDecoderOptions ? decoder.decoderMode : null);
     final id = created++;
     final events = StreamController<VideoEvent>();
     streams[id] = events;
@@ -70,6 +76,39 @@ class DiagnosticVideoPlatform extends VideoPlayerPlatform {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test(
+    'per-player decoder options reach creation and codec serialization',
+    () async {
+      final previous = VideoPlayerPlatform.instance;
+      final platform = DiagnosticVideoPlatform();
+      VideoPlayerPlatform.instance = platform;
+      addTearDown(() => VideoPlayerPlatform.instance = previous);
+      TvDecoderMode? mode = TvDecoderMode.software;
+      final player = LunaExoPlayer(
+        decoderMode: () => mode,
+        television: () => true,
+      );
+      await player.open(Media('file:///synthetic-soft-hevc.mp4'));
+      mode = TvDecoderMode.hardware;
+      await player.open(Media('file:///synthetic-hardware.mp4'));
+      mode = null;
+      await player.open(Media('file:///synthetic-system.mp4'));
+      expect(platform.decoders, ['software', 'hardware', null]);
+      expect(platform.peakLive, 1);
+      final options = messages.CreationOptions(
+        uri: 'file:///synthetic.mp4',
+        httpHeaders: {},
+        decoderMode: 'software',
+      );
+      expect(messages.CreationOptions.decode(options.encode()), options);
+      expect(
+        messages.CreationOptions.decode(options.encode()).decoderMode,
+        'software',
+      );
+      await player.dispose();
+    },
+  );
+
   testWidgets(
     'TV compatibility output can be selected and persists while other playback preferences survive',
     (tester) async {

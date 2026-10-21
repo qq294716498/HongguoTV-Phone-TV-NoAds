@@ -238,42 +238,41 @@ void main() {
     },
   );
 
-  test(
-    'all 15 previous extra aliases and two extra user-reported names convert',
-    () {
-      const aliases = {
-        '捂嘴笑': '🤭',
-        '惊讶': '😮',
-        '惊呆': '😲',
-        '灵光一闪': '💡',
-        '爱慕': '😍',
-        '酷': '😎',
-        '睡': '😴',
-        '睡觉': '😴',
-        '流汗': '😓',
-        '冷汗': '😰',
-        '亲亲': '😘',
-        '拥抱': '🤗',
-        '祈祷': '🙏',
-        '加油': '💪',
-        '狗头': '🐶',
-        '爽': '😆',
-        '怒': '😠',
-      };
-      expect({
-        ...officialDouyinExpressionNames,
-        ...aliases.keys,
-      }, hasLength(231));
-      for (final entry in aliases.entries) {
-        for (final pair in [('[', ']'), ('【', '】'), ('［', '］')]) {
-          expect(
-            danmakuDisplayText('${pair.$1}${entry.key}${pair.$2}'),
-            entry.value,
-          );
-        }
+  test('previous aliases and six user-reported names convert', () {
+    const aliases = {
+      '捂嘴笑': '🤭',
+      '惊讶': '😮',
+      '惊呆': '😲',
+      '灵光一闪': '💡',
+      '爱慕': '😍',
+      '酷': '😎',
+      '睡': '😴',
+      '睡觉': '😴',
+      '流汗': '😓',
+      '冷汗': '😰',
+      '亲亲': '😘',
+      '拥抱': '🤗',
+      '祈祷': '🙏',
+      '加油': '💪',
+      '狗头': '🐶',
+      '爽': '😆',
+      '怒': '😠',
+      '笑': '😄',
+      '哭': '😢',
+      '什么': '❓',
+      '敬礼': '🫡',
+      '吃瓜': '🍉',
+    };
+    expect({...officialDouyinExpressionNames, ...aliases.keys}, hasLength(236));
+    for (final entry in aliases.entries) {
+      for (final pair in [('[', ']'), ('【', '】'), ('［', '］')]) {
+        expect(
+          danmakuDisplayText('${pair.$1}${entry.key}${pair.$2}'),
+          entry.value,
+        );
       }
-    },
-  );
+    }
+  });
 
   test(
     'new expressions mix with text and existing Unicode without losing text',
@@ -356,7 +355,7 @@ void main() {
         durationMs: 60000,
       );
       final item = page.items.single;
-      expect(danmakuFlightText(item), '爽文😆💝[未知]');
+      expect(danmakuFlightText(item), '爽文[爽]【送心】[未知]');
       expect(item.id, 'source-id');
       expect(item.timeMs, 1234);
       expect(item.repeatCount, 1);
@@ -380,8 +379,8 @@ void main() {
       expect(merged.map((item) => item.id), ['first', 'outside']);
       expect(merged.map((item) => item.timeMs), [1000, 4001]);
       expect(merged.map((item) => item.repeatCount), [5, 1]);
-      expect(danmakuFlightText(merged.first), '好看😆  ♥ 5');
-      expect(danmakuFlightText(merged.last), '好看😆');
+      expect(danmakuFlightText(merged.first), '好看[爽]  ♥ 5');
+      expect(danmakuFlightText(merged.last), '好看[爽]');
       expect(original.first.text, '好看[爽]');
     },
   );
@@ -396,13 +395,13 @@ void main() {
         DanmakuItem(id: 'd', text: '[新表情乙]', timeMs: 0),
       ]);
       expect(merged, hasLength(4));
-      expect(merged.map((item) => item.text), ['爽', '😆', '[新表情甲]', '[新表情乙]']);
+      expect(merged.map((item) => item.text), ['爽', '[爽]', '[新表情甲]', '[新表情乙]']);
       expect(merged.every((item) => item.repeatCount == 1), isTrue);
     },
   );
 
   test(
-    'layout measures converted content once including the unchanged heart count',
+    'layout measures lossless expression content once including the unchanged heart count',
     () {
       final measured = <String>[];
       const item = DanmakuItem(
@@ -420,7 +419,7 @@ void main() {
           return 180;
         },
       );
-      expect(flights.single.text, '爽文😆👉👈[未知]  ♥ 3');
+      expect(flights.single.text, '爽文[爽]【戳手手】[未知]  ♥ 3');
       expect(measured, [flights.single.text]);
       expect(flights.single.width, 188);
       expect(flights.single.item, same(item));
@@ -436,6 +435,21 @@ void main() {
         DanmakuItem(id: 'long', text: text, timeMs: 0),
       );
       expect(rendered, '${List.filled(99, '字').join()}👩🏽‍💻…');
+      final aliases = List.filled(100, '[敬礼]').join();
+      expect(
+        danmakuFlightText(DanmakuItem(id: 'aliases', text: aliases, timeMs: 0)),
+        aliases,
+      );
+      expect(
+        danmakuFlightText(
+          DanmakuItem(
+            id: 'overflow',
+            text: '${List.filled(99, '字').join()}[戳手手]',
+            timeMs: 0,
+          ),
+        ),
+        '${List.filled(99, '字').join()}…',
+      );
     },
   );
 }

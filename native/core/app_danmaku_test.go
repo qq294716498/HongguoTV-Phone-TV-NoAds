@@ -85,8 +85,10 @@ func TestHongguoDanmakuCacheAndConcurrentRequests(t *testing.T) {
 	d := rankingTestDownloader(t, func(request *http.Request) (*http.Response, error) {
 		count := calls.Add(1)
 		if request.URL.Path == "/novel/player/video_detail/v1/" {
-			if request.Header.Get("X-Argus") != "" || request.Header.Get("X-Ladon") != "" || request.Header.Get("Comment-Source") != "" {
-				t.Error("comment signatures leaked into the regular player request")
+			// 普通取数请求同样需要完整六个签名头（播放接口缺头会返回 200 空正文），
+			// 但不得带上评论接口专用的 Comment-Source / Server-Channel。
+			if request.Header.Get("Comment-Source") != "" || request.Header.Get("Server-Channel") != "" {
+				t.Error("comment-only headers leaked into the regular player request")
 			}
 			return rankingHTTPResponse(request, 200, `{"code":0}`), nil
 		}

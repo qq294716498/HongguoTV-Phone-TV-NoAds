@@ -1,0 +1,97 @@
+name: Validate playback release candidate
+
+on:
+  push:
+    branches: [candidate/viewing-reminders-0.1.9-31, fix/hongguo-playback-release-0.1.22-47, release/windows-android-0.1.22-47, release/windows-android-0.1.23-48, candidate/hongguo-retry-single-instance-0.1.23-48]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: candidate-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GOPROXY: https://proxy.golang.org,direct
+  GOSUMDB: sum.golang.org
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: python3 -m unittest discover -s scripts -p 'test_*.py'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: native/go.mod
+          cache-dependency-path: native/go.sum
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - name: Check formatting and emit repair diff
+        id: formatting
+        continue-on-error: true
+        run: |
+          dart format lib test integration_test test_driver
+          git diff --exit-code -- lib test integration_test test_driver
+      - run: flutter analyze --no-pub --no-fatal-infos lib test integration_test test_driver
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: flutter test --no-pub --dart-define=DISABLE_REMOTE_IMAGES=true
+      - run: flutter test --no-pub --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true
+      - run: go test -race ./...
+        working-directory: native
+      - run: go test -race -ldflags="-X duanjuapp/native/core.buildAllSources=true" ./...
+        working-directory: native
+
+      - name: Enforce committed source formatting
+        if: always() && steps.formatting.outcome != 'success'
+        run: exit 1
+
+  android-compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: native/go.mod
+          cache-dependency-path: native/go.sum
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: "platforms;android-36"
+          accept-android-sdk-licenses: true
+      - run: sdkmanager 'ndk;28.2.13676358'
+      - run: flutter pub get --enforce-lockfile
+      - run: python3 scripts/build_native.py --platform android --abi arm64-v8a
+      - name: Compile isolated debug variant without release signing
+        run: flutter build apk --debug --target-platform android-arm64 --no-pub
+      - name: Use Java 21 for Robolectric Android 16 tests
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Android player tests and lint
+        working-directory: android
+        run: ./gradlew :video_player_android:testDebugUnitTest :video_player_android:lintDebug :app:lintDebug

@@ -1,8 +1,10 @@
+import 'tv_decoder_settings.dart';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -11,13 +13,16 @@ import 'app_theme.dart';
 import 'background_downloads.dart';
 import 'local_store.dart';
 import 'profiles_screen.dart';
-import 'app_build.dart';
 import 'sources_screen.dart';
 import 'widgets.dart';
 import 'resource_settings_screen.dart';
 import 'lan_screen.dart';
 import 'diary_service.dart';
 import 'app_update_screen.dart';
+import 'watch_reminder_settings.dart';
+import 'app_layout.dart';
+import 'windows_desktop.dart';
+import 'player_menu.dart';
 
 String storageSize(int bytes) {
   if (bytes < 0) return '暂不可用';
@@ -43,6 +48,66 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _busy = false;
   String? _message;
+
+  Future<void> _danmakuSettings() {
+    final television = AppLayout.isTelevision(context);
+    final deviceTelevision = AppLayout.isTelevisionDevice(context);
+    final mobile =
+        !television &&
+        (defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS);
+    return showDialog<void>(
+      context: context,
+      builder: (_) => AppLayout(
+        television: television,
+        deviceTelevision: deviceTelevision,
+        child: ListenableBuilder(
+          listenable: widget.store,
+          builder: (_, _) => PlayerMenu(
+            section: PlayerMenuSection.danmaku,
+            episodes: const [],
+            currentIndex: 0,
+            preferences: widget.store.playbackPreferences,
+            qualities: const [],
+            actualQuality: 0,
+            local: false,
+            favorite: false,
+            mobile: mobile,
+            showDanmaku: true,
+            onEpisode: (_) {},
+            onFavorite: () async {},
+            onPreferences: widget.store.setPlaybackPreferences,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _decoderSettings() async {
+    final selection = await showDialog<TvDecoderMode>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('TV 解码设置'),
+        content: SizedBox(
+          width: 640,
+          child: SingleChildScrollView(
+            child: TvDecoderSettings(
+              value: widget.store.playbackPreferences.tvDecoderMode,
+              onChanged: (mode) => Navigator.pop(context, mode),
+            ),
+          ),
+        ),
+      ),
+    );
+    if (selection == null || !mounted) return;
+    await saveUserChange(
+      context,
+      () => widget.store.setPlaybackPreferences(
+        widget.store.playbackPreferences.copyWith(tvDecoderMode: selection),
+      ),
+    );
+    if (mounted) setState(() {});
+  }
 
   Future<void> _chooseTheme() async {
     final selected = await showDialog<String>(
@@ -145,6 +210,82 @@ class _SettingsScreenState extends State<SettingsScreen> {
             padding: const EdgeInsets.all(16),
             children: [
               const AppUpdateTile(),
+              if (defaultTargetPlatform == TargetPlatform.android &&
+                  AppLayout.isTelevisionDevice(context))
+                ListTile(
+                  key: const ValueKey('global-tv-decoder-settings'),
+                  leading: const Icon(Icons.memory_rounded),
+                  title: const Text('TV 解码模式'),
+                  subtitle: Text(
+                    widget.store.playbackPreferences.tvDecoderMode.label,
+                  ),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: _decoderSettings,
+                ),
+              ListTile(
+                key: const ValueKey('global-danmaku-settings'),
+                leading: const Icon(Icons.subtitles_rounded),
+                title: const Text('弹幕设置'),
+                subtitle: const Text('红果源的弹幕开关、速度与不透明度'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: _danmakuSettings,
+              ),
+              if (WindowsDesktop.current case final desktop?)
+                ListenableBuilder(
+                  listenable: desktop,
+                  builder: (context, _) => Column(
+                    children: [
+                      SwitchListTile(
+                        title: const Text('关闭窗口时进入托盘'),
+                        subtitle: Text(
+                          desktop.available
+                              ? '暂停并保存进度；从托盘恢复后需手动播放。托盘右键可播放/暂停或真正退出。关闭此项则直接退出。'
+                              : '系统托盘暂不可用，关闭窗口将直接退出。',
+                        ),
+                        value: desktop.closeToTray,
+                        onChanged: desktop.available
+                            ? (value) => saveUserChange(
+                                context,
+                                () => desktop.setCloseToTray(value),
+                              )
+                            : null,
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.exit_to_app_rounded),
+                        title: const Text('退出红果TV'),
+                        subtitle: const Text('保存观看进度并结束进程'),
+                        onTap: () => saveUserChange(context, desktop.quit),
+                      ),
+                      if (desktop.error != null) Text(desktop.error!),
+                    ],
+                  ),
+                ),
+              if ((Platform.isAndroid || Platform.isIOS) &&
+                  !AppLayout.isTelevision(context) &&
+                  (context
+                          .dependOnInheritedWidgetOfExactType<AppLayout>()
+                          ?.mobileReminders ??
+                      true))
+                WatchReminderSettings(
+                  preferences: widget.store.playbackPreferences.reminders,
+                  busy: _busy,
+                  onChanged: (value) async {
+                    if (_busy) return;
+                    setState(() => _busy = true);
+                    try {
+                      await saveUserChange(
+                        context,
+                        () => widget.store.setPlaybackPreferences(
+                          widget.store.playbackPreferences.copyWith(
+                            reminders: value,
+                          ),
+                        ),
+                      );
+                    } finally {
+                      if (mounted) setState(() => _busy = false);
+                    }
+                  },
+                ),
               ListTile(
                 key: const ValueKey('lan-settings'),
                 leading: const Icon(Icons.devices_rounded),

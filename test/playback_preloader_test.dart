@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:duanju_app/models.dart';
+import 'package:duanju_app/core_bridge.dart';
 import 'package:duanju_app/playback_preloader.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -44,6 +45,40 @@ void main() {
     url: 'https://example.test/$session.mp4',
     session: session,
     prefetchedBytes: 4 << 20,
+  );
+
+  testWidgets(
+    'blocked source preload respects retryAt instead of retrying every three seconds',
+    (tester) async {
+      final repository = PendingPreloadRepository();
+      var now = DateTime.utc(2026, 10, 20);
+      final preloader = PlaybackPreloader(repository, now: () => now);
+      preloader.prepare(FixtureRepository.free, episode, immediate: true);
+      await tester.pump(const Duration(milliseconds: 1));
+      repository.pending.single.completeError(
+        AppFailure(
+          '站源暂时限制访问',
+          code: 'source_blocked',
+          retryAt: now.add(const Duration(seconds: 60)),
+        ),
+      );
+      await tester.pump();
+      expect(preloader.status, '站源请求受限，60 秒后重试下一集');
+      now = now.add(const Duration(seconds: 59));
+      await tester.pump(const Duration(seconds: 59));
+      preloader.prepare(FixtureRepository.free, episode, immediate: true);
+      await tester.pump();
+      expect(repository.pending, hasLength(1));
+      expect(preloader.status, '站源请求受限，1 秒后重试下一集');
+      now = now.add(const Duration(seconds: 1));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump();
+      expect(repository.pending, hasLength(2));
+      preloader.dispose();
+      expect(preloader.error, isEmpty);
+      repository.pending.last.complete(null);
+      await tester.pump();
+    },
   );
 
   testWidgets(

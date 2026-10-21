@@ -1,8 +1,12 @@
 import 'dart:async';
 import 'package:duanju_app/app_layout.dart';
+import 'package:duanju_app/danmaku_overlay.dart';
 import 'package:duanju_app/local_store.dart';
 import 'package:duanju_app/models.dart';
 import 'package:duanju_app/player_screen.dart';
+import 'package:duanju_app/settings_screen.dart';
+import 'package:duanju_app/tv_decoder_settings.dart';
+import 'package:duanju_app/playback_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -12,6 +16,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'fixtures.dart';
 import 'player_fixtures.dart';
 import 'remote_test_helpers.dart';
+
+class DecoderFailurePlayer extends ScriptedPlayer {
+  void decoderFailure() => errorController.add(
+    'MediaCodecVideoRenderer error, format_supported=NO_EXCEEDS_CAPABILITIES',
+  );
+}
 
 void main() {
   setUp(mockPlayerDevice);
@@ -110,7 +120,126 @@ void main() {
   }
 
   testWidgets(
-    'TV remote pauses, seeks when hidden, seeks on the timeline and returns from fullscreen',
+    'TV decoder failure stops retries and keeps settings and route switch accessible',
+    (tester) async {
+      final repository = RouteRepository();
+      final player = DecoderFailurePlayer();
+      await mount(tester, repository, player);
+      final opens = player.opened.length;
+      player.decoderFailure();
+      await settle(tester);
+      await tester.pump(const Duration(seconds: 1));
+      await settle(tester);
+      expect(find.text('暂时无法播放'), findsOneWidget);
+      expect(find.textContaining('当前视频规格或解码器不兼容'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 30));
+      await settle(tester);
+      expect(player.opened.length, opens);
+      expect(repository.fallbackCalls, 0);
+      final settings = find.byKey(const ValueKey('tv-recovery-settings'));
+      await tester.ensureVisible(settings);
+      await tester.tap(settings);
+      await settle(tester);
+      expect(find.text('播放设置'), findsWidgets);
+      await press(tester, LogicalKeyboardKey.escape);
+      final source = find.byKey(const ValueKey('tv-recovery-source'));
+      await tester.ensureVisible(source);
+      await tester.tap(source);
+      await settle(tester);
+      expect(repository.fallbackCalls, 1);
+      expect(player.opened.length, opens + 1);
+      expect(find.text('暂时无法播放'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await settle(tester);
+      expect(repository.active, isEmpty);
+    },
+  );
+
+  test(
+    'TV decoder preferences migrate safely and preserve other playback settings',
+    () {
+      final old = PlaybackPreferences.fromJson({'speed': 1.25, 'quality': 720});
+      expect(old.tvDecoderMode, TvDecoderMode.automatic);
+      final saved = old.copyWith(
+        tvDecoderMode: TvDecoderMode.software,
+        tvTextureOutput: true,
+      );
+      final restored = PlaybackPreferences.fromJson(saved.toJson());
+      expect(restored.tvDecoderMode, TvDecoderMode.software);
+      expect(restored.tvTextureOutput, true);
+      expect(restored.speed, 1.25);
+      expect(restored.quality, 720);
+      expect(
+        PlaybackPreferences.fromJson({
+          'tvDecoderMode': 'unknown',
+        }).tvDecoderMode,
+        TvDecoderMode.automatic,
+      );
+      expect(isDecoderCompatibilityError('HTTP 403'), false);
+    },
+  );
+
+  testWidgets(
+    'TV and global danmaku settings persist and update live without changing video rate',
+    (tester) async {
+      final repository = RouteRepository();
+      final player = ScriptedPlayer();
+      final store = await mount(tester, repository, player);
+      focusRemote(tester, find.byKey(const ValueKey('tv-settings')));
+      await settle(tester);
+      await press(tester, LogicalKeyboardKey.select);
+      final half = find.byKey(const ValueKey('tv-danmaku-speed-0.5'));
+      await tester.ensureVisible(half);
+      await tester.tap(half);
+      await settle(tester);
+      expect(store.playbackPreferences.danmakuSpeed, .5);
+      expect(
+        tester.widget<DanmakuOverlay>(find.byType(DanmakuOverlay)).speed,
+        .5,
+      );
+      expect(
+        tester
+            .widget<DanmakuOverlay>(find.byType(DanmakuOverlay))
+            .animationBehavior,
+        AnimationBehavior.preserve,
+      );
+      final context = tester.element(find.byType(PlayerScreen));
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => SettingsScreen(repository: repository, store: store),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final settings = find.byKey(const ValueKey('global-danmaku-settings'));
+      await tester.ensureVisible(settings);
+      await tester.tap(settings);
+      await tester.pumpAndSettle();
+      final slower = find.byKey(const ValueKey('menu-danmaku-speed-0.75'));
+      await tester.ensureVisible(slower);
+      await tester.tap(slower);
+      await tester.pumpAndSettle();
+      expect(store.playbackPreferences.danmakuSpeed, .75);
+      Navigator.of(tester.element(find.byType(SettingsScreen))).pop();
+      await tester.pumpAndSettle();
+      Navigator.of(tester.element(find.byType(SettingsScreen))).pop();
+      await tester.pumpAndSettle();
+      final overlay = tester.widget<DanmakuOverlay>(
+        find.byType(DanmakuOverlay),
+      );
+      expect(overlay.speed, .75);
+      expect(overlay.television, isTrue);
+      expect(player.state.rate, 1);
+      expect(player.opened, hasLength(1));
+      await store.flushPendingWrites();
+      final restored = testStore(await SharedPreferences.getInstance());
+      expect(restored.playbackPreferences.danmakuSpeed, .75);
+      restored.dispose();
+      await leave(tester, repository, player);
+    },
+  );
+
+  testWidgets(
+    'TV remote pauses, seeks when hidden, navigates the visible timeline and returns',
     (tester) async {
       final repository = RouteRepository();
       final player = ScriptedPlayer();
@@ -141,9 +270,9 @@ void main() {
         'tv-player-progress',
       );
       await press(tester, LogicalKeyboardKey.arrowRight);
-      expect(player.state.position, const Duration(seconds: 15));
+      expect(player.state.position, Duration.zero);
       await leave(tester, repository, player);
-      expect(store.watched(FixtureRepository.free.id)?.position, 15);
+      expect(store.watched(FixtureRepository.free.id)?.position, 7);
     },
   );
 
@@ -169,9 +298,10 @@ void main() {
       expect(repository.requestedEpisodes.last, 72);
       expect(
         FocusManager.instance.primaryFocus?.debugLabel,
-        'tv-player-episodes',
+        'tv-player-surface',
       );
       expect(repository.active.length, 1);
+      await press(tester, LogicalKeyboardKey.arrowDown);
       focusRemote(tester, find.byKey(const ValueKey('tv-settings')));
       await settle(tester);
       await press(tester, LogicalKeyboardKey.select);
@@ -181,8 +311,11 @@ void main() {
       expect(player.state.rate, 1.25);
       expect(
         FocusManager.instance.primaryFocus?.debugLabel,
-        'tv-player-settings',
+        'tv-player-surface',
       );
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      focusRemote(tester, find.byKey(const ValueKey('tv-settings')));
+      await settle(tester);
       await player.seek(const Duration(seconds: 28));
       await player.pause();
       await settle(tester);
@@ -197,7 +330,7 @@ void main() {
       expect(player.state.playing, isFalse);
       expect(
         FocusManager.instance.primaryFocus?.debugLabel,
-        'tv-player-settings',
+        'tv-player-surface',
       );
       await leave(tester, repository, player);
     },
@@ -224,7 +357,7 @@ void main() {
   });
 
   testWidgets(
-    'native TV back closes the modal, then paused controls immediately, then leaves playback',
+    'native TV back closes the modal into paused playback, then leaves playback',
     (tester) async {
       final active = <bool>[];
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
@@ -256,9 +389,6 @@ void main() {
       await tester.pump(const Duration(milliseconds: 350));
       await settle(tester);
       expect(find.text('播放设置'), findsNothing);
-      expect(find.byKey(const ValueKey('tv-play-pause')), findsOneWidget);
-      await nativeBack(tester);
-      await settle(tester);
       expect(find.byKey(const ValueKey('tv-play-pause')), findsNothing);
       expect(find.byType(PlayerScreen), findsOneWidget);
       expect(player.state.playing, false);
@@ -283,7 +413,7 @@ void main() {
   );
 
   testWidgets(
-    'TV framework back closes modal, paused controls and then route',
+    'TV framework back closes modal into paused playback and then route',
     (tester) async {
       final repository = RouteRepository();
       final player = ScriptedPlayer();
@@ -299,9 +429,6 @@ void main() {
       await tester.pump(const Duration(milliseconds: 350));
       await settle(tester);
       expect(find.text('播放设置'), findsNothing);
-      expect(find.byKey(const ValueKey('tv-play-pause')), findsOneWidget);
-      await tester.binding.handlePopRoute();
-      await settle(tester);
       expect(find.byKey(const ValueKey('tv-play-pause')), findsNothing);
       expect(find.byType(PlayerScreen), findsOneWidget);
       expect(player.state.playing, isFalse);

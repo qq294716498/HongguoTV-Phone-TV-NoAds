@@ -2,16 +2,26 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_build.dart';
+import 'windows_update_runtime.dart';
+import 'app_layout.dart' show appVersion, windowsBuildNumber;
 
 const updateRepository = 'qq294716498/HongguoTV-Phone-TV-NoAds';
 const updateApi =
     'https://api.github.com/repos/$updateRepository/releases/latest';
 const updatePage = 'https://github.com/$updateRepository/releases/latest';
+const windowsUpdateApi =
+    'https://api.github.com/repos/$updateRepository/releases?per_page=100';
+const windowsUpdatePage = 'https://github.com/$updateRepository/releases';
+const windowsUpdateMirror =
+    'https://raw.githubusercontent.com/$updateRepository/windows-stable-channel/windows-stable.json';
+final windowsUpdateTag = RegExp(r'^windows-v(\d+\.\d+\.\d+)-(\d+)$');
 const updateMaximumBytes = 256 * 1024 * 1024;
 const updateAbiOffsets = {
   'armeabi-v7a': 1000,
@@ -117,7 +127,63 @@ class AppRelease {
     );
   }
 
+  static AppRelease? parseWindows(
+    Map<String, dynamic> json,
+    InstalledApp installed,
+  ) {
+    if (json['draft'] != false || json['prerelease'] != false) {
+      throw const FormatException('更新信息不是 Windows 正式版本');
+    }
+    final tag = json['tag_name'];
+    final match = tag is String ? windowsUpdateTag.firstMatch(tag) : null;
+    if (match == null || installed.abi != 'windows-x64') {
+      throw const FormatException('Windows 标签或架构无法识别');
+    }
+    final code = int.parse(match[2]!);
+    if (code < 1 || code > 65535) throw const FormatException('Windows 版本编号无效');
+    if (code <= installed.code) return null;
+    final version = match[1]!;
+    final name = 'HongguoTV-$version-windows-x64.zip';
+    final assets = json['assets'];
+    if (assets is! List) throw const FormatException('缺少 Windows 压缩包');
+    final matches = assets
+        .whereType<Map>()
+        .where((a) => a['name'] == name)
+        .toList();
+    if (matches.length != 1) throw const FormatException('Windows 压缩包不唯一');
+    final asset = matches.single;
+    final bytes = asset['size'];
+    final digest = asset['digest'];
+    final url = Uri.tryParse(asset['browser_download_url']?.toString() ?? '');
+    final expected = Uri.parse(
+      'https://github.com/$updateRepository/releases/download/$tag/$name',
+    );
+    if (bytes is! int ||
+        bytes <= 0 ||
+        bytes > 512 * 1024 * 1024 ||
+        digest is! String ||
+        !RegExp(r'^sha256:[a-fA-F0-9]{64}$').hasMatch(digest) ||
+        asset['state'] != 'uploaded' ||
+        url != expected) {
+      throw const FormatException('Windows 压缩包地址、大小或校验信息无效');
+    }
+    final body = json['body'];
+    final notes = body is String && body.trim().isNotEmpty
+        ? body
+        : '此版本未提供更新说明。';
+    return AppRelease(
+      version: version,
+      code: code,
+      abi: installed.abi,
+      notes: notes.length > 12000 ? '${notes.substring(0, 12000)}…' : notes,
+      url: url!,
+      bytes: bytes,
+      sha256: digest.substring(7).toLowerCase(),
+    );
+  }
+
   Map<String, Object> get validation => {
+    'version': version,
     'code': code,
     'abi': abi,
     'bytes': bytes,
@@ -136,7 +202,11 @@ bool trustedUpdateUrl(
       uri.fragment.isNotEmpty) {
     return false;
   }
-  if (metadata) return uri.toString() == updateApi;
+  if (metadata) {
+    return uri.toString() == updateApi ||
+        uri.toString() == windowsUpdateApi ||
+        uri.toString() == windowsUpdateMirror;
+  }
   if (uri.host == 'github.com') {
     return uri.query.isEmpty &&
         uri.path.startsWith('/$updateRepository/releases/download/') &&
@@ -159,9 +229,12 @@ abstract class UpdateTransport {
 }
 
 class GithubUpdateTransport implements UpdateTransport {
-  GithubUpdateTransport({HttpClient Function()? clientFactory})
-    : clientFactory = clientFactory ?? HttpClient.new;
+  GithubUpdateTransport({
+    HttpClient Function()? clientFactory,
+    this.windows = false,
+  }) : clientFactory = clientFactory ?? HttpClient.new;
   final HttpClient Function() clientFactory;
+  final bool windows;
   HttpClient? _active;
   bool _cancelled = false;
 
@@ -187,7 +260,12 @@ class GithubUpdateTransport implements UpdateTransport {
         HttpHeaders.acceptHeader,
         metadata ? 'application/vnd.github+json' : 'application/octet-stream',
       );
-      if (metadata) request.headers.set('X-GitHub-Api-Version', '2022-11-28');
+      if (metadata && uri.host == 'api.github.com') {
+        request.headers.set('X-GitHub-Api-Version', '2022-11-28');
+      }
+      if (metadata) {
+        request.headers.set(HttpHeaders.cacheControlHeader, 'no-cache');
+      }
       final response = await request.close().timeout(
         const Duration(seconds: 20),
       );
@@ -199,6 +277,7 @@ class GithubUpdateTransport implements UpdateTransport {
         continue;
       }
       if (response.statusCode != 200) {
+        await response.drain<void>().timeout(const Duration(seconds: 5));
         throw HttpException(
           response.statusCode == 403 || response.statusCode == 429
               ? 'GitHub 暂时限流，请稍后手动重试'
@@ -229,29 +308,40 @@ class GithubUpdateTransport implements UpdateTransport {
   Future<Map<String, dynamic>> latest() async {
     final client = _begin();
     try {
-      return await (() async {
-        final response = await _open(
+      try {
+        final data = await _metadata(
           client,
-          Uri.parse(updateApi),
-          metadata: true,
+          windows ? windowsUpdateApi : updateApi,
         );
-        final bytes = <int>[];
-        await for (final chunk in response.timeout(
-          const Duration(seconds: 15),
-        )) {
-          bytes.addAll(chunk);
-          if (bytes.length > 1024 * 1024) throw const FormatException('更新信息过大');
-        }
-        final data = jsonDecode(utf8.decode(bytes));
+        if (windows) return selectWindowsRelease(data);
         if (data is! Map<String, dynamic>) {
           throw const FormatException('更新信息格式错误');
         }
         return data;
-      })().timeout(const Duration(seconds: 45));
+      } on HttpException {
+        if (!windows) rethrow;
+      } on SocketException {
+        if (!windows) rethrow;
+      } on TimeoutException {
+        if (!windows) rethrow;
+      }
+      return parseWindowsMirror(await _metadata(client, windowsUpdateMirror));
     } finally {
       client.close(force: true);
       if (identical(_active, client)) _active = null;
     }
+  }
+
+  Future<Object?> _metadata(HttpClient client, String url) async {
+    return (() async {
+      final response = await _open(client, Uri.parse(url), metadata: true);
+      final bytes = <int>[];
+      await for (final chunk in response.timeout(const Duration(seconds: 15))) {
+        bytes.addAll(chunk);
+        if (bytes.length > 1024 * 1024) throw const FormatException('更新信息过大');
+      }
+      return jsonDecode(utf8.decode(bytes));
+    })().timeout(const Duration(seconds: 45));
   }
 
   @override
@@ -271,6 +361,7 @@ class GithubUpdateTransport implements UpdateTransport {
         }
         sink = output.openWrite();
         var received = 0;
+        var buffered = 0;
         await for (final chunk in response.timeout(
           const Duration(seconds: 30),
         )) {
@@ -282,12 +373,17 @@ class GithubUpdateTransport implements UpdateTransport {
             throw const FormatException('安装包超出预期大小');
           }
           sink!.add(chunk);
-          await sink!.flush();
+          buffered += chunk.length;
+          if (buffered >= 1024 * 1024) {
+            await sink!.flush();
+            buffered = 0;
+          }
           progress(received);
         }
         if (_cancelled || !identical(_active, client)) {
           throw const UpdateCancelled();
         }
+        await sink!.flush();
         if (received != release.bytes) throw const FormatException('下载不完整，请重试');
       })().timeout(const Duration(minutes: 30));
     } finally {
@@ -302,6 +398,44 @@ class GithubUpdateTransport implements UpdateTransport {
     _cancelled = true;
     _active?.close(force: true);
   }
+}
+
+Map<String, dynamic> parseWindowsMirror(Object? data) {
+  if (data is! Map<String, dynamic> ||
+      data['schema'] != 1 ||
+      data['release'] is! Map<String, dynamic>) {
+    throw const FormatException('Windows 更新清单格式错误');
+  }
+  final release = data['release'] as Map<String, dynamic>;
+  AppRelease.parseWindows(
+    release,
+    const InstalledApp(version: '0.0.0', code: 0, abi: 'windows-x64'),
+  );
+  return release;
+}
+
+Map<String, dynamic> selectWindowsRelease(Object? data) {
+  if (data is! List) throw const FormatException('Windows 更新列表格式错误');
+  final candidates = data
+      .whereType<Map<String, dynamic>>()
+      .where(
+        (item) =>
+            item['draft'] == false &&
+            item['prerelease'] == false &&
+            item['tag_name'] is String &&
+            windowsUpdateTag.hasMatch(item['tag_name'] as String),
+      )
+      .toList();
+  candidates.sort(
+    (a, b) =>
+        int.parse(
+          windowsUpdateTag.firstMatch(b['tag_name'] as String)![2]!,
+        ).compareTo(
+          int.parse(windowsUpdateTag.firstMatch(a['tag_name'] as String)![2]!),
+        ),
+  );
+  if (candidates.isEmpty) throw const FormatException('尚无可用的 Windows 正式版本');
+  return candidates.first;
 }
 
 class UpdateCancelled implements Exception {
@@ -353,6 +487,42 @@ class AndroidUpdatePlatform implements UpdatePlatform {
       'returned';
 }
 
+class WindowsUpdatePlatform implements UpdatePlatform {
+  @override
+  Future<InstalledApp> installed() async => const InstalledApp(
+    version: appVersion,
+    code: windowsBuildNumber,
+    abi: 'windows-x64',
+  );
+  @override
+  Future<String> directory() async =>
+      '${(await getApplicationSupportDirectory()).path}/windows-updates';
+  @override
+  Future<void> validate(AppRelease release) async {
+    if (release.abi != 'windows-x64') throw const FormatException('更新架构不匹配');
+    final file = File('${await directory()}/pending.zip');
+    if (await file.length() != release.bytes ||
+        (await sha256.bind(file.openRead()).first).toString() !=
+            release.sha256) {
+      throw const FormatException('Windows 压缩包大小或 SHA-256 校验失败');
+    }
+  }
+
+  @override
+  Future<bool> canInstall() async => true;
+  @override
+  Future<void> openPermission() async {}
+  @override
+  Future<String> install(AppRelease release) async {
+    await validate(release);
+    return WindowsUpdateRuntime.install(
+      zipPath: '${await directory()}/pending.zip',
+      version: release.version,
+      build: release.code,
+    );
+  }
+}
+
 class AppUpdates extends ChangeNotifier {
   AppUpdates({
     required this.preferences,
@@ -360,12 +530,24 @@ class AppUpdates extends ChangeNotifier {
     UpdateTransport? transport,
     UpdatePlatform? platform,
     DateTime Function()? now,
-  }) : transport = transport ?? GithubUpdateTransport(),
-       platform = platform ?? AndroidUpdatePlatform(),
-       now = now ?? DateTime.now;
+    bool? windows,
+  }) : windows = windows ?? Platform.isWindows,
+       transport =
+           transport ??
+           GithubUpdateTransport(windows: windows ?? Platform.isWindows),
+       platform =
+           platform ??
+           ((windows ?? Platform.isWindows)
+               ? WindowsUpdatePlatform()
+               : AndroidUpdatePlatform()),
+       now = now ?? DateTime.now {
+    final skipped = preferences.get(_skippedKey);
+    _skippedRelease = skipped is String ? skipped : null;
+  }
   static AppUpdates? current;
   final SharedPreferences preferences;
   final bool supportedEdition;
+  final bool windows;
   final UpdateTransport transport;
   final UpdatePlatform platform;
   final DateTime Function() now;
@@ -373,6 +555,7 @@ class AppUpdates extends ChangeNotifier {
   AppRelease? release;
   UpdateStage stage = UpdateStage.idle;
   String message = '启动后自动检查，也可手动检查更新';
+  String? installationFailure;
   int downloaded = 0;
   bool _disposed = false;
   bool _cancelled = false;
@@ -381,20 +564,84 @@ class AppUpdates extends ChangeNotifier {
   DateTime? _lastAttempt;
   bool _permissionOpened = false;
   bool _startupCleaned = false;
-  static const _cacheKey = 'app_update_stable_cache_v1';
-  static const _checkedKey = 'app_update_checked_at_v1';
-  bool get busy => [
-    UpdateStage.checking,
-    UpdateStage.downloading,
-    UpdateStage.validating,
-    UpdateStage.installValidating,
-    UpdateStage.installing,
-  ].contains(stage);
+  String? _skippedRelease;
+  bool _savingSkip = false;
+  String get _cacheKey => windows
+      ? 'app_update_windows_stable_cache_v1'
+      : 'app_update_stable_cache_v1';
+  String get _checkedKey => windows
+      ? 'app_update_windows_stable_checked_at_v1'
+      : 'app_update_checked_at_v1';
+  String get _pendingName => windows ? 'pending.zip' : 'pending.apk';
+  bool get busy =>
+      _savingSkip ||
+      [
+        UpdateStage.checking,
+        UpdateStage.downloading,
+        UpdateStage.validating,
+        UpdateStage.installValidating,
+        UpdateStage.installing,
+      ].contains(stage);
   bool get automatic => preferences.getBool('app_update_automatic') ?? true;
   bool get hasUpdate => release != null;
+  String get _skippedKey => windows
+      ? 'app_update_windows_stable_skipped_release_v1'
+      : 'app_update_android_stable_skipped_release_v1';
+  String _releaseIdentity(AppRelease candidate) {
+    final offset = windows ? 0 : updateAbiOffsets[candidate.abi]!;
+    return '${windows ? 'windows' : 'android'}:${candidate.version}+${candidate.code - offset}';
+  }
+
+  bool get currentVersionSkipped =>
+      release != null && _skippedRelease == _releaseIdentity(release!);
+  bool get showAutomaticPrompt => hasUpdate && !currentVersionSkipped;
+
+  Future<void> skipCurrentVersion() async {
+    final candidate = release;
+    if (!supportedEdition ||
+        _disposed ||
+        busy ||
+        candidate == null ||
+        currentVersionSkipped ||
+        stage == UpdateStage.permission) {
+      return;
+    }
+    final previous = _skippedRelease;
+    final identity = _releaseIdentity(candidate);
+    _savingSkip = true;
+    message = '正在保存 ${candidate.version} 的跳过记录…';
+    _notify();
+    try {
+      if (!await preferences.setString(_skippedKey, identity)) {
+        throw StateError('跳过记录未保存');
+      }
+      if (_disposed) return;
+      _skippedRelease = identity;
+      message = '已跳过 ${candidate.version} 的自动提示，仍可在设置中下载或安装';
+    } catch (error) {
+      try {
+        if (previous == null) {
+          await preferences.remove(_skippedKey);
+        } else {
+          await preferences.setString(_skippedKey, previous);
+        }
+      } catch (_) {}
+      if (_disposed) return;
+      message = '无法保存跳过记录：${_error(error)}';
+    } finally {
+      _savingSkip = false;
+      _notify();
+    }
+  }
 
   void _notify() {
     if (!_disposed) notifyListeners();
+  }
+
+  void reportWindowsStartupFailure(String failure) {
+    if (!windows || _disposed) return;
+    installationFailure = failure;
+    _notify();
   }
 
   Future<void> setAutomatic(bool value) async {
@@ -414,7 +661,7 @@ class AppUpdates extends ChangeNotifier {
         (!manual && !automatic)) {
       return;
     }
-    if (!manual && stage == UpdateStage.ready) return;
+    if (!manual && stage == UpdateStage.ready && !currentVersionSkipped) return;
     final attemptAge = _lastAttempt == null
         ? null
         : now().difference(_lastAttempt!);
@@ -425,8 +672,9 @@ class AppUpdates extends ChangeNotifier {
       return;
     }
     _lastAttempt = now();
+    final prepared = stage == UpdateStage.ready ? release : null;
     stage = UpdateStage.checking;
-    message = '正在检查稳定版本…';
+    message = windows ? '正在检查 Windows 正式版本…' : '正在检查稳定版本…';
     _notify();
     try {
       installedApp = await platform.installed().timeout(
@@ -451,21 +699,65 @@ class AppUpdates extends ChangeNotifier {
       if (_disposed) return;
       data ??= await transport.latest();
       if (_disposed) return;
-      final candidate = AppRelease.parse(data, installedApp!);
+      final candidate = windows
+          ? AppRelease.parseWindows(data, installedApp!)
+          : AppRelease.parse(data, installedApp!);
       await preferences.setString(_cacheKey, jsonEncode(data));
       if (manual || !fresh) {
         await preferences.setInt(_checkedKey, now().millisecondsSinceEpoch);
       }
       if (_disposed) return;
       release = candidate;
-      stage = candidate == null ? UpdateStage.idle : UpdateStage.available;
-      message = candidate == null ? '已是最新稳定版本' : '发现稳定版本 ${candidate.version}';
+      final keepPrepared =
+          candidate != null &&
+          prepared != null &&
+          mapEquals(candidate.validation, prepared.validation);
+      stage = candidate == null
+          ? UpdateStage.idle
+          : keepPrepared
+          ? UpdateStage.ready
+          : UpdateStage.available;
+      final channel = windows ? 'Windows 正式版本' : '稳定版本';
+      message = candidate == null
+          ? '已是最新$channel'
+          : keepPrepared
+          ? '该版本已下载校验，可从设置安装'
+          : '发现$channel ${candidate.version}';
+      if (currentVersionSkipped) message += '；已跳过自动提示，仍可手动更新';
     } catch (error) {
       if (_disposed) return;
-      stage = UpdateStage.failed;
+      final keepPrepared =
+          prepared != null &&
+          installedApp != null &&
+          prepared.abi == installedApp!.abi &&
+          prepared.code > installedApp!.code;
+      release = keepPrepared ? prepared : null;
+      stage = keepPrepared ? UpdateStage.ready : UpdateStage.failed;
       message = '暂时无法检查更新：${_error(error)}';
+      if (keepPrepared) message += '；已校验的安装包保留，可从设置安装';
     }
     _notify();
+  }
+
+  Future<bool> _candidateStillNewer(AppRelease candidate) async {
+    final current = await platform.installed().timeout(
+      const Duration(seconds: 5),
+    );
+    if (_disposed) return false;
+    installedApp = current;
+    if (candidate.abi != current.abi) {
+      release = null;
+      throw const FormatException('安装架构已变化，请重新检查更新');
+    }
+    if (candidate.code > current.code) return true;
+    await _removeFile();
+    await preferences.remove('app_update_installing_code');
+    if (_disposed) return false;
+    release = null;
+    stage = UpdateStage.idle;
+    message = '当前已安装 ${current.version}，无需重复下载或安装';
+    _notify();
+    return false;
   }
 
   Future<void> download() async {
@@ -480,30 +772,41 @@ class AppUpdates extends ChangeNotifier {
     _cancelled = false;
     stage = UpdateStage.downloading;
     downloaded = 0;
-    message = '正在下载，可取消';
+    message = '正在确认当前版本…';
     _notify();
     try {
+      if (!await _candidateStillNewer(candidate)) return;
+      if (_cancelled || _disposed) throw const UpdateCancelled();
+      message = '正在下载 ${candidate.version}，可取消';
+      final progressClock = Stopwatch()..start();
+      var notifiedAt = -200;
       final directory = Directory(await platform.directory());
       await directory.create(recursive: true);
-      _file = File('${directory.path}/pending.apk');
-      _partial = File('${directory.path}/pending.apk.part');
+      _file = File('${directory.path}/$_pendingName');
+      _partial = File('${directory.path}/$_pendingName.part');
       await _removeFile();
       if (_cancelled || _disposed) throw const UpdateCancelled();
       await transport.download(candidate, _partial!, (bytes) {
         if (_cancelled || _disposed || stage != UpdateStage.downloading) return;
         downloaded = bytes;
-        _notify();
+        if (bytes == candidate.bytes ||
+            progressClock.elapsedMilliseconds - notifiedAt >= 200) {
+          notifiedAt = progressClock.elapsedMilliseconds;
+          _notify();
+        }
       });
       if (_cancelled || _disposed) throw const UpdateCancelled();
       await _partial!.rename(_file!.path);
       if (_cancelled || _disposed) throw const UpdateCancelled();
       stage = UpdateStage.validating;
-      message = '正在验证大小、SHA-256、签名、版本与架构…';
+      message = windows ? '正在验证压缩包大小与 SHA-256…' : '正在验证大小、SHA-256、签名、版本与架构…';
       _notify();
       await platform.validate(candidate);
       if (_cancelled || _disposed) throw const UpdateCancelled();
       stage = UpdateStage.ready;
-      message = '安装包验证通过。点击安装后由 Android 确认';
+      message = windows
+          ? '下载校验通过。暂停播放后点击安装并重启，将自动验证、替换并保留旧版。'
+          : '安装包验证通过。点击安装后由 Android 确认';
     } catch (error) {
       await _removeFile();
       if (_disposed) return;
@@ -527,6 +830,7 @@ class AppUpdates extends ChangeNotifier {
     final candidate = release;
     if (!supportedEdition ||
         _disposed ||
+        busy ||
         stage != UpdateStage.ready ||
         candidate == null) {
       return;
@@ -535,8 +839,19 @@ class AppUpdates extends ChangeNotifier {
     message = '正在重新验证安装包…';
     _notify();
     try {
+      if (!await _candidateStillNewer(candidate)) return;
       await platform.validate(candidate);
       if (_disposed) return;
+      if (windows) {
+        final result = await platform.install(candidate);
+        if (_disposed) return;
+        stage = UpdateStage.ready;
+        message = result == 'playing'
+            ? '正在播放或准备下一集。请先暂停，再点击安装并重启。'
+            : '更新事务已准备，正在保存并重启。';
+        _notify();
+        return;
+      }
       final allowed = await platform.canInstall();
       if (_disposed) return;
       if (!allowed) {
@@ -615,8 +930,8 @@ class AppUpdates extends ChangeNotifier {
     if (_startupCleaned && !complete) return;
     final path = await platform.directory();
     if (_disposed) return;
-    _file = File('$path/pending.apk');
-    _partial = File('$path/pending.apk.part');
+    _file = File('$path/$_pendingName');
+    _partial = File('$path/$_pendingName.part');
     try {
       if (await _partial!.exists()) await _partial!.delete();
     } catch (_) {}

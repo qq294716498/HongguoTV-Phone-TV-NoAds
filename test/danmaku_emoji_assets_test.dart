@@ -13,7 +13,7 @@ import 'danmaku_text_test.dart' show officialDouyinExpressionNames;
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('all 231 named expression equivalents use bundled Fluent PNGs', () {
+  test('all 236 named expression equivalents use bundled Fluent PNGs', () {
     final names = {
       ...officialDouyinExpressionNames,
       '捂嘴笑',
@@ -33,8 +33,13 @@ void main() {
       '狗头',
       '爽',
       '怒',
+      '笑',
+      '哭',
+      '什么',
+      '敬礼',
+      '吃瓜',
     };
-    expect(names, hasLength(231));
+    expect(names, hasLength(236));
     final glyphs = <String>{};
     for (final name in names) {
       for (final glyph in danmakuDisplayText('[$name]').characters) {
@@ -42,7 +47,7 @@ void main() {
         glyphs.add(glyph);
       }
     }
-    expect(glyphs, hasLength(144));
+    expect(glyphs, hasLength(145));
     expect(DanmakuEmojiAssets.paths.keys.toSet(), glyphs);
   });
 
@@ -60,7 +65,7 @@ void main() {
       expect(manifest['revision'], matches(r'^[a-f0-9]{40}$'));
       expect(manifest['license'], 'MIT');
       final rows = manifest['files'] as List;
-      expect(rows, hasLength(144));
+      expect(rows, hasLength(145));
       for (final row in rows.cast<Map<String, dynamic>>()) {
         expect(DanmakuEmojiAssets.paths[row['glyph']], row['file']);
         final data = await rootBundle.load(

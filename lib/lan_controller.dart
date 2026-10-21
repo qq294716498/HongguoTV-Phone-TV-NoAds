@@ -8,6 +8,7 @@ import 'package:flutter/widgets.dart';
 import 'package:nsd/nsd.dart' as nsd;
 
 import 'core_bridge.dart';
+import 'diary_service.dart';
 import 'lan_models.dart';
 import 'lan_sync_models.dart';
 import 'local_store.dart';
@@ -42,6 +43,8 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
   int _urgentRevision = -1;
   int _sessionEpoch = -1;
   int _syncTicket = 0;
+  String _syncCancellationReason = '同步会话已变更';
+  String _syncPhase = 'idle';
   int _pushSequence = 0;
   bool _connecting = false;
   Object? _pairing;
@@ -197,6 +200,15 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
     'sourceOptions': store.sources.map((source) => source.id).toList(),
   };
 
+  void _invalidateSync(String reason) {
+    _syncTicket++;
+    _syncCancellationReason = reason;
+    if (_syncing || _incomingSync != null) {
+      syncMessage = LanSyncCancelled(reason).toString();
+      DiaryService.add('[LAN] cancel phase=$_syncPhase reason=$reason');
+    }
+  }
+
   void _storeChanged() {
     if (_disposed) return;
     try {
@@ -219,7 +231,15 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
         }
         _configuration = configuration;
         _run++;
-        _syncTicket++;
+        _invalidateSync(
+          !_foreground
+              ? '应用已进入后台'
+              : store.locked || store.profileEpoch != _sessionEpoch
+              ? '当前用户或权限已变更'
+              : !enabled
+              ? '设备互联已关闭'
+              : '设备互联配置已变更',
+        );
         _lifecycle = _lifecycle
             .catchError((Object _) {})
             .then((_) => _reconcile());
@@ -284,6 +304,8 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    DiaryService.add('[LAN] lifecycle=${state.name} receiving=$receiving');
+    if (state == AppLifecycleState.inactive) return;
     final foreground = state == AppLifecycleState.resumed;
     if (foreground == _foreground) return;
     _foreground = foreground;
@@ -523,7 +545,7 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> disconnect() async {
     _pushSequence++;
     _pushing = false;
-    _syncTicket++;
+    _invalidateSync('设备连接已断开');
     _selected = '';
     connection = null;
     _incomingSync = null;
@@ -767,7 +789,7 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
             lastSync = DateTime.now();
             final conflicts = conflictCount;
             syncMessage = conflicts == 0
-                ? '双方记录已同步'
+                ? '追剧及其续播进度已同步'
                 : '记录已同步 · $conflicts 项冲突待处理';
             _notify();
           }
@@ -820,6 +842,11 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
     if (remote == null || !receiving) throw StateError('请先连接设备');
     final run = _run;
     final request = lanID();
+    final ticket = _syncTicket;
+    if (owner == 'sync') {
+      _syncPhase = path;
+      DiaryService.add('[LAN] request phase=$path ticket=$ticket');
+    }
     final requests = owner == 'sync'
         ? _syncRequests
         : owner == 'play'
@@ -833,7 +860,10 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
         'address': remote.address,
         'token': remote.token,
         'path': path,
-        'payload': payload,
+        'payload': {
+          ...payload,
+          if (path.startsWith('sync/')) 'schema': lanSyncSchema,
+        },
         'requestId': request,
       });
       if (_disposed ||
@@ -843,6 +873,11 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
         throw StateError('设备或用户已变更，请重新操作');
       }
       return result;
+    } catch (failure) {
+      if (owner == 'sync' && ticket != _syncTicket) {
+        throw LanSyncCancelled(_syncCancellationReason);
+      }
+      rethrow;
     } finally {
       requests?.remove(request);
     }
@@ -878,7 +913,7 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
     final run = _run;
     unawaited(
       synchronize(automatic: true).catchError((Object failure) {
-        if (run != _run || _disposed) return;
+        if (run != _run || _disposed || failure is LanSyncCancelled) return;
         syncMessage = '等待重试 · ' + failure.toString();
         _notify();
       }),
@@ -916,7 +951,7 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
           _lastAutomatic = DateTime.now();
           final conflicts = conflictCount;
           syncMessage = conflicts == 0
-              ? '双方记录已同步'
+              ? '追剧及其续播进度已同步'
               : '记录已同步 · $conflicts 项冲突待处理';
           lastSync ??= DateTime.now();
           _notify();
@@ -925,7 +960,7 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
     } catch (failure) {
       if (connection == remote) {
         connection = null;
-        _syncTicket++;
+        _invalidateSync('设备连接已中断');
         error = failure.toString();
         syncMessage = '连接中断，重连后补齐';
         _retryAt = DateTime.now().add(const Duration(seconds: 5));
@@ -940,7 +975,7 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
   void dispose() {
     _disposed = true;
     _run++;
-    _syncTicket++;
+    _invalidateSync('应用互联服务已结束');
     store.removeListener(_storeChanged);
     WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();

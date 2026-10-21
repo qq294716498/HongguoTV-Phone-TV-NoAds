@@ -1,0 +1,164 @@
+name: Windows desktop
+
+on:
+  push:
+    branches: ['windows/**', fix/hongguo-playback-release-0.1.22-47, release/windows-android-0.1.22-47, release/windows-android-0.1.23-48, candidate/hongguo-retry-single-instance-0.1.23-48]
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: Publish the validated Windows x64 release without changing Android Latest
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: windows-preview-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PYTHONUTF8: '1'
+  GOPROXY: https://proxy.golang.org,direct
+  GOSUMDB: sum.golang.org
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: native/go.mod
+          cache-dependency-path: native/go.sum
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - run: python3 -m unittest discover -s scripts -p 'test_*.py'
+      - run: flutter pub get --enforce-lockfile
+      - run: dart format --output=none --set-exit-if-changed lib test integration_test test_driver
+      - run: flutter analyze --no-pub --no-fatal-infos lib test integration_test test_driver
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: flutter test --no-pub --dart-define=DISABLE_REMOTE_IMAGES=true --concurrency=2
+      - run: flutter test --no-pub --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true --concurrency=2
+      - run: go test -race ./...
+        working-directory: native
+      - run: go test -race -ldflags="-X duanjuapp/native/core.buildAllSources=true" ./...
+        working-directory: native
+
+  windows:
+    needs: [checks]
+    runs-on: windows-2022
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: native/go.mod
+          cache-dependency-path: native/go.sum
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - name: Use runner MinGW compiler
+        shell: pwsh
+        run: |
+          $compiler = (Get-Command gcc.exe -ErrorAction Stop).Source
+          $target = & $compiler -dumpmachine
+          if ($target -notmatch '^x86_64-w64-mingw32$') { throw "Expected x64 MinGW, found $target" }
+          (Split-Path $compiler) | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - run: python -m pip install pefile==2024.8.26
+      - run: python scripts/build_windows.py --all-sources
+      - name: Verify isolated native single-instance lifecycle with MSVC
+        run: python scripts/test_windows_single_instance_native.py --msvc --report dist/windows/Windows-single-instance-native.json
+      - name: Validate updater ZIP handling on Windows filesystem
+        run: flutter test --no-pub test/windows_update_package_test.dart test/windows_update_startup_test.dart --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true --reporter=expanded
+      - name: Verify version, x64 architecture, DLL imports, resources and hashes
+        run: python scripts/verify_windows_package.py
+      - name: Start unpacked client with synthetic H264 and AAC media
+        run: python scripts/smoke_windows.py
+      - name: Verify update commit, restart, rollback and locked-directory handling
+        run: python scripts/test_windows_transaction.py
+      - name: Record Authenticode status
+        shell: pwsh
+        run: |
+          $exe = 'build\windows\x64\runner\Release\HongguoTV.exe'
+          $signature = Get-AuthenticodeSignature $exe
+          @{ status = $signature.Status.ToString(); signed = ($signature.Status -eq 'Valid'); file = 'HongguoTV.exe' } | ConvertTo-Json | Set-Content -Encoding utf8 dist\windows\Windows-signature.json
+          if ($signature.Status -ne 'NotSigned') { throw 'Unexpected executable signature state' }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hongguotv-windows-x64
+          path: dist/windows/*
+          if-no-files-found: warn
+          retention-days: 14
+
+  release:
+    if: github.ref == 'refs/heads/release/windows-android-0.1.23-48' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_release))
+    needs: [checks, windows]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      WINDOWS_BINARY_COMMIT: ${{ github.sha }}
+      WINDOWS_BINARY_RUN: ${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: hongguotv-windows-x64
+          path: dist/windows
+      - name: Publish validated Windows stable release without changing Android Latest
+        run: python3 scripts/publish_windows_stable.py stage
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - name: Publish verified public Windows fallback manifest
+        run: python3 scripts/publish_windows_stable.py channel
+      - name: Verify public Windows updater download and Android channel
+        env:
+          CHECK_WINDOWS_UPDATE: 'true'
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if flutter test --no-pub test/windows_update_live_test.dart --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true --reporter=expanded; then
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
+      - name: Verify Android assets unchanged and attach checksums
+        run: python3 scripts/publish_windows_stable.py finalize
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hongguotv-windows-release-evidence
+          path: dist/windows/*
+          retention-days: 14

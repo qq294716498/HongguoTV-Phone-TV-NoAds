@@ -163,6 +163,7 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi {
     final String streamInstance = Long.toString(id);
     VideoPlayerOptions playerOptions = new VideoPlayerOptions(sharedOptions);
     playerOptions.backBufferDurationMs = options.getBackBufferDurationMs();
+    playerOptions.decoderMode = options.getDecoderMode();
 
     VideoPlayer videoPlayer =
         PlatformViewVideoPlayer.create(
@@ -185,6 +186,7 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi {
     TextureRegistry.SurfaceProducer handle = flutterState.textureRegistry.createSurfaceProducer();
     VideoPlayerOptions playerOptions = new VideoPlayerOptions(sharedOptions);
     playerOptions.backBufferDurationMs = options.getBackBufferDurationMs();
+    playerOptions.decoderMode = options.getDecoderMode();
 
     VideoPlayer videoPlayer =
         TextureVideoPlayer.create(

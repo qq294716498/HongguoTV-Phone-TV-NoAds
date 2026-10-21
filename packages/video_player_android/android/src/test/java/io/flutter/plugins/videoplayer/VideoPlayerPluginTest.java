@@ -91,7 +91,10 @@ public class VideoPlayerPluginTest {
         mockStatic(PlatformViewVideoPlayer.class)) {
       mockedPlatformViewVideoPlayerStatic
           .when(() -> PlatformViewVideoPlayer.create(any(), any(), any(), any()))
-          .thenReturn(mock(PlatformViewVideoPlayer.class));
+          .thenAnswer(call -> {
+            assertEquals("software", ((VideoPlayerOptions) call.getArgument(3)).decoderMode);
+            return mock(PlatformViewVideoPlayer.class);
+          });
 
       final CreationOptions options =
           new CreationOptions(
@@ -99,7 +102,8 @@ public class VideoPlayerPluginTest {
               null,
               new HashMap<>(),
               null,
-              null);
+              null,
+              "software");
 
       final long playerId = plugin.createForPlatformView(options);
 
@@ -114,7 +118,10 @@ public class VideoPlayerPluginTest {
         mockStatic(TextureVideoPlayer.class)) {
       mockedTextureVideoPlayerStatic
           .when(() -> TextureVideoPlayer.create(any(), any(), any(), any(), any()))
-          .thenReturn(mock(TextureVideoPlayer.class));
+          .thenAnswer(call -> {
+            assertEquals("hardware", ((VideoPlayerOptions) call.getArgument(4)).decoderMode);
+            return mock(TextureVideoPlayer.class);
+          });
 
       final CreationOptions options =
           new CreationOptions(
@@ -122,7 +129,8 @@ public class VideoPlayerPluginTest {
               null,
               new HashMap<>(),
               null,
-              null);
+              null,
+              "hardware");
 
       final TexturePlayerIds ids = plugin.createForTextureView(options);
 

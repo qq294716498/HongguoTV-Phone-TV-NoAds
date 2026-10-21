@@ -9,6 +9,7 @@ import androidx.annotation.Nullable;
 
 public class VideoPlayerOptions {
   public boolean mixWithOthers;
+  @Nullable public String decoderMode;
 
   /**
    * The duration of the back buffer in milliseconds, used to configure ExoPlayer's load control.
@@ -20,6 +21,7 @@ public class VideoPlayerOptions {
   /** Copy constructor to ensure all options are reliably copied. */
   public VideoPlayerOptions(@NonNull VideoPlayerOptions other) {
     this.mixWithOthers = other.mixWithOthers;
+    this.decoderMode = other.decoderMode;
     this.backBufferDurationMs = other.backBufferDurationMs;
   }
 }

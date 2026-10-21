@@ -6,6 +6,7 @@ import 'package:duanju_app/models.dart';
 import 'package:duanju_app/player_controls.dart';
 import 'package:duanju_app/player_screen.dart';
 import 'package:duanju_app/television_controls.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -38,7 +39,13 @@ class ScreenOnPlayer extends ScriptedPlayer {
 }
 
 void main() {
-  for (final mode in ['portrait', 'fullscreen', 'television', 'retry']) {
+  for (final mode in [
+    'portrait',
+    'fullscreen',
+    'television',
+    'retry',
+    'windows',
+  ]) {
     testWidgets(
       '$mode playback keeps screen on through buffering and handoff',
       (tester) async {
@@ -138,6 +145,14 @@ void main() {
         toggle();
         await frames();
         expect(requests, [true, false, true]);
+        if (mode == 'windows') {
+          tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.inactive,
+          );
+          await frames();
+          expect(platform.state.playing, isTrue);
+          expect(requests.last, true);
+        }
         tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
         await frames();
         expect(requests.last, false);
@@ -158,6 +173,9 @@ void main() {
         );
         store.dispose();
       },
+      variant: TargetPlatformVariant.only(
+        mode == 'windows' ? TargetPlatform.windows : TargetPlatform.android,
+      ),
     );
   }
 }

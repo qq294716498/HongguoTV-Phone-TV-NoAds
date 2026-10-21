@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,6 +8,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'core_bridge.dart';
 import 'app_layout.dart';
@@ -23,15 +25,46 @@ import 'video_enhancement_assets.dart';
 import 'danmaku_emoji_assets.dart';
 import 'diary_service.dart';
 import 'app_updates.dart';
+import 'app_update_screen.dart';
+import 'windows_update_runtime.dart';
+import 'windows_desktop.dart';
+import 'app_origin.dart';
+import 'models.dart';
+import 'watch_reminder_runtime.dart';
+import 'television_navigation.dart';
+import 'widgets.dart' show DramaCover;
 
 Future<void> main(List<String> arguments) async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (Platform.isWindows &&
+      Platform.environment['HONGGUOTV_DISABLE_IMAGES'] == '1') {
+    DramaCover.imagesDisabled = true;
+  }
   if (Platform.isAndroid) {
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setSystemUIOverlayStyle(AppTheme.systemBars(Brightness.dark));
   }
   if (Platform.isWindows) {
     await windowManager.ensureInitialized();
+    await windowManager.setMinimumSize(const Size(800, 600));
+    try {
+      await WindowsUpdateRuntime.initialize(arguments);
+    } catch (error) {
+      stderr.writeln('Windows update startup rejected: $error');
+      rethrow;
+    }
+    if (arguments.firstOrNull == '--update-environment-smoke') {
+      if (arguments.length != 2) exit(2);
+      await File(arguments[1]).writeAsString(
+        jsonEncode({
+          'support': (await getApplicationSupportDirectory()).path,
+          'executable': Platform.resolvedExecutable,
+          'build': windowsBuildNumber,
+        }),
+        flush: true,
+      );
+      exit(0);
+    }
   }
   MediaKit.ensureInitialized();
   VideoEnhancementAssets.registerLicenses();
@@ -44,12 +77,60 @@ Future<void> main(List<String> arguments) async {
   DiaryService.add(
     '[App] 应用启动，版本: ${device.version}, 平台: ${Platform.operatingSystem}',
   );
+  if (Platform.isWindows && arguments.firstOrNull == '--startup-smoke') {
+    if (arguments.length != 2) exit(2);
+    DramaCover.imagesDisabled = true;
+    final ready = Completer<void>();
+    final errors = <String>[];
+    FlutterError.onError = (details) => errors.add(details.exceptionAsString());
+    runApp(
+      AppBootstrap(
+        device: device,
+        onReady: () {
+          if (!ready.isCompleted) ready.complete();
+        },
+      ),
+    );
+    final report = File(arguments[1]);
+    try {
+      await ready.future.timeout(const Duration(seconds: 30));
+      await WidgetsBinding.instance.waitUntilFirstFrameRasterized;
+      await Future<void>.delayed(const Duration(seconds: 2));
+      if (errors.isNotEmpty) throw StateError(errors.join('\n'));
+      var originText = false, originButton = false;
+      void inspect(Element element) {
+        if (element.widget is Text &&
+            (element.widget as Text).data == projectFreeNotice)
+          originText = true;
+        if (element.widget.key == const ValueKey('acknowledge-project-origin'))
+          originButton = true;
+        element.visitChildren(inspect);
+      }
+
+      WidgetsBinding.instance.rootElement?.visitChildren(inspect);
+      if (!originText || !originButton)
+        throw StateError('First launch notice did not render');
+      await report.writeAsString(
+        '{"ok":true,"normalAppStartup":true,"remoteImagesDisabled":true,"firstLaunchNoticeVisible":true}',
+        flush: true,
+      );
+      exit(0);
+    } catch (error) {
+      await report.writeAsString(error.toString(), flush: true);
+      exit(1);
+    }
+  }
   runApp(AppBootstrap(device: device));
 }
 
 class AppBootstrap extends StatefulWidget {
-  const AppBootstrap({super.key, this.device = const AppDevice()});
+  const AppBootstrap({
+    super.key,
+    this.device = const AppDevice(),
+    this.onReady,
+  });
   final AppDevice device;
+  final VoidCallback? onReady;
   @override
   State<AppBootstrap> createState() => _AppBootstrapState();
 }
@@ -60,6 +141,7 @@ class _AppBootstrapState extends State<AppBootstrap>
   final navigator = GlobalKey<NavigatorState>();
   LocalStore? store;
   Object? error;
+  bool _exiting = false;
   late AppDevice device = widget.device;
 
   @override
@@ -71,6 +153,10 @@ class _AppBootstrapState extends State<AppBootstrap>
     MediaLibrary.current = null;
     AppUpdates.current?.dispose();
     AppUpdates.current = null;
+    WatchReminderRuntime.current?.dispose();
+    WatchReminderRuntime.current = null;
+    WindowsDesktop.current?.dispose();
+    WindowsDesktop.current = null;
     store?.dispose();
     super.dispose();
   }
@@ -84,7 +170,9 @@ class _AppBootstrapState extends State<AppBootstrap>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && Platform.isAndroid) {
+    WatchReminderRuntime.current?.lifecycle(state);
+    if (state == AppLifecycleState.resumed &&
+        (Platform.isAndroid || Platform.isWindows)) {
       unawaited(_refreshDevice());
       unawaited(AppUpdates.current?.returnedFromSettings());
       unawaited(AppUpdates.current?.check());
@@ -123,9 +211,26 @@ class _AppBootstrapState extends State<AppBootstrap>
     });
     try {
       final preferences = await SharedPreferences.getInstance();
+      if (Platform.isWindows && WindowsDesktop.current == null) {
+        final desktop = WindowsDesktop(preferences, exitProcess: exit);
+        await desktop.initialize();
+        WindowsDesktop.current = desktop;
+        desktop.flushStore = () async {
+          await store?.flushPendingWrites();
+        };
+        desktop.detachUI = () async {
+          if (mounted) setState(() => _exiting = true);
+          WidgetsBinding.instance.scheduleForcedFrame();
+          await WidgetsBinding.instance.endOfFrame;
+        };
+        desktop.restoreUI = () async {
+          if (mounted) setState(() => _exiting = false);
+        };
+      }
       await _refreshDevice();
       if (!mounted) return;
-      if (Platform.isAndroid && AppUpdates.current == null) {
+      if ((Platform.isAndroid || Platform.isWindows) &&
+          AppUpdates.current == null) {
         AppUpdates.current = AppUpdates(preferences: preferences);
         unawaited(AppUpdates.current!.check());
       }
@@ -134,6 +239,10 @@ class _AppBootstrapState extends State<AppBootstrap>
         setState(() {
           store = LocalStore(preferences);
           repository.access = store;
+          if ((Platform.isAndroid || Platform.isIOS) && !device.television) {
+            WatchReminderRuntime.current?.dispose();
+            WatchReminderRuntime.current = WatchReminderRuntime(store!);
+          }
           MediaLibrary.attach(repository, store!);
           LanController.current?.dispose();
           final link = LanController(
@@ -183,8 +292,24 @@ class _AppBootstrapState extends State<AppBootstrap>
             );
           };
         });
+        widget.onReady?.call();
+        if (Platform.isWindows) {
+          unawaited(
+            _finishWindowsUpdate().catchError(
+              (Object failure) => WindowsUpdateRuntime.startupPhase(
+                'ready-failed',
+                error: failure,
+              ),
+            ),
+          );
+        }
       }
     } catch (failure) {
+      if (Platform.isWindows)
+        await WindowsUpdateRuntime.startupPhase(
+          'bootstrap-failed',
+          error: failure,
+        );
       if (mounted) {
         setState(() {
           error = failure;
@@ -193,19 +318,79 @@ class _AppBootstrapState extends State<AppBootstrap>
     }
   }
 
+  Future<void> _finishWindowsUpdate() async {
+    WindowsUpdateRuntime.flushStore = () async => store?.flushPendingWrites();
+    await WindowsUpdateRuntime.startupPhase('bootstrap-ready');
+    await WidgetsBinding.instance.waitUntilFirstFrameRasterized;
+    await WindowsUpdateRuntime.startupPhase('first-frame');
+    await WidgetsBinding.instance.endOfFrame;
+    await WindowsUpdateRuntime.startupPhase('rendered');
+    if (store?.configurationError != null)
+      throw StateError(store!.configurationError!);
+    final resume = await WindowsUpdateRuntime.ready();
+    if (WindowsUpdateRuntime.startupFailure case final failure?) {
+      AppUpdates.current?.reportWindowsStartupFailure(failure);
+      final context = navigator.currentContext;
+      if (mounted && context != null) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(
+            content: const Text('上次 Windows 更新未完成，已保留恢复记录'),
+            duration: const Duration(seconds: 15),
+            action: SnackBarAction(
+              label: '查看详情',
+              onPressed: () => openAppUpdates(context),
+            ),
+          ),
+        );
+      }
+    }
+    if (!mounted ||
+        store == null ||
+        resume == null ||
+        store!.locked ||
+        resume['profile'] != store!.profile.id)
+      return;
+    final detail = DramaDetail.fromJson(
+      Map<String, dynamic>.from(resume['detail'] as Map),
+    );
+    final index = resume['index'] as int;
+    if (!store!.allowsSource(detail.drama.source) ||
+        index < 0 ||
+        index >= detail.episodes.length)
+      return;
+    navigator.currentState?.push(
+      MaterialPageRoute<void>(
+        builder: (_) => PlayerScreen(
+          detail: detail,
+          initialIndex: index,
+          repository: repository,
+          store: store!,
+          initialPosition: (resume['position'] as num).toDouble(),
+          initiallyPlaying: false,
+          localOnly: resume['localOnly'] == true,
+          allowOnlineFallback: resume['allowOnlineFallback'] != false,
+          mediaId: resume['mediaId'] as String?,
+        ),
+      ),
+    );
+  }
+
   @override
-  Widget build(BuildContext context) => DuanjuApp(
-    repository: repository,
-    store: store,
-    bootstrapError: error?.toString(),
-    onRetry: _initialize,
-    television: device.television,
-    version: device.version,
-    navigatorKey: navigator,
-  );
+  Widget build(BuildContext context) => _exiting
+      ? const SizedBox.shrink()
+      : DuanjuApp(
+          repository: repository,
+          store: store,
+          bootstrapError: error?.toString(),
+          onRetry: _initialize,
+          television: device.television,
+          version: device.version,
+          navigatorKey: navigator,
+          requireOriginNotice: true,
+        );
 }
 
-class DuanjuApp extends StatelessWidget {
+class DuanjuApp extends StatefulWidget {
   const DuanjuApp({
     super.key,
     required this.repository,
@@ -215,6 +400,7 @@ class DuanjuApp extends StatelessWidget {
     this.television = false,
     this.version = appVersion,
     this.navigatorKey,
+    this.requireOriginNotice = false,
   });
   final AppRepository repository;
   final LocalStore? store;
@@ -223,6 +409,22 @@ class DuanjuApp extends StatelessWidget {
   final bool television;
   final String version;
   final GlobalKey<NavigatorState>? navigatorKey;
+  final bool requireOriginNotice;
+
+  @override
+  State<DuanjuApp> createState() => _DuanjuAppState();
+}
+
+class _DuanjuAppState extends State<DuanjuApp> {
+  final _navigatorKey = GlobalKey<NavigatorState>();
+  AppRepository get repository => widget.repository;
+  LocalStore? get store => widget.store;
+  String? get bootstrapError => widget.bootstrapError;
+  VoidCallback? get onRetry => widget.onRetry;
+  bool get television => widget.television;
+  String get version => widget.version;
+  GlobalKey<NavigatorState> get navigatorKey =>
+      widget.navigatorKey ?? _navigatorKey;
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
@@ -252,11 +454,14 @@ class DuanjuApp extends StatelessWidget {
             television: tv,
             child: AppLayout(
               television: tv,
+              deviceTelevision: television,
               version: version,
+              mobileReminders:
+                  !television && (Platform.isAndroid || Platform.isIOS),
               child: Theme(
                 data: tv ? televisionTheme(theme) : theme,
                 child: Shortcuts(
-                  shortcuts: const {
+                  shortcuts: {
                     SingleActivator(
                       LogicalKeyboardKey.select,
                       includeRepeats: false,
@@ -265,9 +470,15 @@ class DuanjuApp extends StatelessWidget {
                       LogicalKeyboardKey.gameButtonA,
                       includeRepeats: false,
                     ): ActivateIntent(),
-                    SingleActivator(LogicalKeyboardKey.goBack): DismissIntent(),
+                    if (!tv)
+                      const SingleActivator(LogicalKeyboardKey.goBack):
+                          const DismissIntent(),
                   },
-                  child: FocusTraversalGroup(child: child!),
+                  child: TelevisionNavigation(
+                    enabled: tv || television,
+                    navigatorKey: navigatorKey,
+                    child: FocusTraversalGroup(child: child!),
+                  ),
                 ),
               ),
             ),
@@ -276,45 +487,49 @@ class DuanjuApp extends StatelessWidget {
       );
     },
     home: store != null
-        ? store!.locked
-              ? ProfilesScreen(store: store!, locked: true)
-              : HomeScreen(
-                  key: ValueKey(
-                    'profile-${store!.profile.id}-${store!.profileEpoch}',
-                  ),
-                  repository: repository,
-                  store: store!,
+        ? widget.requireOriginNotice
+              ? FirstLaunchNotice(
+                  preferences: store!.preferences,
+                  child: _home(),
                 )
-        : Scaffold(
-            body: Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.play_circle_fill_rounded,
-                      color: Color(0xFFFF765F),
-                      size: 72,
-                    ),
-                    const SizedBox(height: 24),
-                    Text(
-                      bootstrapError ?? '正在打开$appName',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 18),
-                    ),
-                    const SizedBox(height: 24),
-                    if (bootstrapError == null)
-                      const CircularProgressIndicator()
-                    else
-                      FilledButton(
-                        onPressed: onRetry,
-                        child: const Text('重新打开'),
-                      ),
-                  ],
-                ),
-              ),
+              : _home()
+        : _loading(),
+  );
+
+  Widget _home() => store!.locked
+      ? ProfilesScreen(store: store!, locked: true)
+      : HomeScreen(
+          key: ValueKey('profile-${store!.profile.id}-${store!.profileEpoch}'),
+          repository: repository,
+          store: store!,
+        );
+
+  Widget _loading() => Scaffold(
+    body: Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.play_circle_fill_rounded,
+              color: Color(0xFFFF765F),
+              size: 72,
             ),
-          ),
+            const SizedBox(height: 24),
+            Text(
+              bootstrapError ?? '正在打开$appName',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 18),
+            ),
+            const SizedBox(height: 24),
+            if (bootstrapError == null)
+              const CircularProgressIndicator()
+            else
+              FilledButton(onPressed: onRetry, child: const Text('重新打开')),
+          ],
+        ),
+      ),
+    ),
   );
 }

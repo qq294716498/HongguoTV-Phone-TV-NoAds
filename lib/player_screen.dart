@@ -1,3 +1,5 @@
+import 'tv_decoder_settings.dart';
+
 import 'dart:async';
 import 'dart:io';
 
@@ -16,13 +18,16 @@ import 'diary_service.dart';
 import 'luna_exo_player.dart';
 import 'danmaku_controller.dart';
 import 'danmaku_overlay.dart';
+import 'watch_reminder_models.dart';
+import 'watch_reminder_runtime.dart';
 import 'download_picker.dart';
 import 'downloads_screen.dart';
-import 'follow_state.dart';
 import 'local_store.dart';
 import 'models.dart';
 import 'next_season_resolver.dart';
+import 'series_browser_screen.dart';
 import 'playback_loader.dart';
+import 'playback_attempt.dart';
 import 'playback_preloader.dart';
 import 'playback_recovery.dart';
 import 'playback_preferences.dart';
@@ -37,6 +42,10 @@ import 'lan_controller.dart';
 import 'lan_screen.dart';
 import 'video_enhancement.dart';
 import 'video_output_size.dart';
+import 'windows_update_runtime.dart';
+import 'windows_desktop.dart';
+import 'windows_drama_description.dart';
+import 'episode_label.dart';
 
 class PlayerScreen extends StatefulWidget {
   const PlayerScreen({
@@ -46,6 +55,7 @@ class PlayerScreen extends StatefulWidget {
     required this.repository,
     required this.store,
     this.initialPosition = 0,
+    this.initiallyPlaying = true,
     this.localOnly = false,
     this.allowOnlineFallback = true,
     this.mediaId,
@@ -56,6 +66,7 @@ class PlayerScreen extends StatefulWidget {
   final DramaDetail detail;
   final int initialIndex;
   final double initialPosition;
+  final bool initiallyPlaying;
   final bool localOnly;
   final bool allowOnlineFallback;
   final String? mediaId;
@@ -88,10 +99,14 @@ class _PlayerScreenState extends State<PlayerScreen>
   late final DanmakuController _danmaku;
   int _seekSequence = 0;
   bool _danmakuEnabled = true;
+  double? _danmakuSpeed;
+  double? _danmakuOpacity;
   late final PlayerInteractions _interactions;
   final _playerFocus = FocusNode(debugLabel: 'player-surface');
   final _televisionControls = GlobalKey<TelevisionControlsState>();
   final _videoPaneKey = GlobalKey();
+  Object? _windowsVideoGeometry;
+  bool _windowsDescription = false;
   final _menuRevision = ValueNotifier<int>(0);
   final List<StreamSubscription<dynamic>> _subscriptions = [];
   final _recovery = PlaybackRecovery();
@@ -101,10 +116,17 @@ class _PlayerScreenState extends State<PlayerScreen>
   String? _savedProgressKey;
   final _health = PlaybackHealth();
   Timer? _saveTimer;
+  Timer? _windowsVolumeTimer;
+  double? _windowsVolume;
+  double? _windowsUnmuted;
   Timer? _healthTimer;
+  WatchReminderRuntime? _watchReminders;
   Timer? _errorTimer;
   Timer? _pictureInPictureExitTimer;
   Future<void> _operations = Future<void>.value();
+  Completer<void> _operationCancellation = Completer<void>();
+  PlaybackAttempt? _attempt;
+  Duration _attemptPosition = Duration.zero;
   late int _index;
   late final int _profileEpoch;
   int _openedIndex = -1;
@@ -117,6 +139,8 @@ class _PlayerScreenState extends State<PlayerScreen>
   bool _forceOnline = false;
   bool _localFailure = false;
   bool _fullscreen = false;
+  bool _windowsEpisodesExpanded = true;
+  int _windowsActivityRevision = 0;
   bool _automaticFullscreenSuppressed = false;
   bool _panelOpen = false;
   int _mobileTab = 0;
@@ -149,6 +173,8 @@ class _PlayerScreenState extends State<PlayerScreen>
   double _resumePosition = 0;
   bool _rotating = false;
   bool _television = false;
+  bool _televisionDevice = false;
+  bool _decoderFailure = false;
   AppOrientationController? _orientationController;
   bool get _pictureInPictureVisible =>
       _pictureInPictureActive || _pictureInPictureRequested;
@@ -160,6 +186,15 @@ class _PlayerScreenState extends State<PlayerScreen>
       !_television &&
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS);
+  bool get _windowsDesktop =>
+      !_television && defaultTargetPlatform == TargetPlatform.windows;
+  bool get _windowsMini =>
+      _windowsDesktop && (WindowsDesktop.current?.mini ?? false);
+  bool get _windowsSidebarAvailable =>
+      _windowsDesktop &&
+      !_windowsMini &&
+      !_showFullscreen &&
+      MediaQuery.sizeOf(context).width >= 760;
   bool get _portraitWatching =>
       _mobile &&
       !_showFullscreen &&
@@ -171,7 +206,12 @@ class _PlayerScreenState extends State<PlayerScreen>
     quality: _requestedQuality,
     autoAdvance: _autoAdvance,
     danmaku: _danmakuEnabled,
+    danmakuSpeed: _danmakuSpeed,
+    danmakuOpacity: _danmakuOpacity,
     preload: _preloadEnabled,
+    reminders: widget.store.playbackPreferences.reminders,
+    tvTextureOutput: widget.store.playbackPreferences.tvTextureOutput,
+    tvDecoderMode: widget.store.playbackPreferences.tvDecoderMode,
     enhancement: _enhancement.preferences,
   );
   String get _qualityLabel => _plan?.local == true
@@ -203,15 +243,27 @@ class _PlayerScreenState extends State<PlayerScreen>
     super.initState();
     _television =
         context.getInheritedWidgetOfExactType<AppLayout>()?.television ?? false;
+    final layout = context.getInheritedWidgetOfExactType<AppLayout>();
+    _televisionDevice = layout?.deviceTelevision ?? _television;
     WidgetsBinding.instance.addObserver(this);
     _detail = widget.detail;
     _index = widget.initialIndex;
+    if (_windowsDesktop) {
+      WindowsDesktop.current?.addListener(_desktopChanged);
+      _windowsEpisodesExpanded =
+          widget.store.preferences.getBool(
+            'windows_episode_sidebar_expanded',
+          ) ??
+          true;
+    }
     _profileEpoch = widget.handoff?.profileEpoch ?? widget.store.profileEpoch;
     final preferences = widget.store.playbackPreferences;
     _speed = preferences.speed;
     _requestedQuality = preferences.quality;
     _autoAdvance = true;
     _danmakuEnabled = preferences.danmaku;
+    _danmakuSpeed = preferences.danmakuSpeed;
+    _danmakuOpacity = preferences.danmakuOpacity;
     _preloadEnabled = true;
     _loader = PlaybackLoader(widget.repository);
     _preloader = PlaybackPreloader(
@@ -238,12 +290,16 @@ class _PlayerScreenState extends State<PlayerScreen>
     _danmaku = DanmakuController(widget.repository)
       ..setEnabled(_danmakuEnabled);
     widget.store.addListener(_accessChanged);
+    _watchReminders = WatchReminderRuntime.current;
+    _watchReminders?.addListener(_reminderChanged);
     _player =
         widget.playerFactory?.call() ??
         (Platform.isAndroid
             ? LunaExoPlayer(
                 television: () => _television,
                 textureOutput: () => _preferences.tvTextureOutput,
+                decoderMode: () =>
+                    _televisionDevice ? _preferences.tvDecoderMode : null,
               )
             : Player(
                 configuration: const PlayerConfiguration(
@@ -271,7 +327,22 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
     _interactions = PlayerInteractions(
       player: _player,
+      initialUnmutedVolume: defaultTargetPlatform == TargetPlatform.windows
+          ? widget.store.preferences.getDouble('windows_last_volume') ?? 100
+          : 100,
+      onVolumeChanged: defaultTargetPlatform == TargetPlatform.windows
+          ? (volume, unmuted) {
+              _windowsVolume = volume;
+              _windowsUnmuted = unmuted;
+              _windowsVolumeTimer?.cancel();
+              _windowsVolumeTimer = Timer(
+                const Duration(milliseconds: 250),
+                _saveWindowsVolume,
+              );
+            }
+          : null,
       available: () =>
+          !(Platform.isWindows && WindowsUpdateRuntime.restarting) &&
           !_closed &&
           widget.store.profileEpoch == _profileEpoch &&
           !_loading &&
@@ -303,6 +374,16 @@ class _PlayerScreenState extends State<PlayerScreen>
         return '第 ${_detail.episodes[next].number} 集';
       },
     );
+    if (defaultTargetPlatform == TargetPlatform.windows) {
+      unawaited(
+        _player.setVolume(
+          (widget.store.preferences.getDouble('windows_volume') ?? 100).clamp(
+            0,
+            100,
+          ),
+        ),
+      );
+    }
     _playerFocus.addListener(() {
       if (!_playerFocus.hasPrimaryFocus && !_closed) _interactions.cancel();
     });
@@ -311,7 +392,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       _player.stream.error.listen((error) {
         if (_enhancement.handlePlaybackError(error)) return;
         if (!_closed && _acceptErrors && mounted && error.trim().isNotEmpty) {
-          _queueRecovery();
+          _queueRecovery(error: error);
         }
       }),
     );
@@ -320,6 +401,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         if (completed &&
             !_loading &&
             !_closed &&
+            (!_windowsDesktop || _playIntent) &&
             _acceptErrors &&
             _error == null) {
           final duration = _player.state.duration;
@@ -345,6 +427,11 @@ class _PlayerScreenState extends State<PlayerScreen>
       _player.stream.position.listen((position) {
         if (!_closed && _openedCurrent && position > Duration.zero) {
           _resumePosition = position.inMilliseconds / 1000;
+          if (!_loading &&
+              !_player.state.buffering &&
+              position > _attemptPosition + const Duration(milliseconds: 500)) {
+            _attempt?.stable();
+          }
         }
         _syncDanmaku();
         _syncPreload();
@@ -361,6 +448,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     ]) {
       _subscriptions.add(
         stream.listen((_) {
+          _syncDesktopPlayback();
           _syncScreenOn();
           _syncDanmaku();
           _syncPreload();
@@ -385,6 +473,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
     _healthTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       _syncScreenOn();
+      _syncWatchReminders();
       if (!_closed &&
           _acceptErrors &&
           !_loading &&
@@ -415,6 +504,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       _play(
         _index,
         position: widget.initialPosition,
+        playWhenReady: widget.initiallyPlaying,
         handoffPlan: handoff?.plan,
       );
     }
@@ -426,9 +516,90 @@ class _PlayerScreenState extends State<PlayerScreen>
         );
       }
     });
+    if (_windowsDesktop) {
+      final desktop = WindowsDesktop.current;
+      desktop?.playbackOwner = this;
+      desktop?.togglePlayback = () {
+        if (widget.store.profileEpoch == _profileEpoch &&
+            !widget.store.locked &&
+            widget.store.allowsSource(_detail.drama.source)) {
+          _togglePlayback();
+        }
+      };
+      Future<void> pauseAndSave() async {
+        _cancelSeasonAdvance();
+        _interactions.cancel();
+        _playIntent = false;
+        if (!_loading) _attempt?.stable();
+        _syncScreenOn();
+        await _player.pause();
+        await _saveWindowsVolume();
+        await _saveProgress(flush: true);
+        await widget.store.flushPendingWrites();
+      }
+
+      desktop?.pausePlayback = pauseAndSave;
+      desktop?.savePlayback = pauseAndSave;
+      _syncDesktopPlayback();
+    }
+    if (Platform.isWindows) {
+      WindowsUpdateRuntime.owner = this;
+      WindowsUpdateRuntime.playing = () =>
+          _playIntent ||
+          _player.state.playing ||
+          _loading ||
+          _findingNextSeason;
+      WindowsUpdateRuntime.savePlayback = () async {
+        if (_playIntent || _player.state.playing || _loading)
+          throw StateError('请先暂停播放后安装更新');
+        await _saveWindowsVolume();
+        await _saveProgress(flush: true);
+        await widget.store.flushPendingWrites();
+        return {
+          'profile': widget.store.profile.id,
+          'detail': {
+            'drama': _detail.drama.toJson(),
+            'chapters': _detail.episodes.map((episode) => episode.raw).toList(),
+          },
+          'index': _index,
+          'position': _player.state.position.inMilliseconds / 1000,
+          'localOnly': widget.localOnly,
+          'allowOnlineFallback': widget.allowOnlineFallback,
+          'mediaId': widget.mediaId,
+        };
+      };
+    }
+  }
+
+  Future<void> _saveWindowsVolume() async {
+    _windowsVolumeTimer?.cancel();
+    if (_windowsVolume == null) return;
+    await widget.store.preferences.setDouble('windows_volume', _windowsVolume!);
+    await widget.store.preferences.setDouble(
+      'windows_last_volume',
+      _windowsUnmuted!,
+    );
   }
 
   void _accessChanged() {
+    if (!_closed &&
+        mounted &&
+        !widget.store.locked &&
+        widget.store.profileEpoch == _profileEpoch) {
+      final preferences = widget.store.playbackPreferences;
+      if (preferences.danmaku != _danmakuEnabled ||
+          preferences.danmakuSpeed != _danmakuSpeed ||
+          preferences.danmakuOpacity != _danmakuOpacity) {
+        setState(() {
+          _danmakuEnabled = preferences.danmaku;
+          _danmakuSpeed = preferences.danmakuSpeed;
+          _danmakuOpacity = preferences.danmakuOpacity;
+        });
+        _danmaku.setEnabled(_danmakuEnabled);
+        _syncDanmaku();
+        _menuRevision.value++;
+      }
+    }
     if (!_closed &&
         (widget.store.profileEpoch != _profileEpoch || widget.store.locked)) {
       _cancelSeasonAdvance();
@@ -436,6 +607,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       _enhancement.suspend();
       _handoffOwned = false;
       _playIntent = false;
+      if (!_loading) _attempt?.stable();
       widget.handoff?.fail('接收端用户已变更');
       unawaited(_player.pause());
     }
@@ -486,10 +658,17 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   void _syncScreenOn() {
     if (_closed) _screenOnDeadline?.cancel();
-    if (defaultTargetPlatform != TargetPlatform.android) return;
+    if (defaultTargetPlatform != TargetPlatform.android &&
+        defaultTargetPlatform != TargetPlatform.windows) {
+      return;
+    }
     final enabled =
         !_closed &&
-        _lifecycleState == AppLifecycleState.resumed &&
+        (_lifecycleState == AppLifecycleState.resumed ||
+            _windowsDesktop &&
+                (WindowsDesktop.current?.keepPlayback ?? false) ||
+            defaultTargetPlatform == TargetPlatform.windows &&
+                _lifecycleState == AppLifecycleState.inactive) &&
         !_pictureInPictureVisible &&
         _error == null &&
         widget.store.profileEpoch == _profileEpoch &&
@@ -589,7 +768,10 @@ class _PlayerScreenState extends State<PlayerScreen>
   void _applyLifecycleVisibility({bool pauseWhenHidden = true}) {
     final visible =
         _lifecycleState == AppLifecycleState.resumed ||
-        _pictureInPictureVisible;
+        _windowsDesktop && (WindowsDesktop.current?.keepPlayback ?? false) ||
+        _pictureInPictureVisible ||
+        defaultTargetPlatform == TargetPlatform.windows &&
+            _lifecycleState == AppLifecycleState.inactive;
     if (_foreground != visible) _health.reset();
     _foreground = visible;
     _syncScreenOn();
@@ -607,6 +789,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             _lifecycleState == AppLifecycleState.inactive ||
             _lifecycleState == AppLifecycleState.hidden)) {
       _playIntent = false;
+      if (!_loading) _attempt?.stable();
       unawaited(_player.pause());
       unawaited(_saveProgress(flush: true));
     }
@@ -695,6 +878,81 @@ class _PlayerScreenState extends State<PlayerScreen>
     return {'left': left, 'top': top, 'right': right, 'bottom': bottom};
   }
 
+  void _recordWindowsVideoGeometry() {
+    if (!_windowsDesktop || !mounted || _closed) return;
+    final context = _videoPaneKey.currentContext;
+    final pane = context?.findRenderObject();
+    if (context == null ||
+        pane is! RenderBox ||
+        !pane.attached ||
+        !pane.hasSize) {
+      return;
+    }
+    Rect? texture;
+    void visit(Element element) {
+      if (element.widget is Texture) {
+        final object = element.findRenderObject();
+        if (object is RenderBox && object.attached && object.hasSize) {
+          texture = MatrixUtils.transformRect(
+            object.getTransformTo(pane),
+            Offset.zero & object.size,
+          );
+        }
+        return;
+      }
+      if (texture == null) element.visitChildElements(visit);
+    }
+
+    context.visitChildElements(visit);
+    final media = MediaQuery.of(context);
+    final source = videoDisplaySize(_player.state.videoParams);
+    final contained = source == null
+        ? null
+        : applyBoxFit(BoxFit.contain, source, pane.size).destination;
+    final expected = contained == null
+        ? null
+        : Alignment.center.inscribe(contained, Offset.zero & pane.size);
+    final geometry = (
+      source,
+      pane.size,
+      pane.localToGlobal(Offset.zero),
+      texture,
+      media.devicePixelRatio,
+      View.of(context).physicalSize,
+      media.padding,
+      media.viewInsets,
+      _showFullscreen,
+      _windowsMini,
+    );
+    if (_windowsVideoGeometry == geometry) return;
+    _windowsVideoGeometry = geometry;
+    DiaryService.add(
+      '[WindowsVideo] source=$source viewport=${pane.size} dpr=${media.devicePixelRatio} padding=${media.padding} insets=${media.viewInsets} texture=$texture expectedContain=$expected fullscreen=$_showFullscreen mini=$_windowsMini',
+    );
+    final channel = WindowsDesktop.current?.channel;
+    if (channel != null) {
+      unawaited(() async {
+        try {
+          final native = await channel
+              .invokeMapMethod<String, dynamic>('windowGeometry')
+              .timeout(const Duration(seconds: 2));
+          if (mounted &&
+              !_closed &&
+              _windowsVideoGeometry == geometry &&
+              native != null) {
+            DiaryService.add(
+              '[WindowsVideoNative] flutter=$geometry native=$native',
+            );
+          }
+        } catch (error) {
+          if (mounted && !_closed && _windowsVideoGeometry == geometry) {
+            DiaryService.add('[WindowsVideoNative] unavailable=$error');
+          }
+        }
+      }());
+    }
+  }
+
   void _attachLanPlayback() {
     LanController.current?.attachPlayback(
       LanPlaybackHost(
@@ -742,18 +1000,22 @@ class _PlayerScreenState extends State<PlayerScreen>
   Future<void> _stopForLan() async {
     _cancelSeasonAdvance();
     final generation = _generation;
-    await _serialize(() async {
-      if (_closed ||
-          generation != _generation ||
-          widget.store.profileEpoch != _profileEpoch)
-        return;
-      _playIntent = false;
-      _interactions.cancel();
-      _enhancement.suspend();
-      _health.reset();
-      await _player.pause();
-      await _saveProgress(flush: true);
-    });
+    try {
+      await _serialize(() async {
+        if (_closed ||
+            generation != _generation ||
+            widget.store.profileEpoch != _profileEpoch)
+          return;
+        _playIntent = false;
+        if (!_loading) _attempt?.stable();
+        _interactions.cancel();
+        _enhancement.suspend();
+        _health.reset();
+        await _player.pause();
+        if (_closed || generation != _generation) return;
+        await _saveProgress(flush: true);
+      });
+    } on PlaybackAttemptCancelled {}
   }
 
   Future<void> _pushToDevice() async {
@@ -835,8 +1097,91 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
   }
 
+  bool get _mobileRemindersAllowed =>
+      _mobile &&
+      (context.getInheritedWidgetOfExactType<AppLayout>()?.mobileReminders ??
+          true);
+
+  bool get _watchingForReminders =>
+      !_closed &&
+      _mobileRemindersAllowed &&
+      _lifecycleState == AppLifecycleState.resumed &&
+      !_pictureInPictureVisible &&
+      !_loading &&
+      _error == null &&
+      _openedCurrent &&
+      _playIntent &&
+      _player.state.playing &&
+      !_player.state.buffering &&
+      !_player.state.completed &&
+      !_danmaku.seeking &&
+      widget.store.profileEpoch == _profileEpoch &&
+      !widget.store.locked &&
+      (_panelOpen || (ModalRoute.of(context)?.isCurrent ?? true));
+
+  bool get _reminderVisible =>
+      _watchingForReminders &&
+      !_panelOpen &&
+      (ModalRoute.of(context)?.isCurrent ?? true) &&
+      (_watchReminders?.notice.isNotEmpty ?? false);
+
+  void _reminderChanged() {
+    if (mounted && !_closed) setState(() {});
+  }
+
+  void _syncWatchReminders() {
+    if (_watchReminders == null) return;
+    _watchReminders!.setPlayback(
+      this,
+      watching: _watchingForReminders,
+      canShow:
+          _watchingForReminders &&
+          !_panelOpen &&
+          (ModalRoute.of(context)?.isCurrent ?? true),
+    );
+  }
+
+  Widget _watchReminderDialog() {
+    final kinds = _watchReminders!.notice;
+    return Positioned.fill(
+      child: Stack(
+        children: [
+          const ModalBarrier(dismissible: false, color: Color(0x66000000)),
+          Center(
+            child: AlertDialog(
+              key: const ValueKey('watch-reminder-dialog'),
+              title: const Text('休息一下吧'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (kinds.contains(WatchReminderKind.daily))
+                      const Text('今天的观看时间已达到你设置的上限，起来活动一下吧。'),
+                    if (kinds.contains(WatchReminderKind.bedtime))
+                      const Text('已到你设置的睡觉时间，早点休息吧。'),
+                    if (_watchReminders!.persistenceError != null)
+                      Text(_watchReminders!.persistenceError!),
+                  ],
+                ),
+              ),
+              actions: [
+                FilledButton(
+                  key: const ValueKey('watch-reminder-dismiss'),
+                  onPressed: _watchReminders!.dismiss,
+                  child: const Text('知道了'),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _syncDanmaku({bool discontinuity = false}) {
     if (_closed) return;
+    _syncWatchReminders();
     final state = _player.state;
     _danmaku.update(
       position: state.position,
@@ -866,6 +1211,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       _interactions.cancel();
     }
     _television = television;
+    _televisionDevice = AppLayout.isTelevisionDevice(context);
     _setTelevisionPlaybackActive(_television);
     _orientationController = AppOrientationScope.maybeOf(context);
     final orientation = MediaQuery.orientationOf(context);
@@ -875,6 +1221,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
     _lastOrientation = orientation;
     _scheduleSystemUi();
+    _syncWatchReminders();
   }
 
   void _scheduleSystemUi() {
@@ -910,7 +1257,12 @@ class _PlayerScreenState extends State<PlayerScreen>
     _applyLifecycleVisibility();
   }
 
-  void _queueRecovery() {
+  void _queueRecovery({String? error}) {
+    if (_televisionDevice &&
+        error != null &&
+        isDecoderCompatibilityError(error)) {
+      _decoderFailure = true;
+    }
     if (_closed || !_acceptErrors || _error != null) {
       return;
     }
@@ -952,13 +1304,19 @@ class _PlayerScreenState extends State<PlayerScreen>
     _errorTimer?.cancel();
     _pendingError = false;
     final position = _currentPosition;
-    final action = current.local
+    final action = current.local || _decoderFailure
         ? PlaybackRecoveryAction.stop
         : _recovery.next(current);
     DiaryService.add(
       '[Recovery] episode=${_detail.episodes[_index].number}, action=${action.name}, position=$position, playing=${_player.state.playing}, intent=$_playIntent',
     );
     if (action == PlaybackRecoveryAction.stop) {
+      _attempt?.stable();
+      if (_decoderFailure) {
+        _playIntent = false;
+        _preloader.clear();
+        _syncScreenOn();
+      }
       _resumePosition = position;
       final ticket = _generation;
       try {
@@ -968,10 +1326,14 @@ class _PlayerScreenState extends State<PlayerScreen>
           }
           try {
             await _saveProgress();
+            if (_closed || ticket != _generation) return;
             _openedIndex = -1;
             await _player.stop();
           } finally {
-            await _releaseSession(current.session);
+            if (!_decoderFailure &&
+                (ticket == _generation || _plan?.session != current.session)) {
+              await _releaseSession(current.session);
+            }
           }
         });
       } catch (_) {}
@@ -979,7 +1341,9 @@ class _PlayerScreenState extends State<PlayerScreen>
         setState(() {
           _loading = false;
           _localFailure = current.local;
-          _error = current.local
+          _error = _decoderFailure
+              ? '当前视频规格或解码器不兼容。请打开播放设置更改 TV 解码模式，或更换线路、降低清晰度；系统软解也可能不支持该视频。'
+              : current.local
               ? widget.allowOnlineFallback
                     ? '本地视频读取失败，请重试或重新下载；也可以手动改为在线播放。'
                     : '本地成品读取失败，请重试或重新生成。'
@@ -1057,6 +1421,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         current();
     _findingNextSeason = canContinue;
     _playIntent = false;
+    _attempt?.stable();
     _syncScreenOn();
     _interactions.cancel();
     try {
@@ -1120,12 +1485,14 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   void _togglePlayback() {
+    if (Platform.isWindows && WindowsUpdateRuntime.restarting) return;
     if (_closed || _loading || _error != null) return;
     _cancelSeasonAdvance();
     _handoffOwned = false;
     widget.handoff?.fail('接收端已操作播放');
     _interactions.cancel();
     _playIntent = !_player.state.playing;
+    if (!_playIntent) _attempt?.stable();
     _syncScreenOn();
     if (_playIntent) _enhancement.mediaReady();
     _health.reset();
@@ -1195,10 +1562,78 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
-  Future<void> _serialize(Future<void> Function() operation) {
-    final next = _operations.catchError((Object _) {}).then((_) => operation());
+  Future<void> _serialize(
+    Future<void> Function() operation, {
+    PlaybackAttempt? attempt,
+  }) {
+    final cancellation = _operationCancellation;
+    final owner = attempt ?? _attempt;
+    final pending = _operations.catchError((Object _) {}).then((_) {
+      if (cancellation.isCompleted ||
+          owner?.cancelled == true ||
+          owner?.expired == true) {
+        throw PlaybackAttemptCancelled();
+      }
+      final executing = operation();
+      return owner == null ? executing : owner.guard(executing);
+    });
+    final next = Future.any<void>([
+      pending,
+      cancellation.future.then<void>((_) => throw PlaybackAttemptCancelled()),
+    ]);
     _operations = next;
     return next;
+  }
+
+  void _cancelOperations() {
+    if (!_operationCancellation.isCompleted) _operationCancellation.complete();
+    _operationCancellation = Completer<void>();
+  }
+
+  void _failAttempt(PlaybackAttempt attempt, AppFailure failure) {
+    if (_closed || !mounted || !identical(attempt, _attempt)) return;
+    ++_generation;
+    _cancelOperations();
+    attempt.cancel();
+    _attempt = null;
+    _acceptErrors = false;
+    _pendingError = false;
+    _playIntent = false;
+    _errorTimer?.cancel();
+    _transitionWaitTimer?.cancel();
+    _preloader.clear();
+    unawaited(_loader.cancel().catchError((Object _) {}));
+    if (_player is LunaExoPlayer) {
+      unawaited(_player.cancelPending().catchError((Object _) {}));
+      _player.clearRetainedFrame();
+    }
+    unawaited(
+      _player
+          .stop()
+          .timeout(const Duration(seconds: 2))
+          .catchError((Object _) {}),
+    );
+    final previous = _plan;
+    _plan = null;
+    _openedIndex = -1;
+    _openedDetail = null;
+    if (previous != null) unawaited(_releaseSession(previous.session));
+    var message = failure.message;
+    if (failure.code == 'source_blocked' && failure.retryAt != null) {
+      final seconds = failure.retryAt!.difference(DateTime.now()).inSeconds;
+      if (seconds > 0) {
+        message = '$message 请等待约 ${seconds + 1} 秒后手动重试，也可换一集。';
+      }
+    }
+    setState(() {
+      _loading = false;
+      _smoothTransition = false;
+      _transitionWaitVisible = false;
+      _error = message;
+      _localFailure = false;
+    });
+    widget.handoff?.fail(message);
+    _syncScreenOn();
   }
 
   bool get _hasRetainedFrame =>
@@ -1228,7 +1663,8 @@ class _PlayerScreenState extends State<PlayerScreen>
   }) async {
     final detail = nextDetail ?? _detail;
     final changingSeason = !identical(detail, _detail);
-    if (_closed ||
+    if ((Platform.isWindows && WindowsUpdateRuntime.restarting) ||
+        _closed ||
         widget.store.profileEpoch != _profileEpoch ||
         (changingSeason &&
             (widget.store.locked ||
@@ -1237,6 +1673,24 @@ class _PlayerScreenState extends State<PlayerScreen>
         index >= detail.episodes.length) {
       return;
     }
+    final previousDeadline = recoveryAction == null ? null : _attempt?.deadline;
+    _cancelOperations();
+    _attempt?.cancel();
+    unawaited(_loader.cancel().catchError((Object _) {}));
+    if (_player is LunaExoPlayer) {
+      unawaited(_player.cancelPending().catchError((Object _) {}));
+    }
+    final ticket = ++_generation;
+    late final PlaybackAttempt attempt;
+    attempt = PlaybackAttempt(
+      deadline:
+          detail.drama.source == SourceSite.hongguo.id && !widget.localOnly
+          ? previousDeadline ?? DateTime.now().add(const Duration(seconds: 45))
+          : null,
+      onTimeout: () => _failAttempt(attempt, PlaybackAttempt.timeoutFailure),
+    );
+    _attempt = attempt;
+    _attemptPosition = Duration(milliseconds: (position * 1000).round());
     _cancelSeasonAdvance();
     _completedSeasonKey = null;
     _dismissSeasonNotice();
@@ -1282,7 +1736,6 @@ class _PlayerScreenState extends State<PlayerScreen>
                 )
         : Future<PlaybackPlan?>.value();
     _preloader.clear();
-    final ticket = ++_generation;
     _transitionWaitTimer?.cancel();
     _smoothTransition = smooth;
     _transitionWaitVisible = false;
@@ -1305,6 +1758,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     _health.reset();
     if (recoveryAction == null) {
       _recovery.reset();
+      _decoderFailure = false;
       _playIntent = playWhenReady;
     }
     _resumePosition = position;
@@ -1339,7 +1793,15 @@ class _PlayerScreenState extends State<PlayerScreen>
             ? 'automatic'
             : 'selection'}, reuse=$smooth',
       );
-      warmed = await warmedFuture;
+      warmed = await attempt.guard(
+        warmedFuture.then((plan) {
+          if (plan != null && (_closed || ticket != _generation)) {
+            unawaited(_releaseSession(plan.session));
+            return null;
+          }
+          return plan;
+        }),
+      );
       DiaryService.add(
         '[Switch] episode=${detail.episodes[index].number}, phase=preload, elapsedMs=${switchClock.elapsedMilliseconds}, hit=${warmed != null}, startup=${warmed?.startupReady ?? false}, complete=${warmed?.preloadComplete ?? false}',
       );
@@ -1348,15 +1810,16 @@ class _PlayerScreenState extends State<PlayerScreen>
         if (_closed || ticket != _generation) {
           return;
         }
-        await pausedPrevious;
-        await frameReady;
+        await attempt.guard(pausedPrevious);
+        await attempt.guard(frameReady);
         if (_closed || ticket != _generation) return;
         if (smooth) {
           unawaited(_saveProgress(flush: true));
         } else {
-          await _saveProgress(flush: true);
+          await attempt.guard(_saveProgress(flush: true));
         }
-        await _enhancement.beforeMedia();
+        if (_closed || ticket != _generation) return;
+        await attempt.guard(_enhancement.beforeMedia());
         if (_closed || ticket != _generation) return;
         _openedIndex = -1;
         _openedDetail = null;
@@ -1366,7 +1829,8 @@ class _PlayerScreenState extends State<PlayerScreen>
             tags: detail.drama.tags,
           );
         }
-        if (!smooth) await _player.stop();
+        if (!smooth) await attempt.guard(_player.stop());
+        if (_closed || ticket != _generation) return;
         final previous = _plan;
         _plan = null;
         if (recoveryAction == PlaybackRecoveryAction.alternative) {
@@ -1376,7 +1840,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         } else if (previous != null) {
           await _releaseSession(previous.session);
         }
-      });
+      }, attempt: attempt);
       if (_closed || ticket != _generation) {
         return;
       }
@@ -1388,17 +1852,19 @@ class _PlayerScreenState extends State<PlayerScreen>
             ? 'preloaded'
             : 'fresh'}',
       );
-      prepared = retained != null
-          ? await _loader.fallback(retained!)
-          : warmed != null
-          ? await _loader.use(warmed)
-          : await _loader.load(
-              detail.drama,
-              detail.episodes[index],
-              quality: _requestedQuality,
-              localOnly: widget.localOnly,
-              online: _forceOnline,
-            );
+      prepared = await attempt.guard(
+        retained != null
+            ? _loader.fallback(retained!)
+            : warmed != null
+            ? _loader.use(warmed)
+            : _loader.load(
+                detail.drama,
+                detail.episodes[index],
+                quality: _requestedQuality,
+                localOnly: widget.localOnly,
+                online: _forceOnline,
+              ),
+      );
       if (prepared == null) {
         if (!_closed && ticket == _generation) {
           throw AppFailure('播放准备已中断，请重试');
@@ -1419,39 +1885,35 @@ class _PlayerScreenState extends State<PlayerScreen>
         }
         final platform = _player.platform;
         if (platform is NativePlayer) {
+          Future<void> setProperty(String name, String value) =>
+              attempt.guard(platform.setProperty(name, value));
           if (Platform.isAndroid) {
             if (_television) {
-              await platform.setProperty('hwdec', 'mediacodec');
-              await platform.setProperty('hwdec-codecs', 'all');
-              await platform.setProperty('opengl-pbo', 'yes');
-              await platform.setProperty('video-latency-hacks', 'yes');
-              await platform.setProperty('scale', 'bilinear');
-              await platform.setProperty('cscale', 'bilinear');
-              await platform.setProperty('dscale', 'bilinear');
-              await platform.setProperty('correct-downscaling', 'no');
-              await platform.setProperty('vd-lavc-skiploopfilter', 'all');
-              await platform.setProperty('vd-lavc-skipidct', 'all');
-              await platform.setProperty('vd-lavc-threads', '2');
-              await platform.setProperty(
-                'demuxer-max-bytes',
-                '${4 * 1024 * 1024}',
-              );
-              await platform.setProperty(
-                'demuxer-max-back-bytes',
-                '${1 * 1024 * 1024}',
-              );
-              await platform.setProperty('demuxer-readahead-secs', '5');
+              await setProperty('hwdec', 'mediacodec');
+              await setProperty('hwdec-codecs', 'all');
+              await setProperty('opengl-pbo', 'yes');
+              await setProperty('video-latency-hacks', 'yes');
+              await setProperty('scale', 'bilinear');
+              await setProperty('cscale', 'bilinear');
+              await setProperty('dscale', 'bilinear');
+              await setProperty('correct-downscaling', 'no');
+              await setProperty('vd-lavc-skiploopfilter', 'all');
+              await setProperty('vd-lavc-skipidct', 'all');
+              await setProperty('vd-lavc-threads', '2');
+              await setProperty('demuxer-max-bytes', '${4 * 1024 * 1024}');
+              await setProperty('demuxer-max-back-bytes', '${1 * 1024 * 1024}');
+              await setProperty('demuxer-readahead-secs', '5');
             } else {
-              await platform.setProperty('hwdec', 'auto-safe');
-              await platform.setProperty('hwdec-codecs', 'all');
-              await platform.setProperty('vd-lavc-skiploopfilter', 'nonkey');
-              await platform.setProperty('vd-lavc-threads', '4');
+              await setProperty('hwdec', 'auto-safe');
+              await setProperty('hwdec-codecs', 'all');
+              await setProperty('vd-lavc-skiploopfilter', 'nonkey');
+              await setProperty('vd-lavc-threads', '4');
             }
-            await platform.setProperty('vd-lavc-fast', 'yes');
-            await platform.setProperty('video-sync', 'audio');
-            await platform.setProperty('framedrop', 'vo');
+            await setProperty('vd-lavc-fast', 'yes');
+            await setProperty('video-sync', 'audio');
+            await setProperty('framedrop', 'vo');
           }
-          await platform.setProperty(
+          await setProperty(
             'demuxer-lavf-o',
             [
               'seg_max_retry=3',
@@ -1464,8 +1926,9 @@ class _PlayerScreenState extends State<PlayerScreen>
                 'decryption_key=${plan.decryptionKey}',
             ].join(','),
           );
-          await platform.setProperty('network-timeout', '20');
+          await setProperty('network-timeout', '20');
         }
+        if (_closed || ticket != _generation) return;
         _plan = plan;
         installed = true;
         _acceptErrors = true;
@@ -1499,23 +1962,34 @@ class _PlayerScreenState extends State<PlayerScreen>
             mediaType: plan.mediaType,
           );
         } else {
-          await _player.open(media, play: _foreground && _playIntent);
+          await _player.open(media, play: false);
+          if (_closed || ticket != _generation) return;
+          if (_foreground && _playIntent) {
+            await attempt.guard(_player.play());
+          }
         }
         if (_closed || ticket != _generation) {
           return;
+        }
+        if ((!_foreground || !_playIntent) && _player.state.playing) {
+          await attempt.guard(
+            _player.pause().timeout(const Duration(seconds: 3)),
+          );
+          if (_closed || ticket != _generation) return;
         }
         _openedIndex = index;
         _openedDetail = detail;
         _enhancement.mediaReady();
         _attachLanPlayback();
         _health.reset();
-        await _interactions.applySpeed();
+        await attempt.guard(_interactions.applySpeed());
         if (mounted && !_closed && ticket == _generation) {
           if (!_hasRetainedFrame) _transitionWaitTimer?.cancel();
           setState(() {
             _loading = false;
             _smoothTransition = _hasRetainedFrame;
           });
+          if (!_playIntent) attempt.stable();
           if (_pendingError) _queueRecovery();
           DiaryService.add(
             '[Switch] episode=${detail.episodes[index].number}, phase=ready, requestToReadyMs=${switchClock.elapsedMilliseconds}, prepared=${smooth && _player.lastTransitionUsedPrepared}, firstFrame=${smooth && _player.lastTransitionFirstFrame}',
@@ -1528,8 +2002,23 @@ class _PlayerScreenState extends State<PlayerScreen>
             _showSeasonNotice(detail, index);
           }
         }
-      });
+      }, attempt: attempt);
     } catch (error) {
+      if (error is PlaybackAttemptCancelled) {
+        if (prepared != null && !installed) {
+          unawaited(_releaseSession(prepared.session));
+        }
+        return;
+      }
+      if (error is AppFailure &&
+          (error.code == 'source_blocked' ||
+              error.code == 'playback_timeout')) {
+        if (prepared != null && !installed) {
+          unawaited(_releaseSession(prepared.session));
+        }
+        _failAttempt(attempt, error);
+        return;
+      }
       DiaryService.add('[Play] 捕获播放流程错误: $error');
       if (ticket == _generation && _player is LunaExoPlayer) {
         _player.clearRetainedFrame();
@@ -1542,8 +2031,9 @@ class _PlayerScreenState extends State<PlayerScreen>
             _smoothTransition = false;
           });
           _acceptErrors = true;
-          _queueRecovery();
+          _queueRecovery(error: error.toString());
         } else {
+          attempt.stable();
           if (prepared != null) {
             await _releaseSession(prepared.session);
           }
@@ -1594,7 +2084,9 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   bool get _showFullscreen =>
       _television ||
-      _fullscreen ||
+      (_windowsDesktop && WindowsDesktop.current != null
+          ? WindowsDesktop.current!.fullscreen
+          : _fullscreen) ||
       (_mobile &&
           !_automaticFullscreenSuppressed &&
           _aspectRatio >= 1 &&
@@ -1614,7 +2106,9 @@ class _PlayerScreenState extends State<PlayerScreen>
       _automaticFullscreenSuppressed = !fullscreen;
     });
     try {
-      if (Platform.isWindows) {
+      if (_windowsDesktop && WindowsDesktop.current != null) {
+        await WindowsDesktop.current!.setFullscreen(fullscreen);
+      } else if (Platform.isWindows) {
         await windowManager.setFullScreen(fullscreen);
       } else if (_mobile) {
         await (_orientationController?.setPlayback(
@@ -1644,6 +2138,66 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
+  Future<void> _setWindowsEpisodes(bool expanded) async {
+    if (!_windowsDesktop || _closed || !mounted) return;
+    _interactions.cancel();
+    setState(() {
+      _windowsEpisodesExpanded = expanded;
+      _windowsActivityRevision++;
+    });
+    _playerFocus.requestFocus();
+    try {
+      final saved = await widget.store.preferences.setBool(
+        'windows_episode_sidebar_expanded',
+        expanded,
+      );
+      if (!saved && mounted && !_closed) _interactions.hint('选集栏偏好暂未保存');
+    } catch (_) {
+      if (mounted && !_closed) _interactions.hint('选集栏偏好暂未保存');
+    }
+  }
+
+  Future<void> _windowsEpisodes() => _windowsSidebarAvailable
+      ? _setWindowsEpisodes(!_windowsEpisodesExpanded)
+      : _openPanel(PlayerMenuSection.episodes);
+
+  void _desktopChanged() {
+    if (!mounted || _closed) return;
+    _applyLifecycleVisibility(pauseWhenHidden: false);
+    setState(() {});
+  }
+
+  void _syncDesktopPlayback() {
+    if (!_windowsDesktop || _closed) return;
+    final attached =
+        widget.store.profileEpoch == _profileEpoch &&
+        !widget.store.locked &&
+        widget.store.allowsSource(_detail.drama.source);
+    unawaited(
+      WindowsDesktop.current
+          ?.updatePlayback(
+            attached: attached,
+            playing: attached && _player.state.playing,
+          )
+          .catchError((Object _) {}),
+    );
+  }
+
+  Future<void> _toggleMini() async {
+    final desktop = WindowsDesktop.current;
+    if (desktop == null || _closed) return;
+    _interactions.cancel();
+    try {
+      if (desktop.mini) {
+        await desktop.leaveMini();
+      } else {
+        await desktop.enterMini(aspectRatio: _aspectRatio);
+      }
+    } catch (_) {
+      if (mounted && !_closed) _notice('无法切换迷你窗，请重试');
+    }
+  }
+
   void _notice(String message) {
     if (!mounted || _closed) return;
     ScaffoldMessenger.of(
@@ -1661,9 +2215,12 @@ class _PlayerScreenState extends State<PlayerScreen>
       preload: true,
     );
     final outputChanged =
-        _television &&
         _player is LunaExoPlayer &&
-        nextPreferences.tvTextureOutput != _preferences.tvTextureOutput;
+        ((_television &&
+                nextPreferences.tvTextureOutput !=
+                    _preferences.tvTextureOutput) ||
+            (_televisionDevice &&
+                nextPreferences.tvDecoderMode != _preferences.tvDecoderMode));
     await widget.store.setPlaybackPreferences(nextPreferences);
     if (!mounted || _closed || widget.store.profileEpoch != _profileEpoch)
       return;
@@ -1674,6 +2231,8 @@ class _PlayerScreenState extends State<PlayerScreen>
       _requestedQuality = nextPreferences.quality;
       _autoAdvance = true;
       _danmakuEnabled = nextPreferences.danmaku;
+      _danmakuSpeed = nextPreferences.danmakuSpeed;
+      _danmakuOpacity = nextPreferences.danmakuOpacity;
       _preloadEnabled = true;
     });
     _danmaku.setEnabled(_danmakuEnabled);
@@ -1689,7 +2248,7 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Future<void> _toggleFavorite() async {
     try {
-      await widget.store.toggleFavorite(_detail.drama);
+      await widget.store.toggleSeriesFavorite(_detail.drama);
       if (mounted && !_closed) setState(() {});
     } catch (_) {
       _notice('追剧记录未能保存，请检查存储空间后重试');
@@ -1747,11 +2306,59 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
   }
 
+  bool get _canBrowseSeasons =>
+      _detail.drama.source == SourceSite.hongguo.id &&
+      !widget.localOnly &&
+      widget.allowOnlineFallback &&
+      widget.mediaId == null;
+
+  Future<void> _browseSeasons() async {
+    if (_panelOpen || _closed || !_canBrowseSeasons) return;
+    _cancelSeasonAdvance();
+    _interactions.cancel();
+    setState(() => _panelOpen = true);
+    try {
+      final selection = await Navigator.of(context)
+          .push<SeriesEpisodeSelection>(
+            MaterialPageRoute(
+              builder: (_) => SeriesBrowserScreen(
+                anchor: _detail.drama,
+                initialDetail: _detail,
+                currentEpisode: _detail.episodes[_index].number,
+                repository: widget.repository,
+                store: widget.store,
+              ),
+            ),
+          );
+      if (!mounted ||
+          _closed ||
+          selection == null ||
+          widget.store.profileEpoch != _profileEpoch ||
+          widget.store.locked ||
+          !widget.store.allowsSource(selection.detail.drama.source)) {
+        return;
+      }
+      await _saveProgress(flush: true);
+      if (!mounted || _closed) return;
+      await _play(
+        selection.index,
+        nextDetail: selection.detail,
+        position: selection.position,
+      );
+    } finally {
+      if (mounted && !_closed) {
+        setState(() => _panelOpen = false);
+        _playerFocus.requestFocus();
+      }
+    }
+  }
+
   Future<void> _openPanel(PlayerMenuSection section) async {
     if (_panelOpen || _closed) return;
     _interactions.cancel();
     setState(() => _panelOpen = true);
     final menuTheme = _showFullscreen ? AppTheme.dark : Theme.of(context);
+    var browseSeasons = false;
     try {
       final index = await showDialog<int>(
         context: context,
@@ -1772,9 +2379,13 @@ class _PlayerScreenState extends State<PlayerScreen>
               qualities: _plan?.qualities ?? [],
               actualQuality: _plan?.quality ?? 0,
               local: _plan?.local == true,
-              favorite: widget.store.isFavorite(_detail.drama.id),
+              favorite: widget.store.followedSeries(_detail.drama) != null,
               mobile: _mobile,
+              mobileReminders: _mobileRemindersAllowed,
               onEpisode: (index) => Navigator.pop(menuContext, index),
+              onAllSeasons: _canBrowseSeasons
+                  ? () => Navigator.pop(menuContext, -1)
+                  : null,
               onPreferences: _setPreferences,
               showDanmaku: _detail.drama.source == 'hongguo',
               danmakuStatus: _danmaku.status,
@@ -1785,12 +2396,15 @@ class _PlayerScreenState extends State<PlayerScreen>
                 unawaited(_enhancement.toggleCompare());
                 Navigator.pop(menuContext);
               },
-              onFavorite: () => widget.store.toggleFavorite(_detail.drama),
+              onFavorite: () =>
+                  widget.store.toggleSeriesFavorite(_detail.drama),
             ),
           ),
         ),
       );
-      if (mounted && !_closed && index != null && index != _index) {
+      if (index == -1) {
+        browseSeasons = true;
+      } else if (mounted && !_closed && index != null && index != _index) {
         await _play(index);
       }
     } finally {
@@ -1799,6 +2413,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         _playerFocus.requestFocus();
       }
     }
+    if (browseSeasons && mounted && !_closed) await _browseSeasons();
   }
 
   Future<void> _seekTo(Duration target, {bool resumeAfterSeek = false}) async {
@@ -1812,6 +2427,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     final intentSequence = _seasonSequence;
     final resume = resumeAfterSeek && !_player.state.playing;
     _danmaku.beginSeek();
+    _syncWatchReminders();
     _enhancement.ignorePerformance();
     var succeeded = false;
     try {
@@ -1822,6 +2438,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     } finally {
       if (!_closed && ticket == _seekSequence && generation == _generation) {
         _danmaku.endSeek(succeeded ? target : _player.state.position);
+        _syncWatchReminders();
       }
     }
     if (succeeded &&
@@ -1880,21 +2497,65 @@ class _PlayerScreenState extends State<PlayerScreen>
     try {
       index = await showDialog<int>(
         context: context,
-        builder: (_) => Theme(
+        builder: (dialogContext) => Theme(
           data: televisionTheme(AppTheme.dark),
           child: TelevisionEpisodeDialog(
             episodes: _detail.episodes,
             currentIndex: _index,
+            onAllSeasons: _canBrowseSeasons
+                ? () => Navigator.pop(dialogContext, -1)
+                : null,
           ),
         ),
       );
     } finally {
       if (mounted && !_closed) setState(() => _panelOpen = false);
     }
-    if (index != null && mounted && !_closed && index != _index) {
+    if (index == -1 && mounted && !_closed) {
+      await _browseSeasons();
+    } else if (index != null && mounted && !_closed && index != _index) {
       await _play(index);
     }
   }
+
+  Future<void> _changePlaybackRoute() async {
+    if (_closed || _loading || _plan?.hasAlternative != true) return;
+    _recovery.reset();
+    _decoderFailure = false;
+    _playIntent = true;
+    await _play(
+      _index,
+      position: _currentPosition,
+      recoveryAction: PlaybackRecoveryAction.alternative,
+    );
+  }
+
+  Widget _televisionRecoveryActions(BuildContext context) => Wrap(
+    spacing: 12,
+    runSpacing: 10,
+    alignment: WrapAlignment.center,
+    children: [
+      FilledButton.tonalIcon(
+        key: const ValueKey('tv-recovery-settings'),
+        onPressed: () => _televisionSettings(context),
+        icon: const Icon(Icons.tune_rounded),
+        label: const Text('播放设置'),
+      ),
+      if (!_loading && !_localFailure && _plan?.hasAlternative == true)
+        FilledButton.tonalIcon(
+          key: const ValueKey('tv-recovery-source'),
+          onPressed: _changePlaybackRoute,
+          icon: const Icon(Icons.swap_horiz_rounded),
+          label: const Text('更换播放线路'),
+        ),
+      TextButton.icon(
+        key: const ValueKey('tv-recovery-back'),
+        onPressed: () => Navigator.of(context).maybePop(),
+        icon: const Icon(Icons.arrow_back_rounded),
+        label: const Text('返回选剧'),
+      ),
+    ],
+  );
 
   Future<void> _televisionSettings(BuildContext context) async {
     if (_panelOpen || _closed) return;
@@ -1912,12 +2573,17 @@ class _PlayerScreenState extends State<PlayerScreen>
               tvTextureOutput: _player is LunaExoPlayer
                   ? _preferences.tvTextureOutput
                   : null,
+              tvDecoderMode: _player is LunaExoPlayer && _televisionDevice
+                  ? _preferences.tvDecoderMode
+                  : null,
               quality: _requestedQuality,
               qualities: _plan?.qualities ?? [],
-              favorite: widget.store.isFavorite(_detail.drama.id),
+              favorite: widget.store.followedSeries(_detail.drama) != null,
               onFavorite: _toggleFavorite,
               autoAdvance: _autoAdvance,
               danmaku: _danmakuEnabled,
+              danmakuSpeed: _danmakuSpeed,
+              danmakuOpacity: _danmakuOpacity,
               showDanmaku: _detail.drama.source == 'hongguo',
               danmakuStatus: _danmaku.status,
               onRetryDanmaku: _danmaku.canRetry ? _danmaku.retry : null,
@@ -1941,9 +2607,12 @@ class _PlayerScreenState extends State<PlayerScreen>
         _preferences.copyWith(
           speed: selection.speed,
           tvTextureOutput: selection.tvTextureOutput,
+          tvDecoderMode: selection.tvDecoderMode,
           quality: selection.quality,
           autoAdvance: true,
           danmaku: selection.danmaku,
+          danmakuSpeed: selection.danmakuSpeed,
+          danmakuOpacity: selection.danmakuOpacity,
           preload: true,
           enhancement: selection.enhancement,
         ),
@@ -1954,6 +2623,10 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   void _back() {
+    if (_reminderVisible) {
+      _watchReminders?.dismiss();
+      return;
+    }
     _cancelSeasonAdvance();
     _dismissSeasonNotice();
     if (_television) {
@@ -1970,8 +2643,25 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   @override
   void dispose() {
+    if (_windowsDesktop) {
+      WindowsDesktop.current?.removeListener(_desktopChanged);
+      unawaited(WindowsDesktop.current?.detachPlayback(this));
+    }
+    if (identical(WindowsUpdateRuntime.owner, this)) {
+      WindowsUpdateRuntime.owner = null;
+      WindowsUpdateRuntime.playing = null;
+      WindowsUpdateRuntime.savePlayback = null;
+    }
     _transitionWaitTimer?.cancel();
+    _watchReminders?.removeListener(_reminderChanged);
+    _watchReminders?.detachPlayback(this);
     _closed = true;
+    _cancelOperations();
+    _attempt?.cancel();
+    _attempt = null;
+    if (_player is LunaExoPlayer) {
+      unawaited(_player.cancelPending().catchError((Object _) {}));
+    }
     if (_player is LunaExoPlayer) {
       _player.frameHold.removeListener(_retainedFrameChanged);
       _player.clearRetainedFrame();
@@ -1988,6 +2678,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     _generation++;
     WidgetsBinding.instance.removeObserver(this);
     _saveTimer?.cancel();
+    _windowsVolumeTimer?.cancel();
+    unawaited(_saveWindowsVolume());
     _healthTimer?.cancel();
     _errorTimer?.cancel();
     _pictureInPictureExitTimer?.cancel();
@@ -2003,13 +2695,21 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
     unawaited(_releaseSession(_session));
     unawaited(_loader.close().catchError((Object _) {}));
-    unawaited(
-      _operations.catchError((Object _) {}).then((_) async {
-        await _interactions.pendingRates.catchError((Object _) {});
-        await enhancementClosed.catchError((Object _) {});
-        await _player.dispose();
-      }),
-    );
+    final disposal = () async {
+      await _interactions.pendingRates
+          .timeout(const Duration(seconds: 2))
+          .catchError((Object _) {});
+      await enhancementClosed
+          .timeout(const Duration(seconds: 2))
+          .catchError((Object _) {});
+      try {
+        await _player.dispose().timeout(const Duration(seconds: 5));
+      } catch (error) {
+        DiaryService.add('[Player] cleanup incomplete: $error');
+      }
+    }();
+    if (_windowsDesktop) WindowsDesktop.current?.playbackDisposal = disposal;
+    unawaited(disposal);
     if (Platform.isWindows) {
       unawaited(windowManager.setFullScreen(false));
     } else if (_mobile || _television && Platform.isAndroid) {
@@ -2041,7 +2741,12 @@ class _PlayerScreenState extends State<PlayerScreen>
               : Theme.of(context).brightness;
           return AnnotatedRegion<SystemUiOverlayStyle>(
             value: AppTheme.systemBars(overlayBrightness),
-            child: _buildPlayer(context),
+            child: Stack(
+              children: [
+                _buildPlayer(context),
+                if (_reminderVisible) _watchReminderDialog(),
+              ],
+            ),
           );
         },
       ),
@@ -2050,12 +2755,26 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Widget _buildPlayer(BuildContext context) {
     final theme = Theme.of(context);
-    final title = _detail.drama.title;
+    final title = _windowsDesktop
+        ? '${_detail.drama.title} · ${episodeProgressLabel(_detail, _index)}'
+        : _detail.drama.title;
     final fullscreen = _showFullscreen;
     final pictureInPicture = _pictureInPictureVisible;
     return PopScope(
-      canPop: _television ? !_televisionOverlayVisible : !fullscreen,
+      canPop: _windowsMini
+          ? false
+          : _television
+          ? !_televisionOverlayVisible
+          : !fullscreen && !_reminderVisible,
       onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _windowsMini) {
+          unawaited(_toggleMini());
+          return;
+        }
+        if (!didPop && _reminderVisible) {
+          _watchReminders?.dismiss();
+          return;
+        }
         _cancelSeasonAdvance();
         _dismissSeasonNotice();
         if (!didPop && _television) {
@@ -2068,8 +2787,14 @@ class _PlayerScreenState extends State<PlayerScreen>
       },
       child: CallbackShortcuts(
         bindings: {
-          const SingleActivator(LogicalKeyboardKey.escape): _back,
-          const SingleActivator(LogicalKeyboardKey.goBack): _back,
+          const SingleActivator(
+            LogicalKeyboardKey.escape,
+            includeRepeats: false,
+          ): _back,
+          const SingleActivator(
+            LogicalKeyboardKey.goBack,
+            includeRepeats: false,
+          ): _back,
         },
         child: Focus(
           focusNode: _playerFocus,
@@ -2086,18 +2811,62 @@ class _PlayerScreenState extends State<PlayerScreen>
           canRequestFocus: !_television,
           skipTraversal: _television,
           child: Scaffold(
-            backgroundColor: fullscreen || pictureInPicture || _portraitWatching
+            backgroundColor:
+                fullscreen ||
+                    _windowsMini ||
+                    pictureInPicture ||
+                    _portraitWatching
                 ? Colors.black
                 : theme.scaffoldBackgroundColor,
-            appBar: pictureInPicture || fullscreen || _mobile
+            appBar: pictureInPicture || fullscreen || _windowsMini || _mobile
                 ? null
                 : AppBar(
-                    title: Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    title: _windowsDesktop
+                        ? Semantics(
+                            label: title,
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    _detail.drama.title,
+                                    key: const ValueKey('windows-player-title'),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Flexible(
+                                  child: Text(
+                                    episodeProgressLabel(_detail, _index),
+                                    key: const ValueKey(
+                                      'windows-player-episode',
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(fontSize: 16),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : Text(
+                            title,
+                            key: _windowsDesktop
+                                ? const ValueKey('windows-player-title')
+                                : null,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                     actions: [
+                      if (_windowsDesktop && WindowsDesktop.current != null)
+                        IconButton(
+                          key: const ValueKey('windows-mini'),
+                          tooltip: '迷你窗（置顶）',
+                          onPressed: _toggleMini,
+                          icon: const Icon(
+                            Icons.picture_in_picture_alt_rounded,
+                          ),
+                        ),
                       IconButton(
                         tooltip: '旋转与全屏',
                         onPressed: _rotate,
@@ -2113,6 +2882,30 @@ class _PlayerScreenState extends State<PlayerScreen>
                     child: LayoutBuilder(
                       builder: (context, constraints) {
                         final desktop = constraints.maxWidth >= 840;
+                        if (_windowsDesktop) {
+                          final visible =
+                              _windowsEpisodesExpanded &&
+                              !fullscreen &&
+                              !_windowsMini &&
+                              constraints.maxWidth >= 760;
+                          return Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Expanded(child: _videoPane(context)),
+                              Visibility(
+                                visible: visible,
+                                maintainState: true,
+                                child: SizedBox(
+                                  key: const ValueKey(
+                                    'windows-episode-sidebar',
+                                  ),
+                                  width: desktop ? 312 : 210,
+                                  child: _windowsSidebar(),
+                                ),
+                              ),
+                            ],
+                          );
+                        }
                         if (fullscreen || _portraitWatching) {
                           return _videoPane(context);
                         }
@@ -2175,7 +2968,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         ? televisionTheme(AppTheme.dark)
         : AppTheme.dark;
     final title =
-        '${_detail.drama.title} · 第 ${_detail.episodes[_index].number} 集${_plan?.local == true ? ' · 本地' : ''}${_detail.episodes[_index].vip ? ' · VIP 试看' : ''}${(_plan?.routeIndex ?? 0) > 0 ? ' · 线路 ${_plan!.routeIndex + 1}' : ''}';
+        '${_detail.drama.title} · ${episodeProgressLabel(_detail, _index)}${_plan?.local == true ? ' · 本地' : ''}${_detail.episodes[_index].vip ? ' · VIP 试看' : ''}${(_plan?.routeIndex ?? 0) > 0 ? ' · 线路 ${_plan!.routeIndex + 1}' : ''}';
     final hideOverlayForPictureInPicture = _pictureInPictureVisible;
     final Widget controls = hideOverlayForPictureInPicture
         ? const SizedBox.shrink()
@@ -2229,7 +3022,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             showOnPlaybackReady: _showControlsOnPlaybackReady,
             quietEpisodeChange: () => _quietEpisodeChange,
             title: _detail.drama.title,
-            episodeLabel: '第 ${_detail.episodes[_index].number} 集',
+            episodeLabel: episodeProgressLabel(_detail, _index),
             portraitFooter: _portraitWatching ? _mobilePortraitFooter() : null,
             onTogglePlayback: _togglePlayback,
             onForward: () => _seek(15, resumeAfterSeek: true),
@@ -2246,8 +3039,26 @@ class _PlayerScreenState extends State<PlayerScreen>
             onEpisodes: () => _portraitWatching
                 ? _openMobileDetails(0)
                 : _openPanel(PlayerMenuSection.episodes),
+            onSidebar: _windowsDesktop ? _windowsEpisodes : null,
+            onMini: _windowsDesktop && WindowsDesktop.current != null
+                ? _toggleMini
+                : null,
+            desktopMini: _windowsMini,
+            desktopEpisodesExpanded: _windowsDesktop
+                ? _windowsSidebarAvailable && _windowsEpisodesExpanded
+                : null,
+            desktopActivityRevision: _windowsActivityRevision,
+            episodesTooltip: !_windowsDesktop || !_windowsSidebarAvailable
+                ? null
+                : _windowsEpisodesExpanded
+                ? '收起选集栏'
+                : '展开选集栏',
             onSpeed: () => _openPanel(PlayerMenuSection.speed),
             onQuality: () => _openPanel(PlayerMenuSection.quality),
+            onSettings: () => _openPanel(PlayerMenuSection.settings),
+            onDanmakuSettings: _mobile
+                ? () => _openPanel(PlayerMenuSection.danmaku)
+                : null,
             onDanmaku: _detail.drama.source == 'hongguo'
                 ? _toggleDanmaku
                 : null,
@@ -2301,8 +3112,18 @@ class _PlayerScreenState extends State<PlayerScreen>
         if (!hideOverlayForPictureInPicture && !_hasRetainedFrame)
           DanmakuOverlay(
             controller: _danmaku,
+            animationBehavior: AppLayout.isTelevisionDevice(context)
+                ? AnimationBehavior.preserve
+                : AnimationBehavior.normal,
+            desktop: _windowsDesktop,
+            speed: _preferences.effectiveDanmakuSpeed(mobile: _mobile),
+            opacity: _preferences.effectiveDanmakuOpacity(
+              mobile: _mobile,
+              television: _television,
+            ),
             aspectRatio: _aspectRatio,
             television: _television,
+            mobile: _mobile,
           ),
         controls,
         if (!hideOverlayForPictureInPicture && _seasonNotice != null)
@@ -2350,6 +3171,7 @@ class _PlayerScreenState extends State<PlayerScreen>
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted && !_closed) {
               _enhancement.setViewport(pixels, television: _television);
+              _recordWindowsVideoGeometry();
             }
           });
           return Stack(
@@ -2367,6 +3189,7 @@ class _PlayerScreenState extends State<PlayerScreen>
               else
                 Video(
                   controller: _video!,
+                  pauseUponEnteringBackgroundMode: !_windowsDesktop,
                   fit: BoxFit.contain,
                   controls: (_) => layeredControls,
                 ),
@@ -2405,6 +3228,16 @@ class _PlayerScreenState extends State<PlayerScreen>
                     ),
                   ),
                 ),
+              if (_televisionDevice &&
+                  _loading &&
+                  _error == null &&
+                  !hideOverlayForPictureInPicture)
+                Positioned(
+                  bottom: 24,
+                  left: 24,
+                  right: 24,
+                  child: _televisionRecoveryActions(context),
+                ),
               if (_error != null && !hideOverlayForPictureInPicture)
                 ColoredBox(
                   color: Colors.black.withValues(alpha: .9),
@@ -2419,6 +3252,8 @@ class _PlayerScreenState extends State<PlayerScreen>
                       alignment: WrapAlignment.center,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
+                        if (_televisionDevice)
+                          _televisionRecoveryActions(context),
                         FilledButton.tonalIcon(
                           onPressed: () =>
                               DiaryService.showDiaryDialog(context),
@@ -2509,7 +3344,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       enabled: _mobile && !_showFullscreen,
       contentReady: !_loading && _error == null,
       currentLabel:
-          '${_detail.drama.title}\n第 ${_detail.episodes[_index].number} 集',
+          '${_detail.drama.title}\n${episodeProgressLabel(_detail, _index)}',
       previousLabel: _index > 0
           ? '${_detail.drama.title}\n第 ${_detail.episodes[_index - 1].number} 集'
           : '已经是第一集',
@@ -2562,9 +3397,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             label: Row(
               children: [
                 Expanded(
-                  child: Text(
-                    '选集 · 第 ${_detail.episodes[_index].number} 集 / 共 ${_detail.episodes.length} 集',
-                  ),
+                  child: Text('选集 · ${episodeProgressLabel(_detail, _index)}'),
                 ),
                 const Icon(Icons.chevron_right_rounded, size: 18),
               ],
@@ -2595,6 +3428,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       _panelOpen = true;
       _mobileTab = tab;
     });
+    var browseSeasons = false;
     try {
       await showModalBottomSheet<void>(
         context: context,
@@ -2615,6 +3449,10 @@ class _PlayerScreenState extends State<PlayerScreen>
                   onTabChanged: (value) =>
                       refreshSheet(() => _mobileTab = value),
                   onClose: () => Navigator.pop(sheetContext),
+                  onAllSeasons: () {
+                    browseSeasons = true;
+                    Navigator.pop(sheetContext);
+                  },
                   onEpisodeSelected: (index) {
                     Navigator.pop(sheetContext);
                     if (index != _index) unawaited(_play(index));
@@ -2631,6 +3469,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         _playerFocus.requestFocus();
       }
     }
+    if (browseSeasons && mounted && !_closed) await _browseSeasons();
   }
 
   Widget _mobilePlaybackPanel({
@@ -2638,6 +3477,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     ValueChanged<int>? onTabChanged,
     VoidCallback? onClose,
     ValueChanged<int>? onEpisodeSelected,
+    VoidCallback? onAllSeasons,
   }) {
     final context = panelContext ?? this.context;
     final colors = Theme.of(context).colorScheme;
@@ -2669,6 +3509,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                       ? _episodePanel(
                           compact: true,
                           onSelected: onEpisodeSelected,
+                          onAllSeasons: onAllSeasons,
                           panelContext: context,
                         )
                       : _mobileTab == 1
@@ -2816,7 +3657,11 @@ class _PlayerScreenState extends State<PlayerScreen>
             ),
           ],
           const SizedBox(height: 12),
-          Text(body, style: const TextStyle(height: 1.55)),
+          Text(
+            body,
+            key: const ValueKey('player-description-text'),
+            style: TextStyle(color: colors.onSurface, height: 1.55),
+          ),
           if (_detail.warning.isNotEmpty) ...[
             const SizedBox(height: 12),
             Text(_detail.warning, style: TextStyle(color: colors.error)),
@@ -2828,63 +3673,17 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Widget _mobileFollowControl(Drama drama, {BuildContext? panelContext}) {
     final context = panelContext ?? this.context;
-    final state = widget.store.following(drama.id);
-    return PopupMenuButton<String>(
+    final followed = widget.store.followedSeries(drama) != null;
+    return OutlinedButton.icon(
       key: const ValueKey('player-follow-status'),
-      tooltip: '追剧与观看状态',
-      onSelected: (value) async {
-        if (_profileEpoch != widget.store.profileEpoch) return;
-        if (value == 'remove') {
-          await saveUserChange(
-            context,
-            () => widget.store.toggleFavorite(drama),
-          );
-        } else {
-          final status = FollowStatus.values.firstWhere(
-            (status) => status.name == value,
-          );
-          await saveUserChange(
-            context,
-            () => widget.store.setFollowStatus(drama, status),
-          );
-        }
-        if (mounted && !_closed) setState(() {});
-      },
-      itemBuilder: (_) => [
-        for (final status in FollowStatus.values)
-          CheckedPopupMenuItem(
-            value: status.name,
-            checked: state?.status == status,
-            child: Text(status.label),
-          ),
-        if (state != null)
-          const PopupMenuItem(value: 'remove', child: Text('取消追剧')),
-      ],
-      child: Container(
-        constraints: const BoxConstraints(minHeight: 36),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-        decoration: BoxDecoration(
-          color: state == null
-              ? Theme.of(context).colorScheme.surfaceContainerHighest
-              : Theme.of(context).colorScheme.secondaryContainer,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              state == null
-                  ? Icons.bookmark_add_outlined
-                  : Icons.bookmark_rounded,
-              size: 18,
-            ),
-            const SizedBox(width: 6),
-            Text(state?.label ?? '加入追剧'),
-            const SizedBox(width: 2),
-            const Icon(Icons.expand_more_rounded, size: 16),
-          ],
-        ),
+      onPressed: () => saveUserChange(
+        context,
+        () => widget.store.toggleSeriesFavorite(drama),
       ),
+      icon: Icon(
+        followed ? Icons.bookmark_rounded : Icons.bookmark_add_outlined,
+      ),
+      label: Text(followed ? '取消追剧' : '加入追剧'),
     );
   }
 
@@ -2910,19 +3709,91 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
   }
 
+  Widget _windowsSidebar() {
+    final colors = Theme.of(context).colorScheme;
+    Widget tab(bool description, String label) => Expanded(
+      child: Semantics(
+        selected: _windowsDescription == description,
+        child: TextButton(
+          key: ValueKey(
+            description
+                ? 'windows-sidebar-description'
+                : 'windows-sidebar-episodes',
+          ),
+          style: TextButton.styleFrom(
+            foregroundColor: _windowsDescription == description
+                ? colors.onPrimaryContainer
+                : colors.onSurface,
+            backgroundColor: _windowsDescription == description
+                ? colors.primaryContainer
+                : null,
+          ),
+          onPressed: () => setState(() => _windowsDescription = description),
+          child: Text(label),
+        ),
+      ),
+    );
+    return Column(
+      children: [
+        SizedBox(
+          height: 48,
+          child: Padding(
+            padding: const EdgeInsets.all(4),
+            child: Row(children: [tab(false, '选集'), tab(true, '简介')]),
+          ),
+        ),
+        Expanded(
+          child: IndexedStack(
+            index: _windowsDescription ? 1 : 0,
+            children: [
+              ExcludeFocus(
+                excluding: _windowsDescription,
+                child: _episodePanel(preserveScrollOnResize: true),
+              ),
+              ExcludeFocus(
+                excluding: !_windowsDescription,
+                child: WindowsDramaDescription(drama: _detail.drama),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _episodePanel({
     bool compact = false,
     ValueChanged<int>? onSelected,
     BuildContext? panelContext,
+    VoidCallback? onAllSeasons,
+    bool preserveScrollOnResize = false,
   }) => ColoredBox(
     color: Theme.of(panelContext ?? context).colorScheme.surface,
-    child: PlayerEpisodeGrid(
-      key: ValueKey(_detail.drama.id),
-      episodes: _detail.episodes,
-      currentIndex: _index,
-      compact: compact,
-      title: compact ? '剧集' : '选集',
-      onSelected: onSelected ?? (index) => _play(index),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_canBrowseSeasons)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: OutlinedButton.icon(
+              key: const ValueKey('player-all-seasons'),
+              onPressed: onAllSeasons ?? _browseSeasons,
+              icon: const Icon(Icons.video_library_outlined),
+              label: const Text('查看全季'),
+            ),
+          ),
+        Expanded(
+          child: PlayerEpisodeGrid(
+            key: ValueKey(_detail.drama.id),
+            episodes: _detail.episodes,
+            currentIndex: _index,
+            compact: compact,
+            title: compact ? '剧集' : '选集',
+            preserveScrollOnResize: preserveScrollOnResize,
+            onSelected: onSelected ?? (index) => _play(index),
+          ),
+        ),
+      ],
     ),
   );
 }

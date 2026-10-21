@@ -198,25 +198,17 @@ func (d *Downloader) resolveHongguoMedia(ctx context.Context, task Task) (provid
 	if !hongguoNumericID.MatchString(videoID) || !hongguoNumericID.MatchString(seriesID) {
 		return providerMedia{}, fmt.Errorf("红果章节 ID 无效，请重新获取章节")
 	}
-	media, nativeErr := d.resolveHongguoAppMedia(ctx, videoID)
-	if nativeErr == nil {
-		return media, nil
-	}
-	if err := ctx.Err(); err != nil {
-		return providerMedia{}, err
-	}
-	media, pageErr := d.resolveHongguoWebMedia(ctx, seriesID, videoID)
-	if pageErr == nil {
-		return media, nil
-	}
-	if err := ctx.Err(); err != nil {
-		return providerMedia{}, err
-	}
-	media, apiErr := d.resolveHongguoPlaybackAPI(ctx, seriesID, videoID)
-	if apiErr == nil {
-		return media, nil
-	}
-	return providerMedia{}, fmt.Errorf("红果 App 取流失败：%v；网页取流失败：%v；备用取流失败：%w", publicError(nativeErr), publicError(pageErr), apiErr)
+	return resolveHongguoMediaRoutes(ctx, []hongguoMediaRoute{
+		{name: "红果 App 取流失败", resolve: func(stage context.Context) (providerMedia, error) {
+			return d.resolveHongguoAppMedia(stage, videoID, task.Chapter.ContentType)
+		}},
+		{name: "网页取流失败", resolve: func(stage context.Context) (providerMedia, error) {
+			return d.resolveHongguoWebMedia(stage, seriesID, videoID)
+		}},
+		{name: "备用取流失败", resolve: func(stage context.Context) (providerMedia, error) {
+			return d.resolveHongguoPlaybackAPI(stage, seriesID, videoID)
+		}},
+	})
 }
 
 func (d *Downloader) resolveHongguoWebMedia(ctx context.Context, seriesID, videoID string) (providerMedia, error) {
@@ -232,7 +224,10 @@ func (d *Downloader) resolveHongguoWebMedia(ctx context.Context, seriesID, video
 	info, _ := page["video_player_info"].(map[string]any)
 	addresses := hongguoMediaAddresses(info)
 	if len(addresses) == 0 {
-		return providerMedia{}, fmt.Errorf("红果该集未提供公开播放地址，可能需要登录或 App 授权；不会将试看集冒充该集下载")
+		if page["protectedPlayback"] == true {
+			return providerMedia{}, errors.New("红果网页已启用受保护播放协议，当前客户端尚未适配；页面没有提供公开媒体地址")
+		}
+		return providerMedia{}, errors.New("红果网页未提供该集的公开媒体地址，当前没有明确的登录错误")
 	}
 	duration, _ := strconv.ParseFloat(mapString(info, "duration"), 64)
 	media := providerMedia{URL: addresses[0], Referer: d.providerBaseURL(sourceHongguo) + "/", Duration: time.Duration(duration * float64(time.Second))}

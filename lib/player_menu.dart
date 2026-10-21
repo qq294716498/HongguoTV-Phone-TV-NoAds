@@ -1,15 +1,18 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
+import 'app_layout.dart';
 import 'models.dart';
 import 'episode_browser.dart';
 import 'playback_preferences.dart';
+import 'watch_reminder_settings.dart';
 import 'video_enhancement.dart';
 import 'video_enhancement_settings.dart';
 import 'diary_service.dart';
 
-enum PlayerMenuSection { episodes, speed, quality, settings }
+enum PlayerMenuSection { episodes, speed, quality, settings, danmaku }
 
 class PlayerMenu extends StatefulWidget {
   const PlayerMenu({
@@ -27,11 +30,13 @@ class PlayerMenu extends StatefulWidget {
     required this.onPreferences,
     required this.onFavorite,
     this.showDanmaku = false,
+    this.mobileReminders = true,
     this.danmakuStatus = '',
     this.onRetryDanmaku,
     this.preloadStatus = '',
     this.enhancement,
     this.onCompareEnhancement,
+    this.onAllSeasons,
   });
 
   final PlayerMenuSection section;
@@ -44,11 +49,13 @@ class PlayerMenu extends StatefulWidget {
   final bool favorite;
   final bool mobile;
   final bool showDanmaku;
+  final bool mobileReminders;
   final String danmakuStatus;
   final VoidCallback? onRetryDanmaku;
   final String preloadStatus;
   final VideoEnhancementController? enhancement;
   final VoidCallback? onCompareEnhancement;
+  final VoidCallback? onAllSeasons;
   final ValueChanged<int> onEpisode;
   final Future<void> Function(PlaybackPreferences) onPreferences;
   final Future<void> Function() onFavorite;
@@ -86,6 +93,7 @@ class _PlayerMenuState extends State<PlayerMenu> {
       PlayerMenuSection.speed => '播放倍速',
       PlayerMenuSection.quality => '清晰度',
       PlayerMenuSection.settings => '播放设置',
+      PlayerMenuSection.danmaku => '弹幕设置',
     };
     return Dialog(
       key: const ValueKey('player-menu'),
@@ -125,6 +133,17 @@ class _PlayerMenuState extends State<PlayerMenu> {
                 child: Text(
                   _error!,
                   style: const TextStyle(color: Color(0xFFFFB4A8)),
+                ),
+              ),
+            if (widget.section == PlayerMenuSection.episodes &&
+                widget.onAllSeasons != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 18),
+                child: OutlinedButton.icon(
+                  key: const ValueKey('menu-all-seasons'),
+                  onPressed: widget.onAllSeasons,
+                  icon: const Icon(Icons.video_library_outlined),
+                  label: const Text('查看全季'),
                 ),
               ),
             Expanded(
@@ -239,7 +258,8 @@ class _PlayerMenuState extends State<PlayerMenu> {
             ),
             onCompare: widget.onCompareEnhancement ?? () {},
           ),
-        if (all && widget.showDanmaku) ...[
+        if ((all || widget.section == PlayerMenuSection.danmaku) &&
+            widget.showDanmaku) ...[
           SwitchListTile.adaptive(
             key: const ValueKey('player-danmaku-enabled'),
             contentPadding: EdgeInsets.zero,
@@ -254,6 +274,64 @@ class _PlayerMenuState extends State<PlayerMenu> {
                     ),
                   ),
           ),
+          if (widget.section == PlayerMenuSection.danmaku ||
+              widget.mobile ||
+              (!AppLayout.isTelevision(context) &&
+                  defaultTargetPlatform == TargetPlatform.windows)) ...[
+            const Text('弹幕速度（独立于视频倍速）'),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final speed in danmakuSpeeds)
+                  ChoiceChip(
+                    key: ValueKey('menu-danmaku-speed-$speed'),
+                    label: Text(
+                      '${speed}x${speed == (widget.mobile ? 1.15 : 1) ? '（默认）' : ''}',
+                    ),
+                    selected:
+                        speed ==
+                        preferences.effectiveDanmakuSpeed(
+                          mobile: widget.mobile,
+                        ),
+                    onSelected: _busy
+                        ? null
+                        : (_) => _run(
+                            () => widget.onPreferences(
+                              preferences.copyWith(danmakuSpeed: speed),
+                            ),
+                          ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+          ],
+          const Text('弹幕不透明度（越低越透明）'),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final opacity in danmakuOpacities)
+                ChoiceChip(
+                  key: ValueKey('menu-danmaku-opacity-$opacity'),
+                  label: Text('${(opacity * 100).round()}%'),
+                  selected:
+                      opacity ==
+                      preferences.effectiveDanmakuOpacity(
+                        mobile: widget.mobile,
+                      ),
+                  onSelected: _busy
+                      ? null
+                      : (_) => _run(
+                          () => widget.onPreferences(
+                            preferences.copyWith(danmakuOpacity: opacity),
+                          ),
+                        ),
+                ),
+            ],
+          ),
           if (widget.onRetryDanmaku != null)
             TextButton.icon(
               key: const ValueKey('player-danmaku-retry'),
@@ -262,6 +340,16 @@ class _PlayerMenuState extends State<PlayerMenu> {
               label: const Text('重试弹幕'),
             ),
           const SizedBox(height: 8),
+        ],
+        if (all && widget.mobile && widget.mobileReminders) ...[
+          WatchReminderSettings(
+            preferences: preferences.reminders,
+            busy: _busy,
+            onChanged: (value) => _run(
+              () =>
+                  widget.onPreferences(preferences.copyWith(reminders: value)),
+            ),
+          ),
         ],
         if (all) ...[
           SwitchListTile.adaptive(
@@ -333,6 +421,7 @@ class PlayerEpisodeGrid extends StatelessWidget {
     this.keyPrefix = 'play-episode',
     this.compact = false,
     this.title = '选集',
+    this.preserveScrollOnResize = false,
   });
   final List<Episode> episodes;
   final int currentIndex;
@@ -340,6 +429,7 @@ class PlayerEpisodeGrid extends StatelessWidget {
   final String keyPrefix;
   final bool compact;
   final String title;
+  final bool preserveScrollOnResize;
   @override
   Widget build(BuildContext context) => EpisodeBrowser(
     episodes: episodes,
@@ -350,5 +440,9 @@ class PlayerEpisodeGrid extends StatelessWidget {
     keyPrefix: keyPrefix,
     compact: compact,
     title: title,
+    preserveScrollOnResize: preserveScrollOnResize,
+    denseDesktop:
+        defaultTargetPlatform == TargetPlatform.windows &&
+        !AppLayout.isTelevision(context),
   );
 }

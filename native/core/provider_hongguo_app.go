@@ -19,6 +19,8 @@ const hongguoAppBaseURL = "https://api5-normal-sinfonlineb.fqnovel.com"
 
 const hongguoAppUserAgent = "com.phoenix.read/73532 (Linux; U; Android 16; zh_CN; 25053RT47C; Build/BP2A.250605.031.A3; Cronet/TTNetVersion:04657795 2026-01-23 QuicVersion:c67e9834 2025-09-08)"
 
+const hongguoEmptyResponseRetryDelay = 250 * time.Millisecond
+
 type hongguoCatalogCursor struct {
 	Offset        int       `json:"offset"`
 	SessionID     string    `json:"sessionId,omitempty"`
@@ -157,15 +159,24 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 	if attempts > 3 {
 		attempts = 3
 	}
+	playbackModel := method == http.MethodPost && path == hongguoVideoModelPath
+	if playbackModel && attempts > 2 {
+		attempts = 2
+	}
 	var lastErr error
+	retryDelay := time.Second
 	for attempt := 0; attempt < attempts; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if attempt > 0 {
 			select {
-			case <-time.After(time.Duration(attempt) * time.Second):
+			case <-time.After(retryDelay):
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			}
 		}
+		retryDelay = time.Duration(attempt+1) * time.Second
 		request, err := http.NewRequestWithContext(ctx, method, strings.TrimRight(base, "/")+path, bytes.NewReader(body))
 		if err != nil {
 			return nil, err
@@ -193,7 +204,7 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 			prepared.URL.RawQuery = query.Encode()
 			if comment {
 				signHongguoCommentRequest(prepared, commentNonce, now)
-			} else {
+			} else if path != "/novel/player/video_model/v1/" {
 				signHongguoRequest(prepared, body, now)
 			}
 		})
@@ -207,19 +218,36 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 		}
 		content, readErr := io.ReadAll(io.LimitReader(response.Body, providerMaxBodyBytes+1))
 		response.Body.Close()
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if readErr != nil {
 			lastErr = readErr
 			continue
 		}
-		if response.StatusCode != http.StatusOK {
-			lastErr = fmt.Errorf("红果 App 接口 HTTP %d", response.StatusCode)
-			if response.StatusCode >= 400 && response.StatusCode < 500 {
+		blockedResponse := catalogResponseBlockReason(response, content) != ""
+		if response.StatusCode != http.StatusOK || blockedResponse {
+			lastErr = downloader.catalogResponseError(request, response, content)
+			if blockedResponse || response.StatusCode >= 400 && response.StatusCode < 500 {
 				return nil, lastErr
 			}
 			continue
 		}
-		if len(content) == 0 || len(content) > providerMaxBodyBytes {
-			return nil, errors.New("红果 App 接口未返回有效数据")
+		if len(content) == 0 {
+			downloader.recordDiagnostic(diagnosticEvent{
+				Event: "hongguo.app_empty_response", Level: "warning", Source: sourceHongguo,
+				Host: request.URL.Hostname(), HTTPStatus: response.StatusCode, Protocol: response.Proto,
+				Attempt: attempt + 1, Message: "App 接口返回空响应：" + request.URL.Path,
+			})
+			lastErr = fmt.Errorf("红果 App 接口返回空响应（HTTP %d，正文 0 字节）；未收到明确的登录错误", response.StatusCode)
+			if playbackModel && attempt+1 < attempts && response.Header.Get("Retry-After") == "" {
+				retryDelay = hongguoEmptyResponseRetryDelay
+				continue
+			}
+			return nil, lastErr
+		}
+		if len(content) > providerMaxBodyBytes {
+			return nil, errors.New("红果 App 接口响应超过大小限制")
 		}
 		var result map[string]any
 		decoder := json.NewDecoder(bytes.NewReader(content))

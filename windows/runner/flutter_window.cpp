@@ -1,12 +1,75 @@
 #include "flutter_window.h"
 
 #include <optional>
+#include <shellapi.h>
 #include <flutter/standard_method_codec.h>
 
 #include "flutter/generated_plugin_registrant.h"
+#include "resource.h"
 
-FlutterWindow::FlutterWindow(const flutter::DartProject& project)
-    : project_(project) {}
+namespace {
+constexpr UINT kTrayMessage = WM_APP + 42;
+constexpr UINT kRestore = 41001;
+constexpr UINT kToggle = 41002;
+constexpr UINT kQuit = 41003;
+}
+
+bool FlutterWindow::AddTray() {
+  NOTIFYICONDATAW icon{};
+  icon.cbSize = sizeof(icon);
+  icon.hWnd = GetHandle();
+  icon.uID = 1;
+  icon.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
+  icon.uCallbackMessage = kTrayMessage;
+  tray_icon_ = LoadIcon(GetModuleHandle(nullptr), MAKEINTRESOURCE(IDI_APP_ICON));
+  icon.hIcon = tray_icon_;
+  wcscpy_s(icon.szTip, L"红果TV · 右键恢复 / 播放暂停 / 退出");
+  tray_active_ = Shell_NotifyIconW(NIM_ADD, &icon) != FALSE;
+  if (tray_active_) {
+    icon.uVersion = NOTIFYICON_VERSION_4;
+    Shell_NotifyIconW(NIM_SETVERSION, &icon);
+  }
+  return tray_active_;
+}
+
+void FlutterWindow::RemoveTray() {
+  NOTIFYICONDATAW icon{};
+  icon.cbSize = sizeof(icon);
+  icon.hWnd = GetHandle();
+  icon.uID = 1;
+  Shell_NotifyIconW(NIM_DELETE, &icon);
+  tray_active_ = false;
+  tray_icon_ = nullptr;
+}
+
+void FlutterWindow::TrayAction(const char* action) {
+  if (desktop_channel_) desktop_channel_->InvokeMethod("trayAction",
+    std::make_unique<flutter::EncodableValue>(action));
+}
+
+void FlutterWindow::TrayMenu() {
+  HMENU menu = CreatePopupMenu();
+  if (!menu) return;
+  AppendMenuW(menu, MF_STRING, kRestore, L"恢复窗口");
+  AppendMenuW(menu, MF_STRING | (playback_attached_ ? MF_ENABLED : MF_GRAYED),
+    kToggle, playing_ ? L"暂停" : L"播放");
+  AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+  AppendMenuW(menu, MF_STRING, kQuit, L"退出红果TV");
+  POINT position{};
+  GetCursorPos(&position);
+  SetForegroundWindow(GetHandle());
+  const UINT command = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON,
+    position.x, position.y, 0, GetHandle(), nullptr);
+  DestroyMenu(menu);
+  PostMessage(GetHandle(), WM_NULL, 0, 0);
+  if (command == kRestore) TrayAction("restore");
+  if (command == kToggle && playback_attached_) TrayAction("toggle");
+  if (command == kQuit) TrayAction("quit");
+}
+
+FlutterWindow::FlutterWindow(const flutter::DartProject& project,
+    SingleInstanceGuard& instance_guard)
+    : project_(project), instance_guard_(instance_guard) {}
 
 FlutterWindow::~FlutterWindow() {}
 
@@ -26,6 +89,87 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
+  desktop_channel_ = std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+    flutter_controller_->engine()->messenger(), "duanju/desktop",
+    &flutter::StandardMethodCodec::GetInstance());
+  instance_guard_.SetRestoreCallback([this]() { TrayAction("restore"); });
+  desktop_channel_->SetMethodCallHandler([this](const auto& call, auto result) {
+    if (call.method_name() == "initialize") {
+      result->Success(flutter::EncodableValue(tray_active_ || AddTray()));
+      instance_guard_.SetDesktopReady(true);
+    } else if (call.method_name() == "branding") {
+      const auto brand = LoadIcon(GetModuleHandle(nullptr), MAKEINTRESOURCE(IDI_APP_ICON));
+      const auto window_icon = reinterpret_cast<HICON>(GetClassLongPtr(GetHandle(), GCLP_HICON));
+      flutter::EncodableMap values;
+      values[flutter::EncodableValue("windowBrandIcon")] = flutter::EncodableValue(brand != nullptr && window_icon == brand);
+      values[flutter::EncodableValue("trayBrandIcon")] = flutter::EncodableValue(tray_active_ && tray_icon_ == brand && brand != nullptr);
+      result->Success(flutter::EncodableValue(values));
+    } else if (call.method_name() == "windowGeometry") {
+      RECT bounds{};
+      POINT origin = {0, 0};
+      RECT client{}, child_bounds{}, child_client{};
+      POINT child_origin = {0, 0};
+      const HWND child = flutter_controller_->view()->GetNativeWindow();
+      MONITORINFO monitor{};
+      monitor.cbSize = sizeof(monitor);
+      const bool measured = GetWindowRect(GetHandle(), &bounds) &&
+        GetClientRect(GetHandle(), &client) && ClientToScreen(GetHandle(), &origin) &&
+        GetWindowRect(child, &child_bounds) && GetClientRect(child, &child_client) &&
+        ClientToScreen(child, &child_origin) &&
+        GetMonitorInfoW(MonitorFromWindow(GetHandle(), MONITOR_DEFAULTTONEAREST), &monitor);
+      OffsetRect(&client, origin.x, origin.y);
+      OffsetRect(&child_client, child_origin.x, child_origin.y);
+      auto rectangle = [](const RECT& rect) {
+        return flutter::EncodableValue(flutter::EncodableList{
+          flutter::EncodableValue(static_cast<int>(rect.left)),
+          flutter::EncodableValue(static_cast<int>(rect.top)),
+          flutter::EncodableValue(static_cast<int>(rect.right - rect.left)),
+          flutter::EncodableValue(static_cast<int>(rect.bottom - rect.top))});
+      };
+      using WindowDpi = UINT(WINAPI*)(HWND);
+      const auto window_dpi = reinterpret_cast<WindowDpi>(GetProcAddress(
+        GetModuleHandleW(L"user32.dll"), "GetDpiForWindow"));
+      const auto edge = SendMessageW(GetHandle(), WM_NCHITTEST, 0,
+        MAKELPARAM(bounds.right - 2, bounds.bottom - 2));
+      bool caption_buttons = false;
+      for (const int offset : {20, 65, 110}) {
+        const auto hit = SendMessageW(GetHandle(), WM_NCHITTEST, 0,
+          MAKELPARAM(bounds.right - offset, bounds.top + 15));
+        caption_buttons = caption_buttons || hit == HTCLOSE || hit == HTMINBUTTON || hit == HTMAXBUTTON;
+      }
+      flutter::EncodableMap values;
+      values[flutter::EncodableValue("captionInset")] = flutter::EncodableValue(static_cast<int>(origin.y - bounds.top));
+      values[flutter::EncodableValue("resizeBorder")] = flutter::EncodableValue(edge == HTBOTTOMRIGHT);
+      values[flutter::EncodableValue("captionButtons")] = flutter::EncodableValue(caption_buttons);
+      values[flutter::EncodableValue("geometryAvailable")] = flutter::EncodableValue(measured);
+      values[flutter::EncodableValue("coordinateSpace")] = flutter::EncodableValue("screen device pixels; PerMonitorV2");
+      values[flutter::EncodableValue("windowBounds")] = rectangle(bounds);
+      values[flutter::EncodableValue("clientBounds")] = rectangle(client);
+      values[flutter::EncodableValue("flutterChildBounds")] = rectangle(child_bounds);
+      values[flutter::EncodableValue("flutterChildClientBounds")] = rectangle(child_client);
+      values[flutter::EncodableValue("monitorBounds")] = rectangle(monitor.rcMonitor);
+      values[flutter::EncodableValue("workAreaBounds")] = rectangle(monitor.rcWork);
+      values[flutter::EncodableValue("dpi")] = flutter::EncodableValue(static_cast<int>(window_dpi ? window_dpi(GetHandle()) : 0));
+      values[flutter::EncodableValue("maximized")] = flutter::EncodableValue(IsZoomed(GetHandle()) != FALSE);
+      values[flutter::EncodableValue("minimized")] = flutter::EncodableValue(IsIconic(GetHandle()) != FALSE);
+      result->Success(flutter::EncodableValue(values));
+    } else if (call.method_name() == "dispose") {
+      instance_guard_.SetDesktopReady(false);
+      RemoveTray();
+      result->Success();
+    } else if (call.method_name() == "setPlayback") {
+      const auto* values = std::get_if<flutter::EncodableMap>(call.arguments());
+      auto flag = [values](const char* name) {
+        if (!values) return false;
+        const auto found = values->find(flutter::EncodableValue(name));
+        return found != values->end() && std::holds_alternative<bool>(found->second)
+          && std::get<bool>(found->second);
+      };
+      playback_attached_ = flag("attached");
+      playing_ = flag("playing");
+      result->Success();
+    } else { result->NotImplemented(); }
+  });
   device_channel_ =
       std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
           flutter_controller_->engine()->messenger(), "duanju/device",
@@ -33,6 +177,33 @@ bool FlutterWindow::OnCreate() {
   device_channel_->SetMethodCallHandler(
       [](const flutter::MethodCall<flutter::EncodableValue>& call,
          std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+        if (call.method_name() == "openProjectPage") {
+          const auto opened = reinterpret_cast<INT_PTR>(ShellExecuteW(nullptr, L"open",
+            L"https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds", nullptr, nullptr, SW_SHOWNORMAL));
+          if (opened > 32) result->Success();
+          else result->Error("no_browser", "Unable to open project repository");
+          return;
+        }
+        if (call.method_name() == "setPlaybackScreenOn") {
+          const auto* arguments = std::get_if<flutter::EncodableMap>(call.arguments());
+          bool enabled = false;
+          if (arguments) {
+            const auto value = arguments->find(flutter::EncodableValue("enabled"));
+            if (value != arguments->end()) {
+              const auto* flag = std::get_if<bool>(&value->second);
+              enabled = flag && *flag;
+            }
+          }
+          const EXECUTION_STATE state = enabled
+              ? ES_CONTINUOUS | ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED
+              : ES_CONTINUOUS;
+          if (SetThreadExecutionState(state) == 0) {
+            result->Error("screen_on", "Unable to update playback power state");
+          } else {
+            result->Success();
+          }
+          return;
+        }
         if (call.method_name() != "playbackPower") {
           result->NotImplemented();
           return;
@@ -55,6 +226,7 @@ bool FlutterWindow::OnCreate() {
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
     this->Show();
+    instance_guard_.SetFirstFrameReady();
   });
 
   // Flutter can complete the first frame before the "show window" callback is
@@ -66,6 +238,12 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  instance_guard_.SetDesktopReady(false);
+  instance_guard_.SetRestoreCallback({});
+  instance_guard_.DetachWindow();
+  RemoveTray();
+  desktop_channel_.reset();
+  SetThreadExecutionState(ES_CONTINUOUS);
   device_channel_.reset();
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
@@ -78,6 +256,21 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  LRESULT activation_result = 0;
+  if (instance_guard_.HandleActivation(message, &activation_result)) return activation_result;
+  static const UINT taskbar_created = RegisterWindowMessage(L"TaskbarCreated");
+  if (taskbar_created != 0 && message == taskbar_created && tray_active_) AddTray();
+  if (message == kTrayMessage && tray_active_) {
+    const auto event = LOWORD(lparam);
+    if (event == NIN_SELECT || event == NIN_KEYSELECT || event == WM_LBUTTONDBLCLK) TrayAction("restore");
+    if (event == WM_CONTEXTMENU || event == WM_RBUTTONUP) TrayMenu();
+    return 0;
+  }
+  if (message == WM_COMMAND && tray_active_) {
+    if (LOWORD(wparam) == kRestore) { TrayAction("restore"); return 0; }
+    if (LOWORD(wparam) == kToggle && playback_attached_) { TrayAction("toggle"); return 0; }
+    if (LOWORD(wparam) == kQuit) { TrayAction("quit"); return 0; }
+  }
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
     std::optional<LRESULT> result =

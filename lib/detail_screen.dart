@@ -18,6 +18,7 @@ import 'sources_screen.dart';
 import 'episode_browser.dart';
 import 'follow_state.dart';
 import 'hongguo_series.dart';
+import 'series_browser_screen.dart';
 
 class DetailScreen extends StatefulWidget {
   const DetailScreen({
@@ -105,7 +106,12 @@ class _DetailScreenState extends State<DetailScreen> {
           .current(widget.drama)
           .merge(detail.drama);
       setState(() {
-        _detail = DramaDetail(merged, detail.episodes, warning: detail.warning);
+        _detail = DramaDetail(
+          merged,
+          detail.episodes,
+          warning: detail.warning,
+          hasMoreEpisodes: detail.hasMoreEpisodes,
+        );
         _loading = false;
         _episodePage =
             resumeEpisodeIndex(
@@ -167,6 +173,7 @@ class _DetailScreenState extends State<DetailScreen> {
           updated,
           _detail!.episodes,
           warning: _detail!.warning,
+          hasMoreEpisodes: _detail!.hasMoreEpisodes,
         );
       });
       widget.repository.catalogUpdates.publish(updated);
@@ -286,6 +293,43 @@ class _DetailScreenState extends State<DetailScreen> {
     if (mounted) {
       setState(() {});
     }
+  }
+
+  Future<void> _openAllSeasons() async {
+    if (_profileEpoch != widget.store.profileEpoch ||
+        widget.store.locked ||
+        !widget.store.allowsSource(widget.drama.source)) {
+      return;
+    }
+    final selection = await Navigator.of(context).push<SeriesEpisodeSelection>(
+      MaterialPageRoute(
+        builder: (_) => SeriesBrowserScreen(
+          anchor: _detail?.drama ?? widget.drama,
+          initialDetail: _detail,
+          repository: widget.repository,
+          store: widget.store,
+        ),
+      ),
+    );
+    if (!mounted ||
+        selection == null ||
+        _profileEpoch != widget.store.profileEpoch ||
+        widget.store.locked ||
+        !widget.store.allowsSource(selection.detail.drama.source)) {
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => PlayerScreen(
+          detail: selection.detail,
+          initialIndex: selection.index,
+          initialPosition: selection.position,
+          repository: widget.repository,
+          store: widget.store,
+        ),
+      ),
+    );
+    if (mounted) setState(() {});
   }
 
   Future<void> _openSeriesDrama(Drama drama) async {
@@ -789,7 +833,7 @@ class _DetailScreenState extends State<DetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('相关推荐', style: Theme.of(context).textTheme.titleMedium),
+          Text('同剧其他季', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
@@ -834,78 +878,30 @@ class _DetailScreenState extends State<DetailScreen> {
   }
 
   Widget _followingControls(Drama drama) {
-    final state = widget.store.following(drama.id);
+    final followed = widget.store.followedSeries(drama) != null;
     return Wrap(
       spacing: 8,
       runSpacing: 4,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        PopupMenuButton<String>(
+        if (drama.source == SourceSite.hongguo.id)
+          OutlinedButton.icon(
+            key: const ValueKey('detail-all-seasons'),
+            onPressed: _openAllSeasons,
+            icon: const Icon(Icons.video_library_outlined),
+            label: const Text('查看全季'),
+          ),
+        OutlinedButton.icon(
           key: const ValueKey('follow-status'),
-          tooltip: '追剧与观看状态',
-          onSelected: (value) async {
-            if (_profileEpoch != widget.store.profileEpoch) return;
-            if (value == 'remove') {
-              await saveUserChange(
-                context,
-                () => widget.store.toggleFavorite(drama),
-              );
-            } else {
-              final status = FollowStatus.values.firstWhere(
-                (status) => status.name == value,
-              );
-              await saveUserChange(
-                context,
-                () => widget.store.setFollowStatus(drama, status),
-              );
-            }
-          },
-          itemBuilder: (_) => [
-            for (final status in FollowStatus.values)
-              CheckedPopupMenuItem(
-                value: status.name,
-                checked: state?.status == status,
-                child: Text(status.label),
-              ),
-            if (state != null)
-              const PopupMenuItem(value: 'remove', child: Text('取消追剧')),
-          ],
-          child: Container(
-            constraints: const BoxConstraints(minHeight: 48),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              color: state == null
-                  ? Theme.of(context).colorScheme.surfaceContainerHighest
-                  : Theme.of(context).colorScheme.secondaryContainer,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  state?.status == FollowStatus.watched
-                      ? Icons.check_circle_outline
-                      : state == null
-                      ? Icons.bookmark_add_outlined
-                      : Icons.bookmark_rounded,
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Text(state?.label ?? '加入追剧'),
-                const SizedBox(width: 4),
-                const Icon(Icons.expand_more_rounded, size: 18),
-              ],
-            ),
+          onPressed: () => saveUserChange(
+            context,
+            () => widget.store.toggleSeriesFavorite(drama),
           ),
+          icon: Icon(
+            followed ? Icons.bookmark_rounded : Icons.bookmark_add_outlined,
+          ),
+          label: Text(followed ? '取消追剧' : '加入追剧'),
         ),
-        if (state != null && state.hasUpdates)
-          ActionChip(
-            label: Text('${state.updateLabel} · 标为已读'),
-            onPressed: () => saveUserChange(
-              context,
-              () => widget.store.markUpdatesRead(drama.id),
-            ),
-          ),
       ],
     );
   }

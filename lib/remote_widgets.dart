@@ -437,15 +437,16 @@ class _RemoteGridState extends State<RemoteGrid> {
   @override
   void didUpdateWidget(covariant RemoteGrid oldWidget) {
     super.didUpdateWidget(oldWidget);
+    final retained = widget.itemKeys.toSet();
     final removed = _nodes.keys
-        .where((key) => !widget.itemKeys.contains(key))
+        .where((key) => !retained.contains(key))
         .toList();
     final restore = removed.any((key) => _nodes[key]!.hasFocus);
     final index = oldWidget.itemKeys.indexOf(_focused ?? '');
     for (final key in removed) {
       _nodes.remove(key)?.dispose();
     }
-    if (_focused != null && !widget.itemKeys.contains(_focused)) {
+    if (_focused != null && !retained.contains(_focused)) {
       _focused = null;
       _target = null;
       _generation++;
@@ -513,6 +514,8 @@ class RemoteEpisodeButton extends StatelessWidget {
     this.vip = false,
     this.current = false,
     this.compact = false,
+    this.fontSize,
+    this.borderWidth,
     this.focusNode,
     this.onFocus,
   });
@@ -520,6 +523,8 @@ class RemoteEpisodeButton extends StatelessWidget {
   final bool vip;
   final bool current;
   final bool compact;
+  final double? fontSize;
+  final double? borderWidth;
   final VoidCallback onPressed;
   final FocusNode? focusNode;
   final VoidCallback? onFocus;
@@ -536,7 +541,7 @@ class RemoteEpisodeButton extends StatelessWidget {
       selected: current,
       radius: compact ? 8 : 14,
       padding: compact ? const EdgeInsets.all(2) : const EdgeInsets.all(4),
-      borderWidth: compact ? 1.2 : 2,
+      borderWidth: borderWidth ?? (compact ? 1.2 : 2),
       outlined: true,
       onPressed: onPressed,
       label: '第 $number 集${vip ? '，VIP 试看' : ''}',
@@ -553,7 +558,7 @@ class RemoteEpisodeButton extends StatelessWidget {
                   color: current
                       ? Theme.of(context).colorScheme.onPrimaryContainer
                       : Theme.of(context).colorScheme.onSurface,
-                  fontSize: compact ? 14 : 20,
+                  fontSize: fontSize ?? (compact ? 14 : 20),
                   fontWeight: current ? FontWeight.w700 : FontWeight.w500,
                 ),
               ),

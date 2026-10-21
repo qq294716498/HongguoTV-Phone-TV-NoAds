@@ -29,6 +29,7 @@ class DanmakuController extends ChangeNotifier {
   double rate = 1;
   int motionRevision = 0;
   int timelineRevision = 0;
+  int contentRevision = 0;
   int dataRevision = 0;
   List<DanmakuItem> items = const [];
   DateTime? _anchorTime;
@@ -41,6 +42,16 @@ class DanmakuController extends ChangeNotifier {
       !_plan!.local &&
       _plan!.session.isNotEmpty &&
       _plan!.danmakuId.isNotEmpty;
+  bool get seeking => _seeking;
+  bool get mobileVisible =>
+      !_closed &&
+      supported &&
+      _enabled &&
+      _available &&
+      _foreground &&
+      durationMs > 0 &&
+      positionMs < durationMs;
+  bool get mobileMoving => mobileVisible && _playing && !_buffering;
   bool get visible =>
       !_closed &&
       supported &&
@@ -70,6 +81,7 @@ class DanmakuController extends ChangeNotifier {
     _cancel();
     _plan = plan;
     timelineRevision++;
+    contentRevision++;
     _pages.clear();
     _failures.clear();
     _rebuildItems();
@@ -84,6 +96,7 @@ class DanmakuController extends ChangeNotifier {
     if (_closed || _enabled == enabled) return;
     _enabled = enabled;
     timelineRevision++;
+    contentRevision++;
     _cancel();
     _failures.clear();
     _pages.clear();
@@ -125,6 +138,7 @@ class DanmakuController extends ChangeNotifier {
             nextPosition - positionMs > 2000);
     if (jumped || durationChanged) timelineRevision++;
     if (durationChanged) {
+      contentRevision++;
       _cancel();
       _pages.clear();
       _failures.clear();

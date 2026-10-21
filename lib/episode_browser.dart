@@ -25,14 +25,14 @@ class EpisodeRangeBar extends StatelessWidget {
   final String title;
 
   Future<void> _jump(BuildContext context) async {
-    final controller = TextEditingController();
+    var value = '';
     String? error;
     final index = await showDialog<int>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) {
           void submit() {
-            final number = int.tryParse(controller.text.trim());
+            final number = int.tryParse(value.trim());
             final found = episodes.indexWhere(
               (episode) => episode.number == number,
             );
@@ -46,7 +46,7 @@ class EpisodeRangeBar extends StatelessWidget {
           return AlertDialog(
             title: const Text('跳转到指定集数'),
             content: TextField(
-              controller: controller,
+              onChanged: (text) => value = text,
               autofocus: true,
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -64,7 +64,6 @@ class EpisodeRangeBar extends StatelessWidget {
         },
       ),
     );
-    controller.dispose();
     if (index != null && context.mounted) onLocate(index);
   }
 
@@ -177,6 +176,8 @@ class EpisodeBrowser extends StatefulWidget {
     this.keyPrefix = 'episode',
     this.title = '选集',
     this.compact = false,
+    this.preserveScrollOnResize = false,
+    this.denseDesktop = false,
   });
   final List<Episode> episodes;
   final ValueChanged<int> onSelected;
@@ -185,6 +186,8 @@ class EpisodeBrowser extends StatefulWidget {
   final String keyPrefix;
   final String title;
   final bool compact;
+  final bool preserveScrollOnResize;
+  final bool denseDesktop;
   @override
   State<EpisodeBrowser> createState() => _EpisodeBrowserState();
 }
@@ -192,6 +195,7 @@ class EpisodeBrowser extends StatefulWidget {
 class _EpisodeBrowserState extends State<EpisodeBrowser> {
   final _scroll = ScrollController();
   String _layout = '';
+  String _location = '';
   int get _pageSize => episodePageSize;
   late int _page =
       max(
@@ -254,26 +258,42 @@ class _EpisodeBrowserState extends State<EpisodeBrowser> {
                     max(value, episode.number.toString().length),
               );
               final scale = MediaQuery.textScalerOf(context);
-              final columns =
-                  ((constraints.maxWidth - (widget.compact ? 8 : 36)) /
-                          max(
-                            widget.compact
-                                ? 64
-                                : television
-                                ? 100
-                                : 82,
-                            scale.scale(widget.compact ? 18 : 20) *
-                                    digits *
-                                    .65 +
-                                (widget.compact ? 28 : 40),
-                          ))
-                      .floor()
-                      .clamp(widget.compact ? 4 : 1, 12);
-              final extent = max(
-                widget.compact ? 46.0 : 56.0,
-                scale.scale(widget.compact ? 18 : 20) +
-                    (widget.compact ? 24 : 30),
-              );
+              final spacing = widget.denseDesktop ? 4.0 : 8.0;
+              final horizontal = widget.denseDesktop ? 8.0 : 18.0;
+              final columns = widget.denseDesktop
+                  ? ((constraints.maxWidth - horizontal * 2 + spacing) /
+                            (max(
+                                  56.0,
+                                  scale.scale(14) * digits * .65 +
+                                      20 +
+                                      (visible.any((episode) => episode.vip)
+                                          ? 17
+                                          : 0),
+                                ) +
+                                spacing))
+                        .floor()
+                        .clamp(1, 12)
+                  : ((constraints.maxWidth - (widget.compact ? 8 : 36)) /
+                            max(
+                              widget.compact
+                                  ? 64
+                                  : television
+                                  ? 100
+                                  : 82,
+                              scale.scale(widget.compact ? 18 : 20) *
+                                      digits *
+                                      .65 +
+                                  (widget.compact ? 28 : 40),
+                            ))
+                        .floor()
+                        .clamp(widget.compact ? 4 : 1, 12);
+              final extent = widget.denseDesktop
+                  ? max(44.0, scale.scale(14) + 20)
+                  : max(
+                      widget.compact ? 46.0 : 56.0,
+                      scale.scale(widget.compact ? 18 : 20) +
+                          (widget.compact ? 24 : 30),
+                    );
               final target = max(
                 0,
                 visible.indexWhere(
@@ -285,18 +305,22 @@ class _EpisodeBrowserState extends State<EpisodeBrowser> {
                   '$_page:$_located:${widget.currentNumber}:$columns:$extent:${constraints.maxHeight}';
               if (layout != _layout) {
                 _layout = layout;
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (!mounted || !_scroll.hasClients || _layout != layout) {
-                    return;
-                  }
-                  _scroll.jumpTo(
-                    (18 +
-                            target ~/ columns * (extent + 8) -
-                            constraints.maxHeight / 2 +
-                            extent / 2)
-                        .clamp(0.0, _scroll.position.maxScrollExtent),
-                  );
-                });
+                final location = '$_page:$_located:${widget.currentNumber}';
+                if (!widget.preserveScrollOnResize || location != _location) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (!mounted || !_scroll.hasClients || _layout != layout) {
+                      return;
+                    }
+                    _location = location;
+                    _scroll.jumpTo(
+                      (horizontal +
+                              target ~/ columns * (extent + spacing) -
+                              constraints.maxHeight / 2 +
+                              extent / 2)
+                          .clamp(0.0, _scroll.position.maxScrollExtent),
+                    );
+                  });
+                }
               }
               return RemoteGrid(
                 key: ValueKey('episode-page-$_page-$_located'),
@@ -308,8 +332,10 @@ class _EpisodeBrowserState extends State<EpisodeBrowser> {
                     .toList(),
                 columns: columns,
                 itemExtent: extent,
-                spacing: widget.compact ? 6 : 8,
-                padding: widget.compact
+                spacing: widget.compact ? 6 : spacing,
+                padding: widget.denseDesktop
+                    ? const EdgeInsets.fromLTRB(8, 2, 8, 8)
+                    : widget.compact
                     ? const EdgeInsets.fromLTRB(4, 4, 4, 12)
                     : const EdgeInsets.fromLTRB(18, 2, 18, 18),
                 itemBuilder: (_, index, node, onFocus) {
@@ -318,7 +344,7 @@ class _EpisodeBrowserState extends State<EpisodeBrowser> {
                     key: ValueKey('${widget.keyPrefix}-${episode.number}'),
                     number: episode.number,
                     vip: episode.vip,
-                    compact: widget.compact,
+                    compact: widget.compact || widget.denseDesktop,
                     current:
                         widget.selectedNumbers?.contains(episode.number) ??
                         episode.number == widget.currentNumber,

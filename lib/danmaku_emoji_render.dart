@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'danmaku_emoji_assets.dart';
+import 'danmaku_text.dart';
 
 class DanmakuEmojiCache extends ChangeNotifier {
   DanmakuEmojiCache({AssetBundle? bundle}) : _bundle = bundle ?? rootBundle;
@@ -31,8 +32,9 @@ class DanmakuEmojiCache extends ChangeNotifier {
     if (_disposed) return;
     for (final text in texts) {
       for (final part in DanmakuEmojiContent.parse(text).parts) {
-        final asset = part.asset;
-        if (asset != null && _requested.add(asset)) _queue.add(asset);
+        for (final asset in part.assets) {
+          if (_requested.add(asset)) _queue.add(asset);
+        }
       }
     }
     while (_workers < maxConcurrentDecodes && _queue.isNotEmpty) {
@@ -88,9 +90,20 @@ class DanmakuEmojiCache extends ChangeNotifier {
 }
 
 class DanmakuEmojiPart {
-  const DanmakuEmojiPart(this.text, [this.asset]);
+  const DanmakuEmojiPart(this.text, {this.glyphs = const [], this.fallback});
   final String text;
-  final String? asset;
+  final List<String> glyphs;
+  final String? fallback;
+  String? get asset =>
+      glyphs.isEmpty ? null : DanmakuEmojiAssets.paths[glyphs.first];
+  Iterable<String> get assets =>
+      glyphs.map((glyph) => DanmakuEmojiAssets.paths[glyph]!);
+  String get fallbackText => fallback ?? text;
+
+  bool ready(DanmakuEmojiCache? cache) =>
+      cache != null &&
+      glyphs.isNotEmpty &&
+      glyphs.every((glyph) => cache.imageFor(glyph) != null);
 }
 
 class DanmakuEmojiContent {
@@ -113,13 +126,44 @@ class DanmakuEmojiContent {
       pendingText.clear();
     }
 
-    for (final glyph in text.characters) {
-      final asset = DanmakuEmojiAssets.paths[glyph];
-      if (asset == null) {
-        pendingText.write(glyph);
-      } else {
+    for (final expression in danmakuExpressionParts(text)) {
+      final glyphs = expression.glyphs?.characters.toList();
+      if (glyphs != null &&
+          glyphs.every(DanmakuEmojiAssets.paths.containsKey)) {
         flushText();
-        parts.add(DanmakuEmojiPart(glyph, asset));
+        parts.add(
+          DanmakuEmojiPart(
+            expression.original,
+            glyphs: List.unmodifiable(glyphs),
+          ),
+        );
+        continue;
+      }
+      if (expression.expression) {
+        pendingText.write(expression.original);
+        continue;
+      }
+      for (final glyph in expression.original.characters) {
+        if (DanmakuEmojiAssets.paths.containsKey(glyph)) {
+          flushText();
+          parts.add(
+            DanmakuEmojiPart(
+              glyph,
+              glyphs: [glyph],
+              fallback: '[${danmakuGlyphName(glyph) ?? '表情'}]',
+            ),
+          );
+        } else if (glyph == '\uFFFC' || glyph == '🫡') {
+          flushText();
+          parts.add(
+            DanmakuEmojiPart(
+              glyph,
+              fallback: glyph == '\uFFFC' ? '[OBJ]' : '[敬礼]',
+            ),
+          );
+        } else {
+          pendingText.write(glyph);
+        }
       }
     }
     flushText();
@@ -130,16 +174,21 @@ class DanmakuEmojiContent {
   }
 
   bool get hasImages => parts.any((part) => part.asset != null);
+  String get fallbackText => parts.map((part) => part.fallbackText).join();
   double imageSize(TextStyle style, TextScaler scaler) =>
       scaler.scale(style.fontSize ?? 14) * 1.25;
 
-  List<PlaceholderDimensions> placeholders(double size) => [
+  List<PlaceholderDimensions> placeholders(
+    double size, {
+    DanmakuEmojiCache? cache,
+  }) => [
     for (final part in parts)
-      if (part.asset != null)
-        PlaceholderDimensions(
-          size: Size.square(size),
-          alignment: PlaceholderAlignment.middle,
-        ),
+      if (part.ready(cache))
+        for (final _ in part.glyphs)
+          PlaceholderDimensions(
+            size: Size.square(size),
+            alignment: PlaceholderAlignment.middle,
+          ),
   ];
 
   TextSpan span(TextStyle style, TextScaler scaler, DanmakuEmojiCache? cache) {
@@ -148,53 +197,46 @@ class DanmakuEmojiContent {
       style: style,
       children: [
         for (final part in parts)
-          if (part.asset == null)
-            TextSpan(text: part.text)
+          if (!part.ready(cache))
+            TextSpan(text: part.fallbackText)
           else
-            WidgetSpan(
-              alignment: PlaceholderAlignment.middle,
-              child: SizedBox.square(
-                dimension: size,
-                child: _imageWidget(part.text, style, scaler, cache),
+            for (final glyph in part.glyphs)
+              WidgetSpan(
+                alignment: PlaceholderAlignment.middle,
+                child: SizedBox.square(
+                  dimension: size,
+                  child: _imageWidget(glyph, style, cache!),
+                ),
               ),
-            ),
       ],
     );
   }
 
-  Widget _imageWidget(
-    String glyph,
-    TextStyle style,
-    TextScaler scaler,
-    DanmakuEmojiCache? cache,
-  ) {
-    final image = cache?.imageFor(glyph);
-    if (image != null) {
-      return Opacity(
-        opacity: style.color?.a ?? 1,
-        child: RawImage(
-          image: image,
-          fit: BoxFit.contain,
-          filterQuality: FilterQuality.medium,
-        ),
-      );
-    }
-    return Text(
-      glyph,
-      style: style,
-      textScaler: scaler,
-      maxLines: 1,
-      softWrap: false,
+  Widget _imageWidget(String glyph, TextStyle style, DanmakuEmojiCache cache) {
+    return Opacity(
+      opacity: style.color?.a ?? 1,
+      child: RawImage(
+        image: cache.imageFor(glyph)!,
+        fit: BoxFit.contain,
+        filterQuality: FilterQuality.medium,
+      ),
     );
   }
 
-  double measure(TextStyle style, TextScaler scaler) {
-    final painter = TextPainter(
-      text: span(style, scaler, null),
-      textDirection: TextDirection.ltr,
-      textScaler: scaler,
-      maxLines: 1,
-    )..setPlaceholderDimensions(placeholders(imageSize(style, scaler)));
+  double measure(
+    TextStyle style,
+    TextScaler scaler, {
+    DanmakuEmojiCache? cache,
+  }) {
+    final painter =
+        TextPainter(
+          text: span(style, scaler, cache),
+          textDirection: TextDirection.ltr,
+          textScaler: scaler,
+          maxLines: 1,
+        )..setPlaceholderDimensions(
+          placeholders(imageSize(style, scaler), cache: cache),
+        );
     painter.layout();
     final width = painter.width;
     painter.dispose();
@@ -221,7 +263,7 @@ class DanmakuEmojiText extends StatelessWidget {
     final resolvedStyle = style.copyWith(inherit: false);
     if (!content.hasImages) {
       return Text(
-        text,
+        content.fallbackText,
         style: resolvedStyle,
         textScaler: scaler,
         textDirection: TextDirection.ltr,

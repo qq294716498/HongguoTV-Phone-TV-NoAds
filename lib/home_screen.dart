@@ -1,4 +1,5 @@
 import 'app_update_screen.dart';
+import 'app_origin.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -35,6 +36,7 @@ import 'batch_downloads.dart';
 import 'drama_actions.dart';
 import 'library_updater.dart';
 import 'saved_library.dart';
+import 'television_navigation.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, required this.repository, required this.store});
@@ -58,6 +60,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _error;
   int _generation = 0;
   int _tab = 0;
+  int _followVisit = 0;
   String _submittedQuery = '';
   final _categorySelections = <String, String>{};
   late final CatalogBrowser _browser;
@@ -419,6 +422,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _televisionBack() {
+    if (TelevisionNavigation.dismissInput(context)) return;
     if (_selectionMode) {
       _cancelSelection();
     } else if (_tab != 0) {
@@ -426,8 +430,12 @@ class _HomeScreenState extends State<HomeScreen> {
     } else if (_search.text.isNotEmpty) {
       _search.clear();
       _searchChanged('');
+    } else if (AppLayout.isTelevision(context)) {
+      unawaited(_confirmExit());
     }
   }
+
+  Future<void> _confirmExit() => TelevisionNavigation.confirmExit(context);
 
   @override
   void initState() {
@@ -687,6 +695,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _openDrama(Drama drama, {bool resume = false, bool download = false}) {
+    if (resume) drama = widget.store.seriesWatch(drama)?.drama ?? drama;
     _pauseCatalog();
     if (download) {
       Navigator.of(context).push(
@@ -707,15 +716,27 @@ class _HomeScreenState extends State<HomeScreen> {
         drama: drama,
         repository: widget.repository,
         store: widget.store,
-      ),
+      ).whenComplete(() {
+        if (mounted && _tab == 1) setState(() => _followVisit++);
+      }),
     );
   }
 
-  void _changeTab(int tab) => setState(() {
-    _tab = tab;
-    _selectionMode = false;
-    _selectedDramas.clear();
-  });
+  void _changeTab(int tab) {
+    if (_tab == 0 && tab != 0) _pauseCatalog();
+    setState(() {
+      _tab = tab;
+      if (tab == 1) _followVisit++;
+      _selectionMode = false;
+      _selectedDramas.clear();
+    });
+    if (tab == 0 &&
+        !_showRecommendations &&
+        _items.isEmpty &&
+        widget.store.sources.isNotEmpty) {
+      unawaited(_load(useCache: true));
+    }
+  }
 
   /// 连点「最近观看」6 次弹出站源密码锁（用于启用 / 关闭密码功能）。
   /// 仅多源包（真果鉴）生效；红果鉴单源包无密码功能。
@@ -795,7 +816,7 @@ class _HomeScreenState extends State<HomeScreen> {
     FocusNode? focusNode,
     VoidCallback? onFocus,
   }) {
-    final following = widget.store.following(drama.id);
+    final following = widget.store.followedSeries(drama);
     final canSelect =
         widget.store.canDownload && widget.repository.supportsDownloads;
     return DramaTile(
@@ -812,9 +833,7 @@ class _HomeScreenState extends State<HomeScreen> {
         onPressed: () => _dramaActions(drama),
       ),
       selected: _selectionMode ? _selectedDramas.containsKey(drama.id) : null,
-      badge: following == null
-          ? null
-          : '${following.status.label}${following.hasUpdates ? ' · ${following.updateLabel}' : ''}',
+      badge: following == null ? null : '已追剧',
     );
   }
 
@@ -1037,18 +1056,26 @@ class _HomeScreenState extends State<HomeScreen> {
                       );
                     } else if (value == 'display') {
                       _chooseDisplayMode();
+                    } else if (value == 'exit') {
+                      unawaited(_confirmExit());
                     } else if (value == 'about') {
                       showAboutDialog(
                         context: context,
                         applicationName: appName,
                         applicationVersion: AppLayout.versionOf(context),
-                        applicationIcon: const Icon(
-                          Icons.play_circle_filled_rounded,
-                          size: 48,
-                          color: Color(0xFFFF765F),
+                        applicationIcon: Image.asset(
+                          'assets/app_identity/app-icon.png',
+                          width: 48,
+                          height: 48,
+                          errorBuilder: (_, _, _) => const Icon(
+                            Icons.play_circle_filled_rounded,
+                            size: 48,
+                          ),
                         ),
                         children: [
                           const Text('独立运行，打开即可浏览和播放。观看记录与追剧收藏保存在当前设备。'),
+                          const SizedBox(height: 16),
+                          const ProjectOrigin(),
                           TextButton.icon(
                             onPressed: () {
                               Navigator.of(context, rootNavigator: true).pop();
@@ -1085,6 +1112,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Text('设置与备份'),
                     ),
                     const PopupMenuItem(value: 'display', child: Text('界面模式')),
+                    if (television)
+                      const PopupMenuItem(value: 'exit', child: Text('退出软件')),
                     const PopupMenuItem(
                       value: 'about',
                       child: Text('关于$appName'),
@@ -1180,6 +1209,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           repository: widget.repository,
                           store: widget.store,
                           history: _tab == 2,
+                          refreshToken: _followVisit,
                           onOpen: _openDrama,
                           onContinue: (drama) =>
                               _openDrama(drama, resume: true),
@@ -1226,21 +1256,27 @@ class _HomeScreenState extends State<HomeScreen> {
         );
         if (!television && !_selectionMode) return scaffold;
         return PopScope(
-          canPop:
-              !_selectionMode &&
-              (!television || _tab == 0 && _search.text.isEmpty),
+          canPop: !_selectionMode && !television,
           onPopInvokedWithResult: (didPop, result) {
             if (!didPop) _televisionBack();
           },
-          child: CallbackShortcuts(
-            bindings: {
-              const SingleActivator(LogicalKeyboardKey.escape): () =>
-                  Navigator.of(context).maybePop(),
-              const SingleActivator(LogicalKeyboardKey.goBack): () =>
-                  Navigator.of(context).maybePop(),
-            },
-            child: scaffold,
-          ),
+          child: television
+              ? scaffold
+              : CallbackShortcuts(
+                  bindings: {
+                    const SingleActivator(
+                      LogicalKeyboardKey.escape,
+                      includeRepeats: false,
+                    ): () =>
+                        Navigator.of(context).maybePop(),
+                    const SingleActivator(
+                      LogicalKeyboardKey.goBack,
+                      includeRepeats: false,
+                    ): () =>
+                        Navigator.of(context).maybePop(),
+                  },
+                  child: scaffold,
+                ),
         );
       },
     ),

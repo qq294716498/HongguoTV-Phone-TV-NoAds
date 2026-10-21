@@ -714,7 +714,8 @@ void main() {
         throwsA(isA<PlatformException>()),
       );
       expect(platform.created, 1);
-      expect(player.canTransition, true);
+      expect(player.canTransition, false);
+      expect(platform.disposed, [0]);
     },
   );
 

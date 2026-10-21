@@ -16,6 +16,11 @@ class PlaybackLoader {
   int _generation = 0;
   bool _closed = false;
 
+  Future<void> cancel() {
+    ++_generation;
+    return repository.cancelPlayback().timeout(cancelTimeout);
+  }
+
   Future<PlaybackPlan?> load(
     Drama drama,
     Episode episode, {
@@ -100,7 +105,6 @@ class PlaybackLoader {
 
   Future<void> close() async {
     _closed = true;
-    _generation++;
-    await repository.cancelPlayback().timeout(cancelTimeout);
+    await cancel();
   }
 }

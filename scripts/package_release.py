@@ -1,5 +1,6 @@
 import argparse
 import hashlib
+import json
 import re
 import shutil
 import zipfile
@@ -41,19 +42,30 @@ if options.platform == 'android':
         artifacts.append(target)
 else:
     bundle = root / 'build' / 'windows' / 'x64' / 'runner' / 'Release'
-    required = ['zhenguojian.exe', 'duanju_core.dll', 'flutter_windows.dll', 'libffmpegkit.dll',
-                'libmpv-2.dll', 'msvcp140.dll', 'vcruntime140.dll',
+    required = ['HongguoTV.exe', 'HongguoTV-updater.exe', 'duanju_core.dll', 'flutter_windows.dll', 'libffmpegkit.dll',
+                'libmpv-2.dll', 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll',
+                'libEGL.dll', 'libGLESv2.dll', 'd3dcompiler_47.dll',
                 'data/icudtl.dat', 'data/app.so']
     missing = [name for name in required if not (bundle / name).is_file()]
     if missing:
         raise SystemExit('Windows 安装包缺少文件：' + ', '.join(missing))
-    target = output / f'{variant.slug}-{version}-windows-x64.zip'
+    if (bundle / 'dartjni.dll').exists():
+        raise SystemExit('Windows 不使用 JNI；请运行 flutter clean 后重新构建，避免残留 Java 依赖。')
+    if any((bundle / name).exists() for name in ['libc++.dll', 'zlib.dll']):
+        raise SystemExit('构建目录含未使用的 ANGLE 调试 DLL；请运行 flutter clean 后重新构建。')
+    manifest = {'schema': 1, 'version': version.split('+')[0],
+                'build': int(version.split('+')[1]), 'architecture': 'x64', 'files': {}}
+    for source in sorted(bundle.rglob('*')):
+        if source.is_file() and source.name != 'windows-package.json':
+            manifest['files'][source.relative_to(bundle).as_posix()] = {
+                'bytes': source.stat().st_size,
+                'sha256': hashlib.file_digest(source.open('rb'), 'sha256').hexdigest()}
+    (bundle / 'windows-package.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+    target = output / f'HongguoTV-{version.split("+")[0]}-windows-x64.zip'
     with zipfile.ZipFile(target, 'w', zipfile.ZIP_DEFLATED) as archive:
         for source in sorted(bundle.rglob('*')):
             if source.is_file():
                 relative = source.relative_to(bundle).as_posix()
-                if relative == 'zhenguojian.exe':
-                    relative = variant.slug + '.exe'
                 archive.write(source, relative)
     artifacts.append(target)
 

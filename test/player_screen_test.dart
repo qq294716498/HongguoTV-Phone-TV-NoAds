@@ -8,6 +8,7 @@ import 'package:duanju_app/player_screen.dart';
 import 'package:duanju_app/player_controls.dart';
 import 'package:duanju_app/app_layout.dart';
 import 'package:duanju_app/app_theme.dart';
+import 'package:duanju_app/core_bridge.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -62,6 +63,81 @@ class DeferredSeekPlayer extends ScriptedPlayer {
     commands.add('play');
     resumeCalls++;
     if (!state.playing) await super.playOrPause();
+  }
+}
+
+class DeferredOpenPlayer extends ScriptedPlayer {
+  final opening = Completer<void>();
+  bool deferNext = true;
+  int playCalls = 0;
+
+  @override
+  Future<void> play() async {
+    playCalls++;
+    await super.play();
+  }
+
+  @override
+  Future<void> open(Playable playable, {bool play = true}) async {
+    await super.open(playable, play: play);
+    if (deferNext) {
+      deferNext = false;
+      await opening.future;
+    }
+  }
+}
+
+class DeferredStopPlayer extends ScriptedPlayer {
+  final stopping = Completer<void>();
+  bool deferNextStop = false;
+
+  @override
+  Future<void> stop() async {
+    await super.stop();
+    if (deferNextStop) {
+      deferNextStop = false;
+      await stopping.future;
+    }
+  }
+}
+
+class BlockedRouteRepository extends RouteRepository {
+  bool blocked = true;
+
+  @override
+  Future<PlaybackPlan> resolve(
+    Drama drama,
+    Episode episode, {
+    int quality = 0,
+  }) async {
+    if (blocked) {
+      primaryCalls++;
+      throw AppFailure(
+        '站源暂时限制访问',
+        code: 'source_blocked',
+        retryAt: DateTime.now().add(const Duration(seconds: 60)),
+      );
+    }
+    return super.resolve(drama, episode, quality: quality);
+  }
+}
+
+class DeferredResolveRouteRepository extends RouteRepository {
+  final pendingResolve = Completer<PlaybackPlan>();
+  bool deferFirst = true;
+
+  @override
+  Future<PlaybackPlan> resolve(
+    Drama drama,
+    Episode episode, {
+    int quality = 0,
+  }) {
+    if (!deferFirst) return super.resolve(drama, episode, quality: quality);
+    deferFirst = false;
+    primaryCalls++;
+    requestedQualities.add(quality);
+    requestedEpisodes.add(episode.number);
+    return pendingResolve.future;
   }
 }
 
@@ -150,6 +226,10 @@ void main() {
       ),
     );
     await settleOperations(tester);
+    if (platform is DeferredSeekPlayer) {
+      platform.resumeCalls = 0;
+      platform.commands.clear();
+    }
   }
 
   Future<void> unmount(WidgetTester tester, ScriptedPlayer player) async {
@@ -158,7 +238,12 @@ void main() {
     tester.view.resetDevicePixelRatio();
     tester.view.resetPadding();
     await settleOperations(tester);
+    for (var i = 0; i < 95 && !player.disposalComplete; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await tester.pump();
     expect(player.disposed, isTrue);
+    expect(player.disposalComplete, isTrue);
     expect(tester.takeException(), isNull);
   }
 
@@ -274,6 +359,228 @@ void main() {
     },
   );
 
+  for (final lateResult in ['success', 'failure']) {
+    testWidgets(
+      'switching episodes bypasses pending source retries and ignores late $lateResult',
+      (tester) async {
+        final repository = DeferredResolveRouteRepository();
+        final player = ScriptedPlayer();
+        await mount(tester, repository, player);
+        expect(repository.requestedEpisodes, [1]);
+        expect(repository.pendingResolve.isCompleted, false);
+        expect(player.opened, isEmpty);
+        await tester.tap(find.byKey(const ValueKey('play-episode-2')));
+        await settleOperations(tester);
+        expect(repository.requestedEpisodes, [1, 2]);
+        expect(repository.pendingResolve.isCompleted, false);
+        expect(player.opened, hasLength(1));
+        expect(player.state.playing, true);
+        expect(repository.active, hasLength(1));
+        final current = player.opened.single.uri;
+        final active = Set<String>.of(repository.active);
+        if (lateResult == 'success') {
+          const late = PlaybackPlan(
+            url: 'https://media.test/late-source-retry.mp4',
+            session: 'late-source-retry',
+          );
+          repository.active.add(late.session);
+          repository.pendingResolve.complete(late);
+        } else {
+          repository.pendingResolve.completeError(
+            AppFailure('Obsolete source retries exhausted'),
+          );
+        }
+        await settleOperations(tester);
+        expect(player.opened, hasLength(1));
+        expect(player.opened.single.uri, current);
+        expect(player.state.playing, true);
+        expect(repository.active, active);
+        expect(find.text('暂时无法播放'), findsNothing);
+        expect(tester.takeException(), isNull);
+        await unmount(tester, player);
+        expect(repository.active, isEmpty);
+      },
+    );
+  }
+
+  testWidgets(
+    'new episode bypasses an obsolete open and ignores its late completion',
+    (tester) async {
+      final repository = RouteRepository();
+      final player = DeferredOpenPlayer();
+      await mount(tester, repository, player);
+      expect(repository.primaryCalls, 1);
+      expect(player.opening.isCompleted, false);
+      await tester.tap(find.byKey(const ValueKey('play-episode-2')));
+      await settleOperations(tester);
+      expect(repository.requestedEpisodes, [1, 2]);
+      expect(player.opened, hasLength(2));
+      expect(player.played, [false, false]);
+      expect(player.playCalls, 1);
+      final current = player.opened.last.uri;
+      player.opening.complete();
+      await settleOperations(tester);
+      expect(player.opened.last.uri, current);
+      expect(player.playCalls, 1);
+      expect(repository.active, hasLength(1));
+      expect(find.text('暂时无法播放'), findsNothing);
+      await unmount(tester, player);
+      expect(repository.active, isEmpty);
+    },
+  );
+
+  testWidgets(
+    'new episode bypasses a hung recovery stop without a fresh source request waiting',
+    (tester) async {
+      final repository = RouteRepository();
+      final player = DeferredStopPlayer();
+      await mount(tester, repository, player);
+      for (var i = 0; i < 3; i++) {
+        player.fail();
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 1));
+        await settleOperations(tester);
+      }
+      player.deferNextStop = true;
+      player.fail();
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      await settleOperations(tester);
+      expect(player.stopping.isCompleted, false);
+      await tester.tap(find.byKey(const ValueKey('play-episode-2')));
+      await settleOperations(tester);
+      expect(repository.requestedEpisodes.last, 2);
+      final current = player.opened.last.uri;
+      player.stopping.complete();
+      await settleOperations(tester);
+      expect(player.opened.last.uri, current);
+      expect(find.text('暂时无法播放'), findsNothing);
+      await unmount(tester, player);
+      expect(repository.active, isEmpty);
+    },
+  );
+
+  testWidgets('leaving playback does not await or resume an obsolete open', (
+    tester,
+  ) async {
+    final repository = RouteRepository();
+    final player = DeferredOpenPlayer();
+    await mount(tester, repository, player);
+    await unmount(tester, player);
+    expect(player.disposed, true);
+    expect(repository.active, isEmpty);
+    player.opening.complete();
+    await settleOperations(tester);
+    expect(player.playCalls, 0);
+    expect(repository.active, isEmpty);
+  });
+
+  testWidgets('a pending open completed in background remains paused', (
+    tester,
+  ) async {
+    final repository = RouteRepository();
+    final player = DeferredOpenPlayer();
+    await mount(tester, repository, player);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await settleOperations(tester);
+    player.opening.complete();
+    await settleOperations(tester);
+    expect(player.playCalls, 0);
+    expect(player.state.playing, false);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await unmount(tester, player);
+  });
+
+  testWidgets(
+    'a background pending open keeps its deadline and cannot resume late',
+    (tester) async {
+      final repository = RouteRepository();
+      final player = DeferredOpenPlayer();
+      await mount(tester, repository, player);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump(const Duration(seconds: 46));
+      await settleOperations(tester);
+      expect(find.text('暂时无法播放'), findsOneWidget);
+      player.opening.complete();
+      await settleOperations(tester);
+      expect(player.playCalls, 0);
+      expect(repository.active, isEmpty);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await unmount(tester, player);
+    },
+  );
+
+  for (final pause in ['user', 'background']) {
+    testWidgets('$pause pause after readiness clears the startup deadline', (
+      tester,
+    ) async {
+      final repository = RouteRepository();
+      final player = ScriptedPlayer();
+      await mount(tester, repository, player);
+      if (pause == 'user') {
+        tester
+            .widget<PlayerControls>(find.byType(PlayerControls))
+            .onTogglePlayback();
+      } else {
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      }
+      await settleOperations(tester);
+      expect(player.state.playing, false);
+      await tester.pump(const Duration(seconds: 60));
+      await settleOperations(tester);
+      expect(find.text('暂时无法播放'), findsNothing);
+      expect(repository.primaryCalls, 1);
+      if (pause == 'background') {
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+      }
+      await unmount(tester, player);
+    });
+  }
+
+  testWidgets(
+    'hung startup exits with an actionable error within the shared budget',
+    (tester) async {
+      final repository = RouteRepository();
+      final player = DeferredOpenPlayer();
+      await mount(tester, repository, player);
+      await tester.pump(const Duration(seconds: 46));
+      await settleOperations(tester);
+      expect(find.text('暂时无法播放'), findsOneWidget);
+      expect(find.text('重试播放'), findsOneWidget);
+      expect(repository.active, isEmpty);
+      await tester.tap(find.text('重试播放'));
+      await settleOperations(tester);
+      expect(repository.primaryCalls, 2);
+      expect(find.text('暂时无法播放'), findsNothing);
+      player.opening.complete();
+      await settleOperations(tester);
+      await unmount(tester, player);
+      expect(repository.active, isEmpty);
+    },
+  );
+
+  testWidgets(
+    'blocked source stops automatic retries and preserves manual recovery',
+    (tester) async {
+      final repository = BlockedRouteRepository();
+      final player = ScriptedPlayer();
+      await mount(tester, repository, player);
+      expect(find.textContaining('秒后手动重试'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 65));
+      await settleOperations(tester);
+      expect(repository.primaryCalls, 1);
+      expect(repository.fallbackCalls, 0);
+      repository.blocked = false;
+      await tester.tap(find.text('重试播放'));
+      await settleOperations(tester);
+      expect(repository.primaryCalls, 2);
+      expect(find.text('暂时无法播放'), findsNothing);
+      await unmount(tester, player);
+    },
+  );
+
   testWidgets('picture-in-picture hides app overlay controls', (tester) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
     final messenger =
@@ -342,7 +649,12 @@ void main() {
         await tester.tap(find.byKey(const ValueKey('player-mobile-next')));
         await settleOperations(tester);
         expect(player.opened.length, 2);
-        expect(find.text('第 2 集'), findsOneWidget);
+        expect(
+          tester
+              .widget<PlayerControls>(find.byType(PlayerControls))
+              .episodeLabel,
+          '第 2 集 / 共 2 集',
+        );
         expect(player.state.position, Duration.zero);
         expect(player.state.playing, isTrue);
         await unmount(tester, player);
@@ -496,9 +808,14 @@ void main() {
             await unmount(tester, player);
             return;
         }
+        final playCallsBeforeLateSeek = player.resumeCalls;
+        expect(
+          playCallsBeforeLateSeek,
+          interruption == 'episode switch' ? 1 : 0,
+        );
         player.pendingSeeks.first.complete();
         await settleOperations(tester);
-        expect(player.resumeCalls, 0);
+        expect(player.resumeCalls, playCallsBeforeLateSeek);
         if (interruption == 'newer seek') {
           expect(player.state.playing, isFalse);
           player.pendingSeeks.last.complete();

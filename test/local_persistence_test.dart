@@ -5,6 +5,7 @@ import 'package:duanju_app/local_snapshot.dart';
 import 'package:duanju_app/local_store.dart';
 import 'package:duanju_app/models.dart';
 import 'package:duanju_app/playback_preferences.dart';
+import 'package:duanju_app/watch_reminder_models.dart';
 import 'package:duanju_app/profiles_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -57,6 +58,98 @@ void main() {
     addTearDown(store.dispose);
     return store;
   }
+
+  test(
+    'danmaku speed migrates safely and survives restart and backup',
+    () async {
+      final old = PlaybackPreferences.fromJson({'speed': 1.5});
+      expect(old.effectiveDanmakuSpeed(mobile: true), 1.15);
+      expect(old.effectiveDanmakuSpeed(mobile: false), 1);
+      for (final invalid in [
+        null,
+        'fast',
+        -1,
+        0,
+        9,
+        double.nan,
+        double.infinity,
+      ]) {
+        final parsed = PlaybackPreferences.fromJson({
+          'speed': 1.5,
+          'danmakuSpeed': invalid,
+        });
+        expect(parsed.speed, 1.5);
+        expect(parsed.danmakuSpeed, isNull);
+      }
+      final (store, platform) = await create();
+      for (final speed in danmakuSpeeds) {
+        await store.setPlaybackPreferences(old.copyWith(danmakuSpeed: speed));
+        final restored = await restart(platform);
+        expect(restored.playbackPreferences.danmakuSpeed, speed);
+        expect(restored.playbackPreferences.speed, 1.5);
+        final backup = await restored.exportBackup();
+        await restored.setPlaybackPreferences(const PlaybackPreferences());
+        await restored.importBackup(backup);
+        expect(restored.playbackPreferences.danmakuSpeed, speed);
+      }
+    },
+  );
+
+  test(
+    'opacity and reminder settings survive restart and backup without changing video speed',
+    () async {
+      final (store, platform) = await create();
+      final value = const PlaybackPreferences(
+        speed: 1.5,
+        danmakuSpeed: 1.25,
+        danmakuOpacity: .35,
+        reminders: WatchReminderPreferences(
+          dailyEnabled: true,
+          dailyLimitMinutes: 90,
+          dailyRepeatMinutes: 3,
+          bedtimeEnabled: true,
+          bedtimeMinute: 1380,
+          bedtimeRepeatMinutes: 7,
+        ),
+      );
+      await store.setPlaybackPreferences(value);
+      await store.saveWatchReminderProgress(
+        'default',
+        jsonEncode(
+          WatchReminderProgress(
+            day: '2026-10-14',
+            watchedMs: 3600000,
+            bedtimeLatched: true,
+          ).toJson(),
+        ),
+      );
+      final restored = await restart(platform);
+      expect(restored.playbackPreferences.toJson(), value.toJson());
+      expect(restored.watchReminderProgress.watchedMs, 3600000);
+      final backup = await restored.exportBackup();
+      await restored.setPlaybackPreferences(const PlaybackPreferences());
+      await restored.importBackup(backup);
+      expect(restored.playbackPreferences.toJson(), value.toJson());
+      expect(restored.watchReminderProgress.bedtimeLatched, true);
+      expect(
+        PlaybackPreferences.fromJson({
+          'danmakuOpacity': 'broken',
+        }).danmakuOpacity,
+        isNull,
+      );
+      expect(
+        const PlaybackPreferences().effectiveDanmakuOpacity(mobile: true),
+        .95,
+      );
+      expect(
+        const PlaybackPreferences().effectiveDanmakuOpacity(
+          mobile: false,
+          television: true,
+        ),
+        .55,
+      );
+    },
+  );
 
   for (final failure in ['false', 'throw', 'after']) {
     test(

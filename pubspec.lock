@@ -10,7 +10,7 @@ packages:
     source: hosted
     version: "2.0.0"
   archive:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: archive
       sha256: "6c5bcd986e06b94e3c40244af471750840a3d2341d1f9763a1100a14add517b4"
@@ -881,15 +881,14 @@ packages:
     source: hosted
     version: "2.4.3"
   video_player:
-    dependency: "direct main"
+    dependency: "direct overridden"
     description:
-      name: video_player
-      sha256: "8c837b570dccb9ae6ff73d2e0b03c7e708bfefd3bd1194faa7f3e7f200dfc399"
-      url: "https://pub.dev"
-    source: hosted
+      path: "packages/video_player"
+      relative: true
+    source: path
     version: "2.14.0"
   video_player_android:
-    dependency: "direct overridden"
+    dependency: "direct main"
     description:
       path: "packages/video_player_android"
       relative: true

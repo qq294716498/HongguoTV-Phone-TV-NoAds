@@ -31,6 +31,7 @@ class PlaybackPreloader extends ChangeNotifier {
   DateTime _expires = DateTime(2000), _retryAt = DateTime(2000);
   int _generation = 0;
   bool _closed = false, loading = false;
+  bool _sourceBlocked = false;
   String error = '';
   void _release(PlaybackPlan plan) => unawaited(_releasePlan(plan));
 
@@ -60,11 +61,27 @@ class PlaybackPreloader extends ChangeNotifier {
       return '下一集缓冲中 $progress% · $size MB';
     }
     if (loading || _delay != null) return '正在准备下一集';
+    if (_sourceBlocked && _now().isBefore(_retryAt)) {
+      final seconds = (_retryAt.difference(_now()).inMilliseconds / 1000)
+          .ceil();
+      return '站源请求受限，$seconds 秒后重试下一集';
+    }
     return error.isNotEmpty ? '下一集缓冲失败，正在重试' : '播放稳定后持续缓冲下一集';
   }
 
   String _key(Drama drama, Episode episode, int quality, bool online) =>
       '${drama.id}\u0000${episode.number}\u0000$quality\u0000$online';
+
+  Duration _retryDelay(Object failure) {
+    if (failure is AppFailure && failure.code == 'source_blocked') {
+      final remaining = failure.retryAt?.difference(_now());
+      if (remaining != null && remaining > const Duration(seconds: 3)) {
+        return remaining;
+      }
+      if (remaining == null) return const Duration(seconds: 60);
+    }
+    return const Duration(seconds: 3);
+  }
 
   void prepare(
     Drama drama,
@@ -156,6 +173,7 @@ class PlaybackPreloader extends ChangeNotifier {
           _prepareMedia(plan);
           _expires = expires;
           error = '';
+          _sourceBlocked = false;
           DiaryService.add(
             '[Preload] resolved episode=${episode.number}, elapsedMs=${clock.elapsedMilliseconds}, bytes=${plan.prefetchedBytes}, complete=${plan.local || plan.preloadComplete}',
           );
@@ -165,8 +183,11 @@ class PlaybackPreloader extends ChangeNotifier {
         } catch (failure) {
           if (_closed || ticket != _generation) return;
           error = failure.toString();
-          _retryAt = _now().add(const Duration(seconds: 3));
-          _poll = Timer(const Duration(seconds: 3), () {
+          _sourceBlocked =
+              failure is AppFailure && failure.code == 'source_blocked';
+          final delay = _retryDelay(failure);
+          _retryAt = _now().add(delay);
+          _poll = Timer(delay, () {
             if (!_closed && ticket == _generation) {
               prepare(
                 drama,
@@ -233,8 +254,11 @@ class PlaybackPreloader extends ChangeNotifier {
         _ready = null;
         _release(current);
         error = failure.toString();
-        _retryAt = _now().add(const Duration(seconds: 3));
-        _poll = Timer(const Duration(seconds: 3), () {
+        _sourceBlocked =
+            failure is AppFailure && failure.code == 'source_blocked';
+        final delay = _retryDelay(failure);
+        _retryAt = _now().add(delay);
+        _poll = Timer(delay, () {
           if (!_closed && ticket == _generation) {
             prepare(
               drama,
@@ -332,6 +356,7 @@ class PlaybackPreloader extends ChangeNotifier {
     _identity = null;
     _retryAt = DateTime(2000);
     error = '';
+    _sourceBlocked = false;
     if (old != null) _release(old);
     if (!_closed) notifyListeners();
   }

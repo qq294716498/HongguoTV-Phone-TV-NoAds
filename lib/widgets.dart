@@ -97,7 +97,9 @@ class DramaCover extends StatelessWidget {
   final Drama drama;
   final AppRepository repository;
   final double radius;
-  static const imagesDisabled = bool.fromEnvironment('DISABLE_REMOTE_IMAGES');
+  static bool imagesDisabled = const bool.fromEnvironment(
+    'DISABLE_REMOTE_IMAGES',
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -330,6 +332,7 @@ class DramaTile extends StatelessWidget {
     this.onFocus,
     this.actions,
     this.badge,
+    this.badgeRibbon = false,
     this.selected,
     this.onMore,
     this.onLongPress,
@@ -342,6 +345,7 @@ class DramaTile extends StatelessWidget {
   final VoidCallback? onFocus;
   final Widget? actions;
   final String? badge;
+  final bool badgeRibbon;
   final bool? selected;
   final VoidCallback? onMore;
   final VoidCallback? onLongPress;
@@ -374,7 +378,32 @@ class DramaTile extends StatelessWidget {
             fit: StackFit.expand,
             children: [
               DramaCover(drama: drama, repository: repository),
-              if (badge != null && badge!.isNotEmpty)
+              if (badge != null && badge!.isNotEmpty && badgeRibbon)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    key: const ValueKey('next-season-ribbon'),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: Banner(
+                        message: badge!,
+                        location: BannerLocation.topStart,
+                        layoutDirection: TextDirection.ltr,
+                        color: const Color(0xFFBF245B),
+                        textStyle: TextStyle(
+                          color: Colors.white,
+                          fontFamily: Theme.of(
+                            context,
+                          ).textTheme.labelSmall?.fontFamily,
+                          fontSize: television ? 12 : 11,
+                          fontWeight: FontWeight.w700,
+                          height: 1,
+                        ),
+                        child: const SizedBox.expand(),
+                      ),
+                    ),
+                  ),
+                )
+              else if (badge != null && badge!.isNotEmpty)
                 Positioned(
                   left: 6,
                   right: 6,
@@ -479,7 +508,8 @@ class DramaTile extends StatelessWidget {
     return Semantics(
       button: true,
       selected: selected,
-      label: '${drama.title}，${drama.episodes}集',
+      label:
+          '${drama.title}，${drama.episodes}集${badge == null ? '' : '，$badge'}',
       child: InkWell(
         onTap: onTap,
         onLongPress: onLongPress ?? onMore,

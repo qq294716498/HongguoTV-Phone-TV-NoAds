@@ -239,10 +239,16 @@ class Episode {
 }
 
 class DramaDetail {
-  DramaDetail(this.drama, this.episodes, {this.warning = ''});
+  DramaDetail(
+    this.drama,
+    this.episodes, {
+    this.warning = '',
+    this.hasMoreEpisodes = false,
+  });
   final Drama drama;
   final List<Episode> episodes;
   final String warning;
+  final bool hasMoreEpisodes;
   factory DramaDetail.fromJson(Map<String, dynamic> json) {
     final rows = json['chapters'] as List? ?? const [];
     return DramaDetail(
@@ -252,6 +258,10 @@ class DramaDetail {
           Episode(Map<String, dynamic>.from(rows[i] as Map), i + 1),
       ],
       warning: json['warning'] as String? ?? '',
+      hasMoreEpisodes:
+          json['hasMoreEpisodes'] == true ||
+          json['hasMore'] == true ||
+          json['episodesComplete'] == false,
     );
   }
 }

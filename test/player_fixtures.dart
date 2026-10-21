@@ -24,6 +24,7 @@ class ScriptedPlayer extends PlatformPlayer {
   final opened = <Media>[];
   final played = <bool>[];
   bool disposed = false;
+  bool disposalComplete = false;
   final rates = <double>[];
 
   @override
@@ -111,6 +112,12 @@ class ScriptedPlayer extends PlatformPlayer {
   }
 
   @override
+  Future<void> play() async {
+    state = state.copyWith(playing: true);
+    playingController.add(true);
+  }
+
+  @override
   Future<void> pause() async {
     state = state.copyWith(playing: false);
     playingController.add(false);
@@ -126,6 +133,7 @@ class ScriptedPlayer extends PlatformPlayer {
   Future<void> dispose() async {
     disposed = true;
     await super.dispose();
+    disposalComplete = true;
   }
 }
 

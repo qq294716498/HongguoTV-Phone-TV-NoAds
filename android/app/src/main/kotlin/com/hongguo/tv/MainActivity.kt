@@ -33,6 +33,9 @@ class MainActivity : FlutterActivity() {
     private var headroomReadAt = 0L
     private var thermalHeadroom: Double? = null
     private var deviceChannel: MethodChannel? = null
+    private var navigationChannel: MethodChannel? = null
+    private var televisionNavigationEnabled = false
+    private val televisionBackKey = TelevisionBackKey()
     private var televisionMode = false
     private var televisionPlaybackActive = false
     private var activityResumed = false
@@ -97,12 +100,18 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (televisionPlaybackActive && deviceChannel != null &&
+        val playbackBack = televisionPlaybackActive && deviceChannel != null
+        val navigationBack = televisionNavigationEnabled && navigationChannel != null
+        if ((playbackBack || navigationBack) &&
             (event.keyCode == KeyEvent.KEYCODE_BACK || event.keyCode == KeyEvent.KEYCODE_ESCAPE) &&
             (Build.VERSION.SDK_INT < Build.VERSION_CODES.N || !isInPictureInPictureMode)) {
-            if (event.action == KeyEvent.ACTION_UP && !event.isCanceled) forwardTelevisionBack()
+            val forward = televisionBackKey.shouldForward(event.keyCode, event.action, event.repeatCount, event.isCanceled)
+            if (forward && event.action == KeyEvent.ACTION_UP && !event.isCanceled) {
+                if (playbackBack) forwardTelevisionBack() else navigationChannel?.invokeMethod("back", null)
+            }
             return true
         }
+        televisionBackKey.reset()
         return super.dispatchKeyEvent(event)
     }
 
@@ -207,6 +216,7 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onPause() {
+        televisionBackKey.reset()
         activityResumed = false
         appUpdateBridge?.onPause()
         applyPlaybackScreenOn()
@@ -222,6 +232,17 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         appUpdateBridge = AppUpdateBridge(this, flutterEngine.dartExecutor.binaryMessenger)
+        navigationChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "hongguo/navigation")
+            .also { channel ->
+                channel.setMethodCallHandler { call, result ->
+                    if (call.method == "setEnabled") {
+                        televisionNavigationEnabled = call.argument<Boolean>("enabled") == true
+                        result.success(null)
+                    } else {
+                        result.notImplemented()
+                    }
+                }
+            }
         deviceChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "duanju/device")
             .also { channel ->
                 channel.setMethodCallHandler { call, result ->
@@ -339,6 +360,14 @@ class MainActivity : FlutterActivity() {
                             setFullscreenBrightness(false)
                             result.success(true)
                         }
+                        "openProjectPage" -> {
+                            try {
+                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds")))
+                                result.success(null)
+                            } catch (error: Exception) {
+                                result.error("no_browser", "未找到可用浏览器", null)
+                            }
+                        }
                         "openExternalPlayer" -> {
                             val url = call.argument<String>("url")
                             val title = call.argument<String>("title") ?: "短剧"
@@ -429,6 +458,10 @@ class MainActivity : FlutterActivity() {
         applyPlaybackScreenOn()
         setFullscreenBrightness(false)
         televisionPlaybackActive = false
+        navigationChannel?.setMethodCallHandler(null)
+        navigationChannel = null
+        televisionNavigationEnabled = false
+        televisionBackKey.reset()
         deviceChannel?.setMethodCallHandler(null)
         deviceChannel = null
         super.cleanUpFlutterEngine(flutterEngine)

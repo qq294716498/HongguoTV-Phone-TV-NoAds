@@ -30,7 +30,10 @@ class PlayerInteractions extends ChangeNotifier {
     this.onEpisodeSwipe,
     this.canNavigateEpisode,
     this.captureEpisodeFrame,
+    this.initialUnmutedVolume = 100,
+    this.onVolumeChanged,
   }) {
+    _unmutedVolume = initialUnmutedVolume.clamp(1.0, 100.0);
     _playing = player.stream.playing.listen((playing) {
       if (!playing) cancel();
     });
@@ -45,6 +48,8 @@ class PlayerInteractions extends ChangeNotifier {
   }
 
   final Player player;
+  final double initialUnmutedVolume;
+  final void Function(double, double)? onVolumeChanged;
   final bool Function() available;
   final double Function() baseSpeed;
   final VoidCallback onTogglePlayback;
@@ -576,11 +581,18 @@ class PlayerInteractions extends ChangeNotifier {
     hint('${seconds > 0 ? '快进至' : '后退至'} ${formatPosition(target / 1000)}');
   }
 
+  void setVolume(double value) {
+    if (!available()) return;
+    final volume = value.clamp(0.0, 100.0);
+    if (volume > 0) _unmutedVolume = volume;
+    unawaited(player.setVolume(volume));
+    onVolumeChanged?.call(volume, _unmutedVolume);
+  }
+
   void changeVolume(double delta) {
     if (!available()) return;
     final volume = (player.state.volume + delta).clamp(0.0, 100.0);
-    unawaited(player.setVolume(volume));
-    if (volume > 0) _unmutedVolume = volume;
+    setVolume(volume);
     hint(volume == 0 ? '已静音' : '音量 ${volume.round()}%');
   }
 
@@ -589,7 +601,7 @@ class PlayerInteractions extends ChangeNotifier {
     final current = player.state.volume;
     if (current > 0) _unmutedVolume = current;
     final target = current > 0 ? 0.0 : _unmutedVolume;
-    unawaited(player.setVolume(target));
+    setVolume(target);
     hint(target == 0 ? '已静音' : '音量 ${target.round()}%');
   }
 
