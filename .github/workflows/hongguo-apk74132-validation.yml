@@ -41,6 +41,7 @@ jobs:
 
   live-episode:
     needs: regression
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[live-hongguo]')
     strategy:
       fail-fast: false
       matrix:
@@ -59,4 +60,5 @@ jobs:
         working-directory: native
         env:
           CHECK_LIVE_HONGGUO_APK74132: "true"
+          HONGGUO_APK74132_REGISTERED: "true"
         run: go test ./core -run '^TestLiveHongguoAPK74132IIDAndPlayerScene$' -v -count=1 -timeout=3m

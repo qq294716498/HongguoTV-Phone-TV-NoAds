@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"os"
 	"sort"
@@ -38,7 +39,25 @@ func TestLiveHongguoAPK74132IIDAndPlayerScene(t *testing.T) {
 	if base == nil {
 		base = http.DefaultTransport
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
 	client := d.hongguoClient()
+	registered := os.Getenv("HONGGUO_APK74132_REGISTERED") == "true"
+	if registered {
+		jar, jarErr := cookiejar.New(nil)
+		if jarErr != nil {
+			t.Fatal(jarErr)
+		}
+		d.client.Jar = jar
+		deviceID, installID, registrationErr := probeHongguoGuestIDs(ctx, base, jar, t, 74132)
+		if registrationErr != nil {
+			t.Fatalf("APK 74132 guest registration precondition failed: %v", registrationErr)
+		}
+		client.mu.Lock()
+		client.state.DeviceID, client.state.InstallID = deviceID, installID
+		client.mu.Unlock()
+		t.Log("identityMode=server-assigned-gzip-json-fallback nativeSecurityReportingReproduced=false")
+	}
 	client.mu.Lock()
 	client.baseURL = "https://reading.snssdk.com"
 	deviceID, originalIID := client.state.DeviceID, client.state.InstallID
@@ -48,8 +67,6 @@ func TestLiveHongguoAPK74132IIDAndPlayerScene(t *testing.T) {
 		t.Fatal("IID comparison did not create a distinct synthetic installation ID")
 	}
 	const videoID = "7686465196335844376"
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-	defer cancel()
 	profile := url.Values{
 		"aid": {"8704"}, "app_name": {"kylin_read"}, "version_code": {"74132"},
 		"version_name": {"7.4.1.32"}, "manifest_version_code": {"74132"}, "update_version_code": {"74132"},
@@ -69,6 +86,12 @@ func TestLiveHongguoAPK74132IIDAndPlayerScene(t *testing.T) {
 		{"changed-iid-only", "/novel/player/video_model/v1/", changedIID, 1007, false},
 		{"observed-player-scene", "/novel/player/multi_video_model/player/v1", changedIID, 1007, true},
 		{"ai-shortplay-type-control", "/novel/player/multi_video_model/player/v1", changedIID, 1002, true},
+	}
+	if registered {
+		comparisons = comparisons[2:]
+		for index := range comparisons {
+			comparisons[index].iid = originalIID
+		}
 	}
 	requests, stopped := 0, false
 	for index, comparison := range comparisons {
@@ -127,7 +150,7 @@ func TestLiveHongguoAPK74132IIDAndPlayerScene(t *testing.T) {
 			if value, parseErr := strconv.ParseInt(mapString(envelope, "code", "status_code"), 10, 32); parseErr == nil {
 				code = value
 			}
-			t.Logf("comparison=%s syntheticIds=true sameDevice=true changedIID=%t path=%s contentType=%d status=%d bytes=%d json=%t code=%d stopped=%t", comparison.name, comparison.iid != originalIID, comparison.path, comparison.contentType, response.StatusCode, len(body), jsonOK, code, stopped)
+			t.Logf("comparison=%s registeredIds=%t sameDevice=true changedIID=%t path=%s contentType=%d status=%d bytes=%d json=%t code=%d stopped=%t", comparison.name, registered, comparison.iid != originalIID, comparison.path, comparison.contentType, response.StatusCode, len(body), jsonOK, code, stopped)
 			return response, nil
 		})
 		result, requestErr := d.hongguoAppRequest(ctx, http.MethodPost, comparison.path, profile, payload)

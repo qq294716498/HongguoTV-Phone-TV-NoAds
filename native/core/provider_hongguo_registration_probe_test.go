@@ -69,7 +69,15 @@ func TestLiveHongguoGuestRegistration(t *testing.T) {
 	}
 }
 
-func probeHongguoGuestIDs(ctx context.Context, transport http.RoundTripper, jar http.CookieJar, t *testing.T) (string, string, error) {
+func probeHongguoGuestIDs(ctx context.Context, transport http.RoundTripper, jar http.CookieJar, t *testing.T, versions ...int) (string, string, error) {
+	versionCode := 74032
+	if len(versions) > 0 {
+		versionCode = versions[0]
+	}
+	if versionCode < 10000 || versionCode > 99999 {
+		return "", "", errors.New("unsupported guest registration version")
+	}
+	versionName := fmt.Sprintf("%d.%d.%d.%02d", versionCode/10000, versionCode/1000%10, versionCode/100%10, versionCode%100)
 	var random [32]byte
 	if _, err := rand.Read(random[:]); err != nil {
 		return "", "", errors.New("could not create a synthetic guest installation")
@@ -78,8 +86,8 @@ func probeHongguoGuestIDs(ctx context.Context, transport http.RoundTripper, jar 
 	openID := hex.EncodeToString(random[16:24])
 	header := map[string]any{
 		"aid": 8704, "app_name": "kylin_read", "package": "com.kylin.read",
-		"app_version": "7.4.0.32", "version_code": 74032, "manifest_version_code": 74032,
-		"update_version_code": 74032, "channel": "update_64", "device_platform": "android",
+		"app_version": versionName, "version_code": versionCode, "manifest_version_code": versionCode,
+		"update_version_code": versionCode, "channel": "update_64", "device_platform": "android",
 		"os": "Android", "os_api": 36, "os_version": "16", "device_model": "25053RT47C",
 		"device_brand": "Redmi", "device_manufacturer": "Xiaomi", "cpu_abi": "arm64-v8a",
 		"resolution": "2772x1280", "density_dpi": 520, "language": "zh", "access": "wifi",
@@ -115,8 +123,8 @@ func probeHongguoGuestIDs(ctx context.Context, transport http.RoundTripper, jar 
 			return "", "", errors.New("invalid APK registration address")
 		}
 		query := url.Values{
-			"aid": {"8704"}, "app_name": {"kylin_read"}, "version_code": {"74032"},
-			"version_name": {"7.4.0.32"}, "device_platform": {"android"}, "os": {"android"},
+			"aid": {"8704"}, "app_name": {"kylin_read"}, "version_code": {fmt.Sprint(versionCode)},
+			"version_name": {versionName}, "device_platform": {"android"}, "os": {"android"},
 			"_rticket": {fmt.Sprint(time.Now().UnixMilli())},
 		}
 		address.RawQuery = query.Encode()
@@ -127,11 +135,20 @@ func probeHongguoGuestIDs(ctx context.Context, transport http.RoundTripper, jar 
 		request.Header.Set("Content-Type", "application/json; charset=utf-8")
 		request.Header.Set("Content-Encoding", "gzip")
 		request.Header.Set("Accept", "application/json")
-		request.Header.Set("User-Agent", strings.ReplaceAll(strings.ReplaceAll(hongguoAppUserAgent, "com.phoenix.read", "com.kylin.read"), "/73532 ", "/74032 "))
+		request.Header.Set("User-Agent", strings.ReplaceAll(strings.ReplaceAll(hongguoAppUserAgent, "com.phoenix.read", "com.kylin.read"), "/73532 ", "/"+fmt.Sprint(versionCode)+" "))
 		response, err := client.Do(request)
 		if err != nil {
 			t.Logf("registration host=%s transportErrorType=%T", address.Hostname(), err)
 			continue
+		}
+		if response.StatusCode == http.StatusForbidden || response.StatusCode == http.StatusTooManyRequests || response.Header.Get("Retry-After") != "" {
+			t.Logf("registration host=%s status=%d hasRetryAfter=%t stopped=true", address.Hostname(), response.StatusCode, response.Header.Get("Retry-After") != "")
+			response.Body.Close()
+			return "", "", errors.New("provider requested guest registration comparison to stop")
+		}
+		if strings.HasPrefix(strings.ToLower(response.Header.Get("Content-Type")), "image/") {
+			response.Body.Close()
+			return "", "", errors.New("unexpected guest registration image response was not read")
 		}
 		content, readErr := io.ReadAll(io.LimitReader(response.Body, 1024*1024+1))
 		response.Body.Close()
