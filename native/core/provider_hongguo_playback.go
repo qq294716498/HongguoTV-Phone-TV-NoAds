@@ -41,11 +41,15 @@ type hongguoPlaybackResponse struct {
 	} `json:"key_urls"`
 }
 
-func (d *Downloader) resolveHongguoPlaybackAPI(ctx context.Context, seriesID, videoID string) (providerMedia, error) {
+func (d *Downloader) resolveHongguoPlaybackAPI(ctx context.Context, seriesID, videoID string, contentTypes ...int) (providerMedia, error) {
 	if !hongguoNumericID.MatchString(seriesID) || !hongguoNumericID.MatchString(videoID) {
 		return providerMedia{}, errors.New("红果播放请求缺少有效的剧集 ID")
 	}
-	reference, err := json.Marshal(hongguoPlaybackReference{ContentType: 1004, SeriesID: seriesID, VideoID: videoID, VideoPlatform: 3})
+	contentType := 1004
+	if len(contentTypes) > 0 {
+		contentType = hongguoMediaContentType(contentTypes[0], 1004)
+	}
+	reference, err := json.Marshal(hongguoPlaybackReference{ContentType: contentType, SeriesID: seriesID, VideoID: videoID, VideoPlatform: 3})
 	if err != nil {
 		return providerMedia{}, err
 	}
