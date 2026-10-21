@@ -36,7 +36,7 @@ jobs:
           go test -race -ldflags="-X duanjuapp/native/core.buildAllSources=true" ./...
       - name: Preserve checked source
         run: |
-          python3 scripts/finish_task.py --message "保留网页详情和备用取流的剧集内容类型，添加 APK 7.4.1.32 同集验证；尚未声明恢复播放"
+          python3 scripts/finish_task.py --message "Preserve content types and compare IID with the APK 74132 observed player scene; playback restoration remains unverified"
           python3 scripts/sync_source.py --check
 
   live-episode:
@@ -55,8 +55,8 @@ jobs:
         with:
           go-version-file: native/go.mod
           cache-dependency-path: native/go.sum
-      - name: Verify user-confirmed episode without images
+      - name: Compare IID and observed player scene without images
         working-directory: native
         env:
           CHECK_LIVE_HONGGUO_APK74132: "true"
-        run: go test ./core -run '^TestLiveHongguoAPK74132KnownEpisode$' -v -count=1 -timeout=3m
+        run: go test ./core -run '^TestLiveHongguoAPK74132IIDAndPlayerScene$' -v -count=1 -timeout=3m
