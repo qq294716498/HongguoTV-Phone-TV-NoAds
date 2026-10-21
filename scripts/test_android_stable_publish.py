@@ -56,7 +56,7 @@ class AndroidStablePublishTests(unittest.TestCase):
                 edits.assert_not_called()
 
     def test_failed_public_latest_validation_never_marks_notes_complete(self):
-        with mock.patch.object(Path, 'read_text', return_value='version: 0.1.23+48\n'), \
+        with mock.patch.object(Path, 'read_text', return_value='version: 0.1.24+49\n'), \
                 mock.patch.object(publish.os, 'chdir'), mock.patch.object(publish, 'validate_release_source'), \
                 mock.patch.object(publish, 'read', return_value={}), \
                 mock.patch.object(publish, 'github', return_value=json.dumps({'tag_name': 'app-v0.1.22-47'})), \
@@ -166,7 +166,7 @@ class AndroidStablePublishTests(unittest.TestCase):
     def test_changed_android_latest_blocks_staging_without_publication(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            (root / 'pubspec.yaml').write_text('version: 0.1.23+48\n')
+            (root / 'pubspec.yaml').write_text('version: 0.1.24+49\n')
             values = [json.dumps({'object': {'sha': 'current'}}),
                       json.dumps({'tag_name': 'app-v0.1.20-45'})]
             with mock.patch.object(publish, 'root', root), mock.patch.object(publish.os, 'chdir'), \
@@ -180,7 +180,7 @@ class AndroidStablePublishTests(unittest.TestCase):
                     publish.main()
                 self.assertEqual(github.call_count, 2)
                 self.assertEqual(commands.call_args_list, [mock.call(
-                    ['gh', 'release', 'view', 'app-v0.1.23-48'],
+                    ['gh', 'release', 'view', 'app-v0.1.24-49'],
                     stdout=publish.subprocess.DEVNULL, stderr=publish.subprocess.DEVNULL)])
 
     def test_signing_preflight_reports_presence_without_secret_values(self):

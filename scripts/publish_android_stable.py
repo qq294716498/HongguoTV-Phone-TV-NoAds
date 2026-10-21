@@ -133,8 +133,8 @@ def main():
     os.chdir(root)
     version, raw_build = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(), re.M).group(1).split('+')
     build = int(raw_build)
-    if version != '0.1.23' or build != 48:
-        raise ValueError('This workflow only publishes Android 0.1.23+48')
+    if version != '0.1.24' or build != 49:
+        raise ValueError('This workflow only publishes Android 0.1.24+49')
     validate_release_source(os.environ['GITHUB_SHA'])
     tag = f'app-v{version}-{build}'
     phase = sys.argv[1]
