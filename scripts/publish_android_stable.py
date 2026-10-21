@@ -133,7 +133,7 @@ def wait_for_windows(commit, timeout=1200):
         result = subprocess.run(['gh', 'api', f'repos/{repository}/releases/tags/{windows_tag}'], capture_output=True, text=True)
         if result.returncode == 0:
             candidate = json.loads(result.stdout)
-            if candidate['target_commitish'] != commit:
+            if not equivalent_windows_source(candidate['target_commitish'], commit):
                 raise ValueError('Windows release source differs from this Android candidate')
             if not candidate['draft'] and not candidate['prerelease'] and required.issubset({asset['name'] for asset in candidate['assets']}) and windows_verified_publication_note in candidate.get('body', ''):
                 print('Matching Windows release finalized; Android public validation may proceed.', flush=True)

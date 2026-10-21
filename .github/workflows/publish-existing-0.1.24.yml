@@ -14,71 +14,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  windows:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      contents: write
-      actions: read
-    env:
-      GH_TOKEN: ${{ github.token }}
-      WINDOWS_BINARY_COMMIT: bc4ddc77a59235544cca0134a4b9b55989f98da5
-      RELEASE_SOURCE_COMMIT: bc4ddc77a59235544cca0134a4b9b55989f98da5
-      RELEASE_SOURCE_ROOT: ${{ github.workspace }}/source
-      RELEASE_SOURCE_RUN: '39580851183'
-      WINDOWS_BINARY_RUN: '39580851183'
-    defaults:
-      run:
-        working-directory: source
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          path: publisher
-          persist-credentials: false
-      - uses: actions/checkout@v4
-        with:
-          ref: bc4ddc77a59235544cca0134a4b9b55989f98da5
-          path: source
-          persist-credentials: false
-          fetch-depth: 0
-      - uses: actions/download-artifact@v4
-        with:
-          name: hongguotv-windows-x64
-          run-id: 39580851183
-          github-token: ${{ github.token }}
-          path: source/dist/windows
-      - name: Publish validated Windows stable release without changing Android Latest
-        run: python3 ../publisher/scripts/publish_windows_stable.py stage
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.47.4'
-          channel: stable
-          cache: true
-      - run: flutter pub get --enforce-lockfile
-      - name: Publish verified public Windows fallback manifest
-        run: python3 ../publisher/scripts/publish_windows_stable.py channel
-      - name: Verify public Windows updater download and Android channel
-        env:
-          CHECK_WINDOWS_UPDATE: 'true'
-        run: |
-          for attempt in 1 2 3 4 5; do
-            if flutter test --no-pub test/windows_update_live_test.dart --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true --reporter=expanded; then
-              exit 0
-            fi
-            sleep 5
-          done
-          exit 1
-      - name: Verify Android assets unchanged and attach checksums
-        run: python3 ../publisher/scripts/publish_windows_stable.py finalize
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: windows-existing-0.1.24-release-evidence
-          path: source/dist/windows/*
-          retention-days: 14
-
   android:
-    needs: [windows]
     runs-on: ubuntu-latest
     timeout-minutes: 35
     permissions:
