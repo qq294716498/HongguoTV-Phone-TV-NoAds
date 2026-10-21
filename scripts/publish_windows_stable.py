@@ -20,6 +20,7 @@ previous_android_commit = '5bc038a5f3e5e35eaed6568831ac547a5b80b03d'
 pending_publication_note = '公开发布核验进行中：尚未完成 Windows 公网 ZIP 下载、升级通道及 Android Latest 隔离检查。'
 verified_publication_note = '公开发布核验已完成：Windows 公网 ZIP 下载与 SHA-256、正式升级通道和 API 限流回退检查通过；Android Latest 隔离及旧版本资产保持检查通过。'
 release_only_paths = frozenset({
+    'LICENSE', 'LICENSE.third-party.txt', 'NOTICE',
     'README.md', '.github/workflows/android-stable.yml',
     '.github/workflows/windows-preview.yml',
     'scripts/publish_android_stable.py', 'scripts/test_android_stable_publish.py',

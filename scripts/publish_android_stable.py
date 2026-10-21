@@ -23,6 +23,7 @@ offsets = {'arm64-v8a': 2000, 'armeabi-v7a': 1000, 'x86_64': 4000}
 release_branch = 'release/windows-android-0.1.24-49'
 approved_source = 'ff65899bf63559631f07c277622048f5d3c87fd1'
 release_only_paths = frozenset({
+    'LICENSE', 'LICENSE.third-party.txt', 'NOTICE',
     'README.md', '.github/workflows/android-stable.yml',
     '.github/workflows/windows-preview.yml',
     'scripts/publish_android_stable.py', 'scripts/test_android_stable_publish.py',
