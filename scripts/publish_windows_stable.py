@@ -9,7 +9,7 @@ import sys
 import urllib.request
 from pathlib import Path
 
-root = Path(__file__).resolve().parents[1]
+root = Path(os.environ.get('RELEASE_SOURCE_ROOT', Path(__file__).resolve().parents[1])).resolve()
 output = root / 'dist/windows'
 repository = 'qq294716498/HongguoTV-Phone-TV-NoAds'
 release_branch = 'release/windows-android-0.1.24-49'
@@ -32,6 +32,48 @@ release_only_paths = frozenset({
 })
 
 
+def source_commit():
+    return os.environ.get('RELEASE_SOURCE_COMMIT', os.environ['GITHUB_SHA'])
+
+
+def source_run():
+    return os.environ.get('RELEASE_SOURCE_RUN', os.environ['GITHUB_RUN_ID'])
+
+
+def validate_reused_source():
+    if not os.environ.get('RELEASE_SOURCE_COMMIT'):
+        return
+    selected = source_commit()
+    expected_runs = {
+        'bc4ddc77a59235544cca0134a4b9b55989f98da5': ('39580851183', 'windows'),
+        '2843cabe4792f7734271f767727180dc7efcb0e3': ('39583037347', 'android'),
+    }
+    if selected not in expected_runs or source_run() != expected_runs[selected][0]:
+        raise ValueError('Unapproved original build source or run')
+    if subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip() != selected:
+        raise ValueError('Corresponding source checkout does not match the original build')
+    run = json.loads(github('api', f'repos/{repository}/actions/runs/{source_run()}'))
+    expected_path = '.github/workflows/windows-preview.yml' if expected_runs[selected][1] == 'windows' else '.github/workflows/android-stable.yml'
+    if run['head_sha'] != selected or run['path'] != expected_path or run.get('head_repository', {}).get('full_name') != repository:
+        raise ValueError('Original build provenance does not match the approved repository and workflow')
+    jobs = json.loads(github('api', f'repos/{repository}/actions/runs/{source_run()}/jobs?per_page=100'))['jobs']
+    required = {'checks', expected_runs[selected][1]}
+    if {job['name'] for job in jobs if job['conclusion'] == 'success'} & required != required:
+        raise ValueError('Original checks and binary build must have succeeded')
+
+
+def equivalent_windows_source(windows_commit, android_commit):
+    if windows_commit == android_commit:
+        return True
+    if (windows_commit, android_commit) != (
+            'bc4ddc77a59235544cca0134a4b9b55989f98da5',
+            '2843cabe4792f7734271f767727180dc7efcb0e3'):
+        return False
+    ancestor = subprocess.check_output(['git', 'merge-base', windows_commit, android_commit], cwd=root, text=True).strip()
+    changed = set(subprocess.check_output(['git', 'diff', '--name-only', windows_commit, android_commit, '--'], cwd=root, text=True).splitlines())
+    return ancestor == windows_commit and changed == {'.github/workflows/android-stable.yml'}
+
+
 def validate_release_source(commit):
     if not re.fullmatch(r'[0-9a-f]{40}', approved_source):
         raise ValueError('Final approved runtime source must be pinned before release')
@@ -49,7 +91,7 @@ def github(*arguments):
 
 def finalize_release_notes(tag):
     published = json.loads(github('api', f'repos/{repository}/releases/tags/{tag}'))
-    if tag != 'windows-v0.1.24-49' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
+    if tag != 'windows-v0.1.24-49' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != source_commit():
         raise ValueError('Only the current verified Windows stable release notes may be finalized')
     body = published['body']
     if body.count(pending_publication_note) != 1:
@@ -106,7 +148,7 @@ def validate_single_instance(value):
     cases = value.get('cases', [])
     if value.get('nativeExecuted') is not True or value.get('successful') is not True or value.get('compiler', {}).get('family') != 'MSVC' or value.get('testsRun') != len(expected) or len(cases) != len(expected) or {item.get('test') for item in cases} != expected or not all(item.get('status') == 'passed' for item in cases):
         raise ValueError('Native single-instance behavior not validated with MSVC')
-    if value.get('sourceCommit') != os.environ['GITHUB_SHA'] or value.get('workflowRun') != os.environ['GITHUB_RUN_ID']:
+    if value.get('sourceCommit') != source_commit() or value.get('workflowRun') != source_run():
         raise ValueError('Native single-instance evidence must come from this source and workflow run')
 
 
@@ -159,7 +201,7 @@ def publish_channel(tag, version, build):
             if '404' not in ref.stderr:
                 raise ValueError('Unable to read the Windows channel branch: ' + ref.stderr)
             github('api', '--method', 'POST', f'repos/{repository}/git/refs',
-                   '-f', 'ref=refs/heads/' + branch, '-f', 'sha=' + os.environ['GITHUB_SHA'])
+                   '-f', 'ref=refs/heads/' + branch, '-f', 'sha=' + source_commit())
     else:
         raise ValueError('Unable to read the Windows update channel: ' + previous.stderr)
     request_file = Path(os.environ['RUNNER_TEMP']) / 'windows-channel-request.json'
@@ -174,6 +216,7 @@ def publish_channel(tag, version, build):
 
 def main():
     os.chdir(root)
+    validate_reused_source()
     version, build = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(encoding='utf-8'), re.MULTILINE).group(1).split('+')
     if not re.fullmatch(r'\d+\.\d+\.\d+', version):
         raise ValueError('Only Windows stable releases are allowed')
@@ -182,13 +225,15 @@ def main():
     tag = f'windows-v{version}-{build}'
     package = output / f'HongguoTV-{version}-windows-x64.zip'
     if sys.argv[1] == 'stage':
-        validate_release_source(os.environ['GITHUB_SHA'])
-        if os.environ.get('WINDOWS_BINARY_COMMIT') != os.environ['GITHUB_SHA'] or os.environ.get('WINDOWS_BINARY_RUN') != os.environ['GITHUB_RUN_ID']:
-            raise ValueError('Windows release requires fresh compilation in this workflow run')
+        validate_release_source(source_commit())
+        if os.environ.get('WINDOWS_BINARY_COMMIT') != source_commit() or os.environ.get('WINDOWS_BINARY_RUN') != source_run():
+            raise ValueError('Windows binary must match the verified original build source and run')
         current_head = json.loads(github('api', f'repos/{repository}/git/ref/heads/{release_branch}'))['object']['sha']
-        if current_head != os.environ['GITHUB_SHA']:
+        if current_head != source_commit() and not (os.environ.get('RELEASE_SOURCE_COMMIT') and equivalent_windows_source(source_commit(), current_head)):
             raise ValueError('A newer source commit superseded this release candidate')
         validation = read_json('Windows-validation.json')
+        if os.environ.get('RELEASE_SOURCE_COMMIT') and validation.get('sha256') != '3db5e1302138b46463b575c7f321bcee27002975583edde737493cb5ecc24ba9':
+            raise ValueError('Reused Windows package differs from the approved successful artifact')
         smoke = read_json('Windows-smoke.json')
         signature = read_json('Windows-signature.json')
         transactions = read_json('Windows-update-transaction.json')
@@ -243,10 +288,12 @@ def main():
         source = max(root.parent.glob('真果·鉴-*.zip'), key=lambda file: file.stat().st_mtime_ns)
         source_package = output / f'HongguoTV-{version}-source.zip'
         shutil.copy2(source, source_package)
-        commit = os.environ['GITHUB_SHA']
-        ci = f'https://github.com/{repository}/actions/runs/{os.environ["GITHUB_RUN_ID"]}'
+        commit = source_commit()
+        ci = f'https://github.com/{repository}/actions/runs/{source_run()}'
         write_json('Source-and-checks.json', {
             'version': version, 'build': int(build), 'sourceCommit': commit,
+            'publicationCommit': os.environ['GITHUB_SHA'], 'publicationRun': os.environ['GITHUB_RUN_ID'],
+            'binaryReused': source_run() != os.environ['GITHUB_RUN_ID'],
             'baselineTag': previous_android_tag, 'baselineCommit': previous_android_commit,
             'runtimeBaselineCommit': approved_source, 'runtimeChangesBeyondApprovedCommit': False,
             'workflowRun': ci,

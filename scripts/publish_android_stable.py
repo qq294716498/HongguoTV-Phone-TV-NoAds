@@ -8,7 +8,7 @@ import subprocess
 import sys
 import time
 
-root = Path(__file__).resolve().parents[1]
+root = Path(os.environ.get('RELEASE_SOURCE_ROOT', Path(__file__).resolve().parents[1])).resolve()
 output = root / 'dist/android'
 repository = 'qq294716498/HongguoTV-Phone-TV-NoAds'
 certificate = '55c3c3395a00e56e99b8bfd580b14c99618da74db19692a2e42606eb05c47ba9'
@@ -35,6 +35,48 @@ release_only_paths = frozenset({
 })
 
 
+def source_commit():
+    return os.environ.get('RELEASE_SOURCE_COMMIT', os.environ['GITHUB_SHA'])
+
+
+def source_run():
+    return os.environ.get('RELEASE_SOURCE_RUN', os.environ['GITHUB_RUN_ID'])
+
+
+def validate_reused_source():
+    if not os.environ.get('RELEASE_SOURCE_COMMIT'):
+        return
+    selected = source_commit()
+    expected_runs = {
+        'bc4ddc77a59235544cca0134a4b9b55989f98da5': ('39580851183', 'windows'),
+        '2843cabe4792f7734271f767727180dc7efcb0e3': ('39583037347', 'android'),
+    }
+    if selected not in expected_runs or source_run() != expected_runs[selected][0]:
+        raise ValueError('Unapproved original build source or run')
+    if subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip() != selected:
+        raise ValueError('Corresponding source checkout does not match the original build')
+    run = json.loads(github('api', f'repos/{repository}/actions/runs/{source_run()}'))
+    expected_path = '.github/workflows/windows-preview.yml' if expected_runs[selected][1] == 'windows' else '.github/workflows/android-stable.yml'
+    if run['head_sha'] != selected or run['path'] != expected_path or run.get('head_repository', {}).get('full_name') != repository:
+        raise ValueError('Original build provenance does not match the approved repository and workflow')
+    jobs = json.loads(github('api', f'repos/{repository}/actions/runs/{source_run()}/jobs?per_page=100'))['jobs']
+    required = {'checks', expected_runs[selected][1]}
+    if {job['name'] for job in jobs if job['conclusion'] == 'success'} & required != required:
+        raise ValueError('Original checks and binary build must have succeeded')
+
+
+def equivalent_windows_source(windows_commit, android_commit):
+    if windows_commit == android_commit:
+        return True
+    if (windows_commit, android_commit) != (
+            'bc4ddc77a59235544cca0134a4b9b55989f98da5',
+            '2843cabe4792f7734271f767727180dc7efcb0e3'):
+        return False
+    ancestor = subprocess.check_output(['git', 'merge-base', windows_commit, android_commit], cwd=root, text=True).strip()
+    changed = set(subprocess.check_output(['git', 'diff', '--name-only', windows_commit, android_commit, '--'], cwd=root, text=True).splitlines())
+    return ancestor == windows_commit and changed == {'.github/workflows/android-stable.yml'}
+
+
 def validate_release_source(commit):
     if not re.fullmatch(r'[0-9a-f]{40}', approved_source):
         raise ValueError('Final approved runtime source must be pinned before release')
@@ -56,7 +98,7 @@ def release(tag):
 
 def finalize_release_notes(tag):
     published = release(tag)
-    if tag != 'app-v0.1.24-49' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
+    if tag != 'app-v0.1.24-49' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != source_commit():
         raise ValueError('Only the current verified Android stable release notes may be finalized')
     body = published['body']
     if body.count(pending_publication_note) != 1:
@@ -79,7 +121,7 @@ def validated_windows_snapshots(commit):
     published = {name: release(name) for name in windows_tags}
     candidate = published[windows_tag]
     required = {'Windows-update-check.json', 'Windows-update-channel.json', 'Windows-update-transaction.json', 'Windows-single-instance-native.json', 'Android-isolation.json', 'SHA256SUMS.txt'}
-    if candidate['draft'] or candidate['prerelease'] or candidate['target_commitish'] != commit or not required.issubset({asset['name'] for asset in candidate['assets']}) or windows_verified_publication_note not in candidate.get('body', ''):
+    if candidate['draft'] or candidate['prerelease'] or not equivalent_windows_source(candidate['target_commitish'], commit) or not required.issubset({asset['name'] for asset in candidate['assets']}) or windows_verified_publication_note not in candidate.get('body', ''):
         raise ValueError('Published Windows baseline is not finalized or has a different source')
     return {name: snapshot(value) for name, value in published.items()}
 
@@ -132,18 +174,19 @@ def validate_apks(records, version, build, directory):
 
 def main():
     os.chdir(root)
+    validate_reused_source()
     version, raw_build = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(), re.M).group(1).split('+')
     build = int(raw_build)
     if version != '0.1.24' or build != 49:
         raise ValueError('This workflow only publishes Android 0.1.24+49')
-    validate_release_source(os.environ['GITHUB_SHA'])
+    validate_release_source(source_commit())
     tag = f'app-v{version}-{build}'
     phase = sys.argv[1]
     if phase == 'wait-windows':
-        wait_for_windows(os.environ['GITHUB_SHA'])
+        wait_for_windows(source_commit())
     elif phase == 'stage':
         head = json.loads(github('api', f'repos/{repository}/git/ref/heads/{release_branch}'))['object']['sha']
-        if head != os.environ['GITHUB_SHA']:
+        if head != source_commit():
             raise ValueError('Newer Android source superseded this build')
         validate_apks(read('APK-validation.json'), version, build, output)
         if read('Signing-availability.json')['ok'] is not True:
@@ -159,23 +202,25 @@ def main():
             match = re.fullmatch(r'app-v\d+\.\d+\.\d+-(\d+)', item['tag_name'])
             if match and int(match[1]) >= build:
                 raise ValueError('A newer or reserved Android build already exists')
-        write('Release-before.json', {'android': snapshot(latest), 'windows': validated_windows_snapshots(os.environ['GITHUB_SHA'])})
+        write('Release-before.json', {'android': snapshot(latest), 'windows': validated_windows_snapshots(source_commit())})
         subprocess.run([sys.executable, 'scripts/finish_task.py', '--message', 'Android 0.1.23 手机与TV播放请求恢复修复；三ABI既有正式签名新构建及集中回归通过，未实测实体手机或TV'], check=True)
         subprocess.run([sys.executable, 'scripts/sync_source.py', '--check'], check=True)
         source = max(root.parent.glob('真果·鉴-*.zip'), key=lambda p: p.stat().st_mtime_ns)
         source_package = output / f'HongguoTV-{version}-source.zip'
         shutil.copy2(source, source_package)
         write('Source-and-checks.json', {'version': version, 'build': build, 'sourceCommit': head,
+              'publicationCommit': os.environ['GITHUB_SHA'], 'publicationRun': os.environ['GITHUB_RUN_ID'],
+              'binaryBuildCommit': source_commit(), 'binaryBuildRun': source_run(),
               'androidBaseline': previous_android_tag, 'androidBaselineCommit': previous_android_commit,
               'preservedWindowsBaseline': windows_tag,
               'runtimeBaselineCommit': approved_source, 'runtimeChangesBeyondApprovedCommit': False,
-              'workflowRun': f'https://github.com/{repository}/actions/runs/{os.environ["GITHUB_RUN_ID"]}',
+              'workflowRun': f'https://github.com/{repository}/actions/runs/{source_run()}',
               'sourceArchiveSha256': digest(source_package), 'expectedCertificate': certificate,
               'formatAnalysisPythonFlutterAndGoRacePassed': True, 'allThreeSignedApksValidated': True,
               'realPhoneOrTvPerformanceMeasured': False, 'realDevicePlaybackVerified': False})
         readme = (root / 'README.md').read_text()
         notes = readme.split('## Android 最近更新：', 1)[1].split('\n## ', 1)[0]
-        notes += f'\n源码：https://github.com/{repository}/commit/{head}\n\nCI：https://github.com/{repository}/actions/runs/{os.environ["GITHUB_RUN_ID"]}\n\n手机 / TV 继续共用 com.hongguo.tv、既有正式证书和 Android 8.0 最低版本。真实手机 / TV 覆盖安装、流畅度、解码和长时间连播仍未实测。\n\n{pending_publication_note}\n'
+        notes += f'\n源码：https://github.com/{repository}/commit/{head}\n\nCI：https://github.com/{repository}/actions/runs/{source_run()}\n\n手机 / TV 继续共用 com.hongguo.tv、既有正式证书和 Android 8.0 最低版本。真实手机 / TV 覆盖安装、流畅度、解码和长时间连播仍未实测。\n\n{pending_publication_note}\n'
         notes_file = Path(os.environ['RUNNER_TEMP']) / 'android-release-notes.md'
         notes_file.write_text(notes, encoding='utf-8')
         assets = [output / f'HongguoTV-{version}-{abi}.apk' for abi in offsets] + [source_package, output / 'APK-validation.json', output / 'Source-and-checks.json', output / 'Signing-availability.json']
@@ -184,7 +229,7 @@ def main():
         Path('staged-release.json').write_text(json.dumps(release(tag)), encoding='utf-8')
     elif phase == 'promote':
         head = json.loads(github('api', f'repos/{repository}/git/ref/heads/{release_branch}'))['object']['sha']
-        if head != os.environ['GITHUB_SHA']:
+        if head != source_commit():
             raise ValueError('Newer source superseded this candidate; do not promote')
         before = read('Release-before.json')
         if {name: snapshot(release(name)) for name in windows_tags} != before['windows']:
