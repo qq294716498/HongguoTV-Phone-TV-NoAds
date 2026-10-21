@@ -109,7 +109,7 @@ class AppUpdateScreen extends StatelessWidget {
                         Padding(
                           padding: EdgeInsets.all(16),
                           child: Text(
-                            '0.1.23+48 更新：红果播放模型接口遇到零字节空响应时，最多增加一次短退避重试，仍服从原时限、取消和 Retry-After，不改变设备身份。Windows 同一账户下跨目录共用一个新版实例，再次启动唤醒托盘或最小化窗口并保持暂停；旧 EXE 无法追溯补上启动检查。更新交接发生实例冲突时保护用户配置。保留 0.1.22 的取源时限与取消、迟到结果隔离、预加载失败恢复、冷却提示、全屏及迷你窗、剧情简介、当前集与本季数量、跳过版本和弹幕表情改进。Windows 完整包仍未签名；上游偶发空响应的全部原因、真实站源长时间连播、消费级 GPU、多显示器混合 DPI 及用户旧版原地替换未实测。请先从托盘彻底退出旧程序，再将完整 ZIP 解压到独立可写的新目录，勿混放旧 DLL 或只复制 EXE；同一 Windows 账户保留原应用数据。',
+                            '0.1.24+49 更新：修复红果取流。播放模型接口已迁到 multi_video_model/v1，请求改用 mixed_video_id_map（槽位 1004）；签名补齐 x-ladon / x-argus / x-helios / x-medusa，并按分支抖动 _rticket；兼容 video_list 直接返回与 fallback_api 二次请求，受 key_seed 保护的媒体地址按 spade 方案解密。Windows 完整包仍未签名；真实站源长时间连播、真实手机 / TV 升级及旧版原地替换尚未实测。',
                           ),
                         ),
                       ],

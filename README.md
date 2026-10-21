@@ -2,9 +2,9 @@
 
 基于 [guoapp](https://github.com/zhoufuweigg/guoapp) 的非官方独立客户端。手机与 Android TV 共用 Android 应用，另提供 Windows x64 客户端；支持浏览、搜索、播放、弹幕、追剧和下载。
 
-## 本次更新：0.1.23+48
+## 本次更新：0.1.24+49
 
-本次补齐红果播放模型接口偶发空正文时的有限重试，并增加 Windows 单实例和更新交接保护。保留 0.1.22 的取源时限与取消、切集恢复、Windows 全屏和剧情简介、当前集与本季数量、跳过版本及弹幕表情改进，以及播放源、弹幕设置、预加载、下一集 / 下一季、全季、追剧与进度、搜索发现、下载与合并、备份、TV 解码设置和局域网互联。安装包、源码及验证结果以对应 Release 和附件为准；自动化不等同用户设备验收。
+本次修复红果取流长期失败。播放模型接口已迁到 multi_video_model/v1，请求改用 mixed_video_id_map（槽位 1004、video_platform 1024）；签名补齐 x-ladon / x-argus / x-helios / x-medusa 四个头并抖动 _rticket 避开服务端不接受的分支；兼容 video_list 直接返回与 fallback_api 二次请求两种形态，受 key_seed 保护的媒体地址按 spade 方案解密。安装包、源码及验证结果以对应 Release 和附件为准；自动化不等同用户设备验收。
 
 ## Windows 正式版：0.1.23+48
 
