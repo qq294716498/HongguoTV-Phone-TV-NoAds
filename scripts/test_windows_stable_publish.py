@@ -35,8 +35,8 @@ class WindowsReleaseNotesTests(unittest.TestCase):
             self.assertNotIn(publish.verified_publication_note, manifest['release']['body'])
 
     def test_final_notes_mark_verified_channel_and_preserve_unsigned_limits(self):
-        tag = 'windows-v0.1.23-48'
-        body = '0.1.23+48\n假全屏与取源恢复修复。\nWindows x64 仍未签名；真实站源仍未实测。\n' + publish.pending_publication_note
+        tag = 'windows-v0.1.24-49'
+        body = '0.1.24+49\n假全屏与取源恢复修复。\nWindows x64 仍未签名；真实站源仍未实测。\n' + publish.pending_publication_note
         final = body.replace(publish.pending_publication_note, publish.verified_publication_note)
         current = dict(tag_name=tag, draft=False, prerelease=False, target_commitish='current', body=body)
         with mock.patch.object(publish, 'github', side_effect=[json.dumps(current), json.dumps({**current, 'body': final})]) as reads, \

@@ -12,22 +12,22 @@ from publish_android_stable import certificate, offsets, validate_apks
 
 
 class AndroidStablePublishTests(unittest.TestCase):
-    def test_release_uses_published_022_baseline_and_preserves_all_windows_releases(self):
+    def test_release_uses_published_023_baseline_and_preserves_all_windows_releases(self):
         import publish_windows_stable as windows
-        self.assertEqual(publish.previous_android_tag, 'app-v0.1.22-47')
-        self.assertEqual(publish.previous_android_commit, '1281b06ed7d49aba3b380b6ca310d98f38481486')
+        self.assertEqual(publish.previous_android_tag, 'app-v0.1.23-48')
+        self.assertEqual(publish.previous_android_commit, '5bc038a5f3e5e35eaed6568831ac547a5b80b03d')
         self.assertEqual(windows.previous_android_tag, publish.previous_android_tag)
         self.assertEqual(windows.previous_android_commit, publish.previous_android_commit)
-        self.assertEqual(publish.windows_tag, 'windows-v0.1.23-48')
+        self.assertEqual(publish.windows_tag, 'windows-v0.1.24-49')
         self.assertEqual(windows.previous_windows_tags, (
-            'windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47'))
+            'windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48'))
         self.assertEqual(publish.windows_tags, (*windows.previous_windows_tags, publish.windows_tag))
         self.assertEqual(windows.release_branch, publish.release_branch)
         self.assertEqual(windows.release_only_paths, publish.release_only_paths)
 
     def test_final_notes_mark_verified_public_downloads_and_preserve_limits(self):
-        tag = 'app-v0.1.23-48'
-        body = '0.1.23+48\n取源恢复与冷却修复。\n既有证书；Android 8.0；真实手机 / TV 仍未实测。\n' + publish.pending_publication_note
+        tag = 'app-v0.1.24-49'
+        body = '0.1.24+49\n取源恢复与冷却修复。\n既有证书；Android 8.0；真实手机 / TV 仍未实测。\n' + publish.pending_publication_note
         final = body.replace(publish.pending_publication_note, publish.verified_publication_note)
         current = dict(tag_name=tag, draft=False, prerelease=False, target_commitish='current', body=body)
         with mock.patch.object(publish, 'release', side_effect=[current, {**current, 'body': final}]) as reads, \
@@ -72,7 +72,7 @@ class AndroidStablePublishTests(unittest.TestCase):
     def test_only_exact_release_branch_push_or_explicit_dispatch_can_publish(self):
         root = Path(__file__).resolve().parents[1]
         fix = 'fix/hongguo-playback-release-0.1.22-47'
-        release = 'release/windows-android-0.1.23-48'
+        release = 'release/windows-android-0.1.24-49'
         for filename in ['android-stable.yml', 'windows-preview.yml']:
             workflow = (root / '.github/workflows' / filename).read_text()
             branches = re.search(r'(?m)^    branches: (.*)$', workflow).group(1)
@@ -81,7 +81,7 @@ class AndroidStablePublishTests(unittest.TestCase):
             expression = re.search(r'(?m)^  release:\n(?:    [^\n]*\n)*?    if: ([^\n]+)', workflow).group(1)
             expression = expression.replace('github.ref', 'ref').replace('github.event_name', 'event').replace('inputs.publish_release', 'publish')
             expression = expression.replace('&&', ' and ').replace('||', ' or ')
-            for branch in [fix, release, 'candidate/hongguo-retry-single-instance-0.1.23-48', 'release/windows-android-0.1.22-47', 'windows/other', 'main']:
+            for branch in [fix, release, 'candidate/hongguo-retry-single-instance-0.1.23-48', 'release/windows-android-0.1.22-47', 'release/windows-android-0.1.23-48', 'windows/other', 'main']:
                 for event in ['push', 'workflow_dispatch', 'pull_request']:
                     for publish in [False, True]:
                         expected = branch == release and (event == 'push' or (event == 'workflow_dispatch' and publish))

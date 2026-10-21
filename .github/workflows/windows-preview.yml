@@ -2,7 +2,7 @@ name: Windows desktop
 
 on:
   push:
-    branches: ['windows/**', fix/hongguo-playback-release-0.1.22-47, release/windows-android-0.1.22-47, release/windows-android-0.1.23-48, candidate/hongguo-retry-single-instance-0.1.23-48]
+    branches: ['windows/**', fix/hongguo-playback-release-0.1.22-47, release/windows-android-0.1.22-47, release/windows-android-0.1.23-48, release/windows-android-0.1.24-49, candidate/hongguo-retry-single-instance-0.1.23-48]
   workflow_dispatch:
     inputs:
       publish_release:
@@ -114,7 +114,7 @@ jobs:
           retention-days: 14
 
   release:
-    if: github.ref == 'refs/heads/release/windows-android-0.1.23-48' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_release))
+    if: github.ref == 'refs/heads/release/windows-android-0.1.24-49' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_release))
     needs: [checks, windows]
     runs-on: ubuntu-latest
     timeout-minutes: 20
