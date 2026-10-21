@@ -63,7 +63,11 @@ class NextSeasonResolver {
     }
     if (matches.isEmpty) return null;
     if (matches.length != 1) {
-      throw AppFailure('找到多个下一季版本，请手动选择', code: 'next_season_ambiguous');
+      final narrowed = _disambiguate(anchor, matches);
+      if (narrowed == null) {
+        throw AppFailure('找到多个下一季版本，请手动选择', code: 'next_season_ambiguous');
+      }
+      matches = [narrowed];
     }
     final candidate = matches.single;
     final detail = await bounded(() => repository.detail(candidate));
@@ -106,4 +110,55 @@ class NextSeasonResolver {
     }
     return matches.values.toList();
   }
+
+  /// 同季存在多个发行版本时，用简介相似度挑出唯一候选。
+  /// 证据不足一律返回 null，由调用方继续抛歧义交还给用户，
+  /// 避免把用户带到别的剧上。
+  Drama? _disambiguate(Drama anchor, List<Drama> matches) {
+    if (matches.length < 2) return null;
+    final anchorShingles = _shingles(anchor.description);
+    if (anchorShingles.isEmpty) return null;
+    final scored = <_ScoredDrama>[];
+    for (final drama in matches) {
+      final shingles = _shingles(drama.description);
+      scored.add(_ScoredDrama(drama, _jaccard(anchorShingles, shingles)));
+    }
+    scored.sort((left, right) => right.score.compareTo(left.score));
+    final best = scored.first;
+    final runnerUp = scored[1];
+    if (best.score < _minimumDescriptionScore) return null;
+    if (best.score - runnerUp.score < _minimumScoreMargin) return null;
+    return best.drama;
+  }
+
+  static Set<String> _shingles(String text) {
+    final normalized = text.replaceAll(_whitespacePattern, ' ').trim();
+    if (normalized.isEmpty) return <String>{};
+    final runes = normalized.runes.toList();
+    if (runes.length <= _shingleSize) return <String>{normalized};
+    return <String>{
+      for (var index = 0; index + _shingleSize <= runes.length; index++)
+        String.fromCharCodes(runes.sublist(index, index + _shingleSize)),
+    };
+  }
+
+  static double _jaccard(Set<String> left, Set<String> right) {
+    if (left.isEmpty || right.isEmpty) return 0;
+    final shared = left.intersection(right).length;
+    final union = left.length + right.length - shared;
+    if (union <= 0) return 0;
+    return shared / union;
+  }
+}
+
+const _shingleSize = 3;
+const _minimumDescriptionScore = 0.35;
+const _minimumScoreMargin = 0.12;
+final _whitespacePattern = RegExp(r'\s+');
+
+class _ScoredDrama {
+  const _ScoredDrama(this.drama, this.score);
+
+  final Drama drama;
+  final double score;
 }

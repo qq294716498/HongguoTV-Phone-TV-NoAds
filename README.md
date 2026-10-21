@@ -4,7 +4,7 @@
 
 ## 本次更新：0.1.24+49
 
-本次修复红果取流长期失败。播放模型接口已迁到 multi_video_model/v1，请求改用 mixed_video_id_map（槽位 1004、video_platform 1024）；签名补齐 x-ladon / x-argus / x-helios / x-medusa 四个头并抖动 _rticket 避开服务端不接受的分支；兼容 video_list 直接返回与 fallback_api 二次请求两种形态，受 key_seed 保护的媒体地址按 spade 方案解密。安装包、源码及验证结果以对应 Release 和附件为准；自动化不等同用户设备验收。
+本次修复红果取流长期失败。播放模型接口已迁到 multi_video_model/v1，请求改用 mixed_video_id_map（槽位 1004、video_platform 1024）；签名补齐 x-ladon / x-argus / x-helios / x-medusa 四个头并抖动 _rticket 避开服务端不接受的分支；兼容 video_list 直接返回与 fallback_api 二次请求两种形态，受 key_seed 保护的媒体地址按 spade 方案解密；同名同季存在多个版本时按简介相似度裁决下一季，证据不足仍交由用户选择。安装包、源码及验证结果以对应 Release 和附件为准；自动化不等同用户设备验收。
 
 ## Windows 正式版：0.1.23+48
 

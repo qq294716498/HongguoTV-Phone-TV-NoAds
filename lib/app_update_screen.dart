@@ -109,7 +109,7 @@ class AppUpdateScreen extends StatelessWidget {
                         Padding(
                           padding: EdgeInsets.all(16),
                           child: Text(
-                            '0.1.24+49 更新：修复红果取流。播放模型接口已迁到 multi_video_model/v1，请求改用 mixed_video_id_map（槽位 1004）；签名补齐 x-ladon / x-argus / x-helios / x-medusa，并按分支抖动 _rticket；兼容 video_list 直接返回与 fallback_api 二次请求，受 key_seed 保护的媒体地址按 spade 方案解密。Windows 完整包仍未签名；真实站源长时间连播、真实手机 / TV 升级及旧版原地替换尚未实测。',
+                            '0.1.24+49 更新：修复红果取流。播放模型接口已迁到 multi_video_model/v1，请求改用 mixed_video_id_map（槽位 1004）；签名补齐 x-ladon / x-argus / x-helios / x-medusa，并按分支抖动 _rticket；兼容 video_list 直接返回与 fallback_api 二次请求，受 key_seed 保护的媒体地址按 spade 方案解密。同名同季存在多个版本时，按简介相似度自动裁决下一季，证据不足仍交由用户选择。Windows 完整包仍未签名；真实站源长时间连播、真实手机 / TV 升级及旧版原地替换尚未实测。',
                           ),
                         ),
                       ],
