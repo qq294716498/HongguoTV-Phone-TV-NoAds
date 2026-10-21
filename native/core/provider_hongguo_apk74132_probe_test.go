@@ -3,11 +3,14 @@ package core
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -70,8 +73,36 @@ func TestLiveHongguoAPK74132KnownEpisode(t *testing.T) {
 				signHongguoRequest(request, body, time.Now())
 			}
 			response, err := base.RoundTrip(request)
+			if response != nil && host == "api5-normal-sinfonlineb.fqnovel.com" {
+				suppressionCode := int64(-1)
+				if value, parseErr := strconv.ParseInt(response.Header.Get("X-Tt-Suppress-Body-Code"), 10, 32); parseErr == nil {
+					suppressionCode = value
+				}
+				t.Logf("comparison=%s apiStatus=%d protocol=%s declaredBytes=%d bodySuppressionCode=%d", name, response.StatusCode, response.Proto, response.ContentLength, suppressionCode)
+			}
 			if response != nil && (response.StatusCode == http.StatusForbidden || response.StatusCode == http.StatusTooManyRequests || response.Header.Get("Retry-After") != "") {
 				stopped = true
+			}
+			if err == nil && response != nil && host == "djapi.999888456.xyz" && response.StatusCode == http.StatusOK {
+				body, readErr := io.ReadAll(io.LimitReader(response.Body, providerMaxBodyBytes+1))
+				response.Body.Close()
+				response.Body = io.NopCloser(bytes.NewReader(body))
+				if readErr != nil {
+					return nil, readErr
+				}
+				decoded, decodeErr := decodeHongguoPlaybackResponse(string(body))
+				var envelope map[string]any
+				jsonErr := json.Unmarshal(decoded, &envelope)
+				fields := make([]string, 0, len(envelope))
+				for field := range envelope {
+					fields = append(fields, field)
+				}
+				sort.Strings(fields)
+				code := int64(-1)
+				if value, parseErr := strconv.ParseInt(mapString(envelope, "code", "status_code"), 10, 32); parseErr == nil {
+					code = value
+				}
+				t.Logf("backup decoded=%t json=%t fields=%v code=%d mediaEntries=%d", decodeErr == nil, jsonErr == nil, fields, code, len(anyList(envelope["key_urls"])))
 			}
 			return response, err
 		})
