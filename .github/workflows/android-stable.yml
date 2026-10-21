@@ -75,6 +75,15 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Free runner disk space before native builds
+        run: |
+          set -euo pipefail
+          df -h /
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost || true
+          sudo rm -rf /usr/local/lib/android/sdk/ndk || true
+          sudo apt-get clean || true
+          sudo docker image prune -af || true
+          df -h /
       - name: Confirm existing Android signing Secrets without exposing values
         run: python3 scripts/check_android_signing.py
         env:
