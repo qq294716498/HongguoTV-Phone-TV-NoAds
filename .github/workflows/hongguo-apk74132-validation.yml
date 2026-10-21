@@ -1,0 +1,62 @@
+name: Hongguo APK 74132 playback validation
+
+on:
+  push:
+    branches: [fix/hongguo-apk74132-20261021]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hongguo-apk74132-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: native/go.mod
+          cache-dependency-path: native/go.sum
+      - name: Check Go formatting
+        working-directory: native
+        run: |
+          gofmt -d core/provider_hongguo*.go
+          test -z "$(gofmt -l core/provider_hongguo*.go)"
+      - name: Default and all-source regression
+        working-directory: native
+        run: |
+          go test -race ./...
+          go test -race -ldflags="-X duanjuapp/native/core.buildAllSources=true" ./...
+      - name: Preserve checked source
+        run: |
+          python3 scripts/finish_task.py --message "保留网页详情和备用取流的剧集内容类型，添加 APK 7.4.1.32 同集验证；尚未声明恢复播放"
+          python3 scripts/sync_source.py --check
+
+  live-episode:
+    needs: regression
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: native/go.mod
+          cache-dependency-path: native/go.sum
+      - name: Verify user-confirmed episode without images
+        working-directory: native
+        env:
+          CHECK_LIVE_HONGGUO_APK74132: "true"
+        run: go test ./core -run '^TestLiveHongguoAPK74132KnownEpisode$' -v -count=1 -timeout=3m

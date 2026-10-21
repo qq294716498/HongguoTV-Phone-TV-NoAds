@@ -159,6 +159,8 @@ func (d *Downloader) fetchHongguoWebChapters(ctx context.Context, sourceID strin
 		return "", nil, fmt.Errorf("hongguo detail is empty")
 	}
 	title := firstNonEmpty(mapString(detail, "series_name", "series_title", "name"), sourceID)
+	contentType, _ := strconv.Atoi(mapString(detail, "content_type", "video_content_type"))
+	contentType = hongguoMediaContentType(contentType, 0)
 	vids := anyList(detail["vid_list"])
 	chapters := make([]Chapter, 0, len(vids))
 	for i, v := range vids {
@@ -167,7 +169,7 @@ func (d *Downloader) fetchHongguoWebChapters(ctx context.Context, sourceID strin
 			continue
 		}
 		idx := i + 1
-		chapters = append(chapters, Chapter{ID: providerChapterID(sourceHongguo, sourceID, vid), Source: sourceHongguo, Title: fmt.Sprintf("第%d集", idx), VideoURL: "hongguo-cenc://" + vid, CurrentEpisode: rawEpisode(idx)})
+		chapters = append(chapters, Chapter{ID: providerChapterID(sourceHongguo, sourceID, vid), Source: sourceHongguo, ContentType: contentType, Title: fmt.Sprintf("第%d集", idx), VideoURL: "hongguo-cenc://" + vid, CurrentEpisode: rawEpisode(idx)})
 	}
 	if len(chapters) == 0 {
 		return title, nil, errors.New("红果详情没有返回剧集 ID")
@@ -206,7 +208,7 @@ func (d *Downloader) resolveHongguoMedia(ctx context.Context, task Task) (provid
 			return d.resolveHongguoWebMedia(stage, seriesID, videoID)
 		}},
 		{name: "备用取流失败", resolve: func(stage context.Context) (providerMedia, error) {
-			return d.resolveHongguoPlaybackAPI(stage, seriesID, videoID)
+			return d.resolveHongguoPlaybackAPI(stage, seriesID, videoID, task.Chapter.ContentType)
 		}},
 	})
 }

@@ -17,8 +17,8 @@ func (downloader *Downloader) resolveHongguoAppMedia(ctx context.Context, videoI
 		return providerMedia{}, errors.New("红果视频 ID 无效")
 	}
 	contentType := 1
-	if len(contentTypes) > 0 && (contentTypes[0] >= 1 && contentTypes[0] <= 7 || contentTypes[0] >= 1000 && contentTypes[0] <= 1011) {
-		contentType = contentTypes[0]
+	if len(contentTypes) > 0 {
+		contentType = hongguoMediaContentType(contentTypes[0], 1)
 	}
 	payload := map[string]any{
 		"video_id": videoID, "content_type": contentType,
