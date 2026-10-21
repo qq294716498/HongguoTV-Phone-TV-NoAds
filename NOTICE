@@ -1,0 +1,56 @@
+HongguoTV 0.1.24+49 distribution notice
+========================================
+This notice applies to the 0.1.24+49 distribution. This release is distributed
+under GNU GPL version 3. The complete text is in LICENSE. Existing third-party
+components retain their original licenses, copyright notices and attributions.
+This statement does not replace notices for earlier releases or claim ownership
+of upstream contributions.
+
+Corresponding source: the exact commit referenced by app-v0.1.24-49 and
+windows-v0.1.24-49, and the matching source ZIP attached to both releases.
+The archive includes the application source, checked-in build scripts and
+dependency manifests. Platform SDKs, credentials and caches are excluded.
+
+Playback implementation attribution:
+- native/core/provider_hongguo_puresign.go is a Go port attributed in that file
+  to sunnysky123/hongguo-web/server/src/core/pure-sign.js.
+  https://github.com/sunnysky123/hongguo-web
+- That source file expressly identifies jackotom/hongguo-drama/src/native/app-source.js
+  as GPL-3.0 upstream; its applicable GPL attribution is retained here.
+  https://github.com/jackotom/hongguo-drama
+- The intermediate repository's MIT notice is retained verbatim in
+  LICENSE.third-party.txt. It does not replace upstream GPL notices.
+
+The exact intermediate revision used for the original Go port is not recorded
+in its source header. The following unmodified upstream NOTICE records the
+earlier provenance, source revisions and upstream modifications. Those upstream
+modification dates describe that upstream project, not changes made here.
+The local Go port and playback changes are recorded in this repository's history;
+the release-preparation changes on 2026-10-21 add documentation only.
+
+Original upstream NOTICE (verbatim)
+----------------------------------
+App playback source and signature attribution
+
+The necessary signature, Spade URL and content-key routines in app-source.js
+are adapted from N3urda/hongguoTV server/vendor/hongguo.cjs, commit
+ eea73e6a45569a2cbbb9440f7cd5290c459b0b70.
+https://github.com/N3urda/hongguoTV
+
+That file is an unmodified copy (renamed) of spider/js/红果果[短].js from
+woshishiq1/drpys, commit 22261adfa31435e3b3ef5a730b8a2a75bcaf1715.
+https://github.com/woshishiq1/drpys
+Upstream license: GPL-3.0; complete text: LICENSE.drpys.txt.
+
+Modifications made 2026-10-07: limited playback adapter, local ephemeral
+visitor identifiers, removal of fixed visitor fingerprints, strict response
+and destination validation, supported-codec selection and no secret logging.
+SM3 is implemented locally for Electron runtimes without native SM3 support.
+The existing application remains GPL-3.0.
+
+Existing bundled component notices
+----------------------------------
+README.md describes media_kit/libmpv and FFmpegKit min-gpl use. Preserve the
+license files in packages/video_player, packages/video_player_android,
+packages/media_kit_libs_windows_video, assets/danmaku_emoji and
+assets/video_enhancement, together with dependency-supplied notices.
