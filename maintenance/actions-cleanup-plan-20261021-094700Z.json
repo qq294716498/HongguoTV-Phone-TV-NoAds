@@ -1,0 +1,1786 @@
+{
+  "repository": "qq294716498/HongguoTV-Phone-TV-NoAds",
+  "proposedOnly": true,
+  "deletionExecuted": false,
+  "createdBeforeUtc": "2026-10-21T09:47:00Z",
+  "selection": "Only these explicitly listed completed runs; release/* branches and known published-release commits excluded.",
+  "candidateRuns": 129,
+  "availableArtifacts": 68,
+  "availableArtifactBytes": 4635433410,
+  "protectedRuns": [
+    39580851183,
+    39583037347,
+    39583037465,
+    39585054502,
+    39585798727
+  ],
+  "protectedResources": [
+    "all Releases",
+    "all tags",
+    "repository source",
+    "published update assets",
+    "all queued or in-progress runs"
+  ],
+  "requiresCurrentStateRecheckBeforeDeletion": true,
+  "metadataErrors": [],
+  "runs": [
+    {
+      "run": 39577388738,
+      "conclusion": "success",
+      "created": "2026-10-21T09:29:43Z",
+      "head": "a0b37b290dabe6bc907e2ea3c3b7fb7311f5827b",
+      "branch": "main",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12333719981,
+          "name": "readme-source-snapshot",
+          "bytes": 7464799,
+          "expires": "2026-11-04T09:29:51Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 39554543413,
+      "conclusion": "failure",
+      "created": "2026-10-21T06:17:52Z",
+      "head": "2b59941897636c7a19feaedb974fcdc9fe261733",
+      "branch": "fix/hongguo-apk74132-20261021",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 39553836972,
+      "conclusion": "failure",
+      "created": "2026-10-21T06:10:47Z",
+      "head": "63be278ef516cd772a88397a7e1cb77458db3978",
+      "branch": "fix/hongguo-apk74132-20261021",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 39551366054,
+      "conclusion": "failure",
+      "created": "2026-10-21T05:45:29Z",
+      "head": "d7c4bcfc5e1bbe639c901a25e88a45eff98657d2",
+      "branch": "fix/hongguo-apk74132-20261021",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 39550877021,
+      "conclusion": "failure",
+      "created": "2026-10-21T05:40:24Z",
+      "head": "4176ce887fad664d9d12ca36d3acb733ccbccae9",
+      "branch": "fix/hongguo-apk74132-20261021",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 39416454503,
+      "conclusion": "success",
+      "created": "2026-10-20T11:39:01Z",
+      "head": "ee1d46d6981bffe62e893dc4a55c2101922fc6b1",
+      "branch": "main",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12261188058,
+          "name": "readme-source-snapshot",
+          "bytes": 6708129,
+          "expires": "2026-11-03T11:39:09Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 39410821555,
+      "conclusion": "success",
+      "created": "2026-10-20T10:51:01Z",
+      "head": "7ef2ce407abcb40b2faa5a9cb13a52e01efa3511",
+      "branch": "candidate/hongguo-retry-single-instance-0.1.23-48",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12259949307,
+          "name": "hongguotv-windows-x64",
+          "bytes": 100706547,
+          "expires": "2026-11-03T11:20:02Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 39410821573,
+      "conclusion": "success",
+      "created": "2026-10-20T10:51:01Z",
+      "head": "7ef2ce407abcb40b2faa5a9cb13a52e01efa3511",
+      "branch": "candidate/hongguo-retry-single-instance-0.1.23-48",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 39410821590,
+      "conclusion": "success",
+      "created": "2026-10-20T10:51:01Z",
+      "head": "7ef2ce407abcb40b2faa5a9cb13a52e01efa3511",
+      "branch": "candidate/hongguo-retry-single-instance-0.1.23-48",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12259921505,
+          "name": "windows-video-layout",
+          "bytes": 983626,
+          "expires": "2026-11-03T11:04:52Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 39410821538,
+      "conclusion": "success",
+      "created": "2026-10-20T10:51:01Z",
+      "head": "7ef2ce407abcb40b2faa5a9cb13a52e01efa3511",
+      "branch": "candidate/hongguo-retry-single-instance-0.1.23-48",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12260187082,
+          "name": "hongguotv-android-0.1.23+48",
+          "bytes": 124450117,
+          "expires": "2026-11-03T11:09:36Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 39410480545,
+      "conclusion": "cancelled",
+      "created": "2026-10-20T10:48:04Z",
+      "head": "5243a46c6cad4665502012aecc23033e9fb4f92b",
+      "branch": "candidate/hongguo-retry-single-instance-0.1.23-48",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 39410480657,
+      "conclusion": "cancelled",
+      "created": "2026-10-20T10:48:04Z",
+      "head": "5243a46c6cad4665502012aecc23033e9fb4f92b",
+      "branch": "candidate/hongguo-retry-single-instance-0.1.23-48",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 39410480619,
+      "conclusion": "cancelled",
+      "created": "2026-10-20T10:48:04Z",
+      "head": "5243a46c6cad4665502012aecc23033e9fb4f92b",
+      "branch": "candidate/hongguo-retry-single-instance-0.1.23-48",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 39410480637,
+      "conclusion": "failure",
+      "created": "2026-10-20T10:48:04Z",
+      "head": "5243a46c6cad4665502012aecc23033e9fb4f92b",
+      "branch": "candidate/hongguo-retry-single-instance-0.1.23-48",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12260216002,
+          "name": "hongguotv-windows-x64",
+          "bytes": 100691753,
+          "expires": "2026-11-03T11:03:33Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 39410001392,
+      "conclusion": "success",
+      "created": "2026-10-20T10:43:56Z",
+      "head": "6f31b51a306f652b17f44115f9fbdce29cf3ecd9",
+      "branch": "candidate/hongguo-retry-single-instance-0.1.23-48",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12258339876,
+          "name": "windows-video-layout",
+          "bytes": 983741,
+          "expires": "2026-11-03T10:56:13Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 39410001185,
+      "conclusion": "cancelled",
+      "created": "2026-10-20T10:43:56Z",
+      "head": "6f31b51a306f652b17f44115f9fbdce29cf3ecd9",
+      "branch": "candidate/hongguo-retry-single-instance-0.1.23-48",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 39410001105,
+      "conclusion": "cancelled",
+      "created": "2026-10-20T10:43:55Z",
+      "head": "6f31b51a306f652b17f44115f9fbdce29cf3ecd9",
+      "branch": "candidate/hongguo-retry-single-instance-0.1.23-48",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 39410001125,
+      "conclusion": "cancelled",
+      "created": "2026-10-20T10:43:55Z",
+      "head": "6f31b51a306f652b17f44115f9fbdce29cf3ecd9",
+      "branch": "candidate/hongguo-retry-single-instance-0.1.23-48",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 39409191217,
+      "conclusion": "success",
+      "created": "2026-10-20T10:36:58Z",
+      "head": "904af6498f46ea7fa9959a6d95033bc98e83419f",
+      "branch": "candidate/hongguo-retry-single-instance-0.1.23-48",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12258799346,
+          "name": "hongguotv-android-0.1.23+48",
+          "bytes": 124449867,
+          "expires": "2026-11-03T10:55:04Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 39409191278,
+      "conclusion": "failure",
+      "created": "2026-10-20T10:36:58Z",
+      "head": "904af6498f46ea7fa9959a6d95033bc98e83419f",
+      "branch": "candidate/hongguo-retry-single-instance-0.1.23-48",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12258563761,
+          "name": "hongguotv-windows-x64",
+          "bytes": 100691332,
+          "expires": "2026-11-03T10:50:30Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 39409191202,
+      "conclusion": "cancelled",
+      "created": "2026-10-20T10:36:58Z",
+      "head": "904af6498f46ea7fa9959a6d95033bc98e83419f",
+      "branch": "candidate/hongguo-retry-single-instance-0.1.23-48",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 39409191208,
+      "conclusion": "success",
+      "created": "2026-10-20T10:36:58Z",
+      "head": "904af6498f46ea7fa9959a6d95033bc98e83419f",
+      "branch": "candidate/hongguo-retry-single-instance-0.1.23-48",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12259082678,
+          "name": "windows-video-layout",
+          "bytes": 984069,
+          "expires": "2026-11-03T10:46:48Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 39403346249,
+      "conclusion": "success",
+      "created": "2026-10-20T09:48:16Z",
+      "head": "7222065d048cf8205505930908221998a0d284ca",
+      "branch": "main",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12255682402,
+          "name": "readme-source-snapshot",
+          "bytes": 6707539,
+          "expires": "2026-11-03T09:48:24Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 39398534183,
+      "conclusion": "success",
+      "created": "2026-10-20T09:08:45Z",
+      "head": "d4194620b569488633345d93e639e1eeb4209625",
+      "branch": "fix/hongguo-playback-release-0.1.22-47",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 39398534003,
+      "conclusion": "success",
+      "created": "2026-10-20T09:08:45Z",
+      "head": "d4194620b569488633345d93e639e1eeb4209625",
+      "branch": "fix/hongguo-playback-release-0.1.22-47",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12254917065,
+          "name": "hongguotv-windows-x64",
+          "bytes": 100685643,
+          "expires": "2026-11-03T09:23:33Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 39398534197,
+      "conclusion": "success",
+      "created": "2026-10-20T09:08:45Z",
+      "head": "d4194620b569488633345d93e639e1eeb4209625",
+      "branch": "fix/hongguo-playback-release-0.1.22-47",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12253418605,
+          "name": "hongguotv-android-0.1.22+47",
+          "bytes": 124447743,
+          "expires": "2026-11-03T09:24:58Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 39398533918,
+      "conclusion": "success",
+      "created": "2026-10-20T09:08:45Z",
+      "head": "d4194620b569488633345d93e639e1eeb4209625",
+      "branch": "fix/hongguo-playback-release-0.1.22-47",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12254781058,
+          "name": "windows-video-layout",
+          "bytes": 984258,
+          "expires": "2026-11-03T09:17:24Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 39396551813,
+      "conclusion": "failure",
+      "created": "2026-10-20T08:52:31Z",
+      "head": "f90cfc076b9df7830256b4d977d8568a3d918e70",
+      "branch": "fix/hongguo-playback-release-0.1.22-47",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12253726109,
+          "name": "hongguotv-windows-x64",
+          "bytes": 100684744,
+          "expires": "2026-11-03T09:10:35Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 39396551855,
+      "conclusion": "success",
+      "created": "2026-10-20T08:52:31Z",
+      "head": "f90cfc076b9df7830256b4d977d8568a3d918e70",
+      "branch": "fix/hongguo-playback-release-0.1.22-47",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12252456983,
+          "name": "windows-video-layout",
+          "bytes": 984209,
+          "expires": "2026-11-03T09:01:46Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 39396551814,
+      "conclusion": "success",
+      "created": "2026-10-20T08:52:31Z",
+      "head": "f90cfc076b9df7830256b4d977d8568a3d918e70",
+      "branch": "fix/hongguo-playback-release-0.1.22-47",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 39396551809,
+      "conclusion": "success",
+      "created": "2026-10-20T08:52:31Z",
+      "head": "f90cfc076b9df7830256b4d977d8568a3d918e70",
+      "branch": "fix/hongguo-playback-release-0.1.22-47",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12252129410,
+          "name": "hongguotv-android-0.1.22+47",
+          "bytes": 124447862,
+          "expires": "2026-11-03T09:08:06Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 39395365170,
+      "conclusion": "failure",
+      "created": "2026-10-20T08:42:43Z",
+      "head": "39a47abfe42d7b4fc380757cba84e003e7a4af2a",
+      "branch": "fix/hongguo-playback-release-0.1.22-47",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 39395365208,
+      "conclusion": "failure",
+      "created": "2026-10-20T08:42:43Z",
+      "head": "39a47abfe42d7b4fc380757cba84e003e7a4af2a",
+      "branch": "fix/hongguo-playback-release-0.1.22-47",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 39395365155,
+      "conclusion": "success",
+      "created": "2026-10-20T08:42:43Z",
+      "head": "39a47abfe42d7b4fc380757cba84e003e7a4af2a",
+      "branch": "fix/hongguo-playback-release-0.1.22-47",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12252021323,
+          "name": "windows-video-layout",
+          "bytes": 984137,
+          "expires": "2026-11-03T08:52:27Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 39395365174,
+      "conclusion": "cancelled",
+      "created": "2026-10-20T08:42:43Z",
+      "head": "39a47abfe42d7b4fc380757cba84e003e7a4af2a",
+      "branch": "fix/hongguo-playback-release-0.1.22-47",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 39243136842,
+      "conclusion": "success",
+      "created": "2026-10-19T11:13:55Z",
+      "head": "00089d391c1ab1692fdbfd742060cda90286a6b0",
+      "branch": "fix/windows-client-viewport-0.1.21-46",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12183340933,
+          "name": "hongguotv-windows-x64",
+          "bytes": 100676169,
+          "expires": "2026-11-02T11:30:23Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 39243136353,
+      "conclusion": "success",
+      "created": "2026-10-19T11:13:55Z",
+      "head": "00089d391c1ab1692fdbfd742060cda90286a6b0",
+      "branch": "fix/windows-client-viewport-0.1.21-46",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12182287663,
+          "name": "windows-video-layout",
+          "bytes": 984305,
+          "expires": "2026-11-02T11:23:25Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 39241521162,
+      "conclusion": "failure",
+      "created": "2026-10-19T11:00:40Z",
+      "head": "5be914e9feb8d87a3cb9411f6ac3e34fe19649cc",
+      "branch": "fix/windows-client-viewport-0.1.21-46",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12182570213,
+          "name": "windows-video-layout",
+          "bytes": 761142,
+          "expires": "2026-11-02T11:09:53Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 39236361150,
+      "conclusion": "success",
+      "created": "2026-10-19T10:17:13Z",
+      "head": "77d248e63e01e518b64028aebe8a8f20a54e3034",
+      "branch": "fix/windows-layout-description-skip-0.1.20-45",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12179984194,
+          "name": "hongguotv-windows-x64",
+          "bytes": 100672366,
+          "expires": "2026-11-02T10:34:53Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 39236360253,
+      "conclusion": "success",
+      "created": "2026-10-19T10:17:12Z",
+      "head": "77d248e63e01e518b64028aebe8a8f20a54e3034",
+      "branch": "fix/windows-layout-description-skip-0.1.20-45",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12179772765,
+          "name": "windows-video-layout",
+          "bytes": 349099,
+          "expires": "2026-11-02T10:24:39Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 39232351266,
+      "conclusion": "success",
+      "created": "2026-10-19T09:44:40Z",
+      "head": "464d9c4ed56f6d584284cf07683bb36ef15d5017",
+      "branch": "fix/windows-layout-description-skip-0.1.20-45",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12177322409,
+          "name": "windows-video-layout",
+          "bytes": 300656,
+          "expires": "2026-11-02T09:51:36Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 39221734603,
+      "conclusion": "success",
+      "created": "2026-10-19T08:17:36Z",
+      "head": "8c999359160d7127d9358cf605b86a1b1cd81cbf",
+      "branch": "fix/windows-tv-decoder-maintenance",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12172976396,
+          "name": "hongguotv-windows-x64",
+          "bytes": 100546515,
+          "expires": "2026-11-02T08:33:52Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 39220472932,
+      "conclusion": "success",
+      "created": "2026-10-19T08:06:59Z",
+      "head": "79514c67bace544a5a56df52db3322aa412f0cf8",
+      "branch": "fix/windows-tv-decoder-maintenance",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12172275720,
+          "name": "tv-decoder-source-validation",
+          "bytes": 109124,
+          "expires": "2026-11-02T08:14:56Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 39219626881,
+      "conclusion": "failure",
+      "created": "2026-10-19T07:59:44Z",
+      "head": "228b8a6c28d0dca027ea592ac4359847ac56379d",
+      "branch": "fix/windows-tv-decoder-maintenance",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12171307438,
+          "name": "tv-decoder-source-validation",
+          "bytes": 5676,
+          "expires": "2026-11-02T08:05:11Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 39219386198,
+      "conclusion": "failure",
+      "created": "2026-10-19T07:57:32Z",
+      "head": "02c761aea6fff08274b0af38efa1dcd784a28b58",
+      "branch": "fix/windows-tv-decoder-maintenance",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12170888715,
+          "name": "tv-decoder-source-validation",
+          "bytes": 174,
+          "expires": "2026-11-02T07:59:11Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 39218899493,
+      "conclusion": "cancelled",
+      "created": "2026-10-19T07:53:14Z",
+      "head": "5a6e17537ff9c1da371ece40fd89236c0cd52732",
+      "branch": "fix/windows-tv-decoder-maintenance",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 39218896196,
+      "conclusion": "success",
+      "created": "2026-10-19T07:53:13Z",
+      "head": "5a6e17537ff9c1da371ece40fd89236c0cd52732",
+      "branch": "fix/windows-tv-decoder-maintenance",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12171099824,
+          "name": "hongguotv-windows-x64",
+          "bytes": 100959730,
+          "expires": "2026-11-02T08:11:43Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 38869036088,
+      "conclusion": "success",
+      "created": "2026-10-16T07:43:32Z",
+      "head": "5d55f9303b58a41e7d658cd8fbf579df63fbc80f",
+      "branch": "main",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12032029366,
+          "name": "readme-source-snapshot",
+          "bytes": 6709475,
+          "expires": "2026-10-30T07:43:40Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 38866712283,
+      "conclusion": "success",
+      "created": "2026-10-16T07:21:39Z",
+      "head": "49e8200bae9d58e6266fa23382ef649d8a44adf2",
+      "branch": "android/0.1.16-stable-41",
+      "total": 3,
+      "artifacts": [
+        {
+          "id": 12032565075,
+          "name": "android-0.1.16-release-evidence",
+          "bytes": 131310953,
+          "expires": "2026-10-30T07:41:23Z"
+        },
+        {
+          "id": 12032111566,
+          "name": "hongguotv-android-0.1.16",
+          "bytes": 124034906,
+          "expires": "2026-10-30T07:32:19Z"
+        },
+        {
+          "id": 12031783370,
+          "name": "android-0.1.16-release-evidence",
+          "bytes": 124035002,
+          "expires": "2026-10-30T07:33:28Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 38866274771,
+      "conclusion": "failure",
+      "created": "2026-10-16T07:17:28Z",
+      "head": "ee60cf8abada4b75f9f57dac24a6adb154641f06",
+      "branch": "windows/0.1.15-stable-40",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12031119548,
+          "name": "hongguotv-windows-x64",
+          "bytes": 100910113,
+          "expires": "2026-10-30T07:25:43Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 38865952375,
+      "conclusion": "cancelled",
+      "created": "2026-10-16T07:14:26Z",
+      "head": "10a3575e9e74f6a34a47d0442a9e08dbbd619109",
+      "branch": "windows/0.1.15-stable-40",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38860795522,
+      "conclusion": "success",
+      "created": "2026-10-16T06:22:02Z",
+      "head": "64cc42f441453915bb0a4dab93f3b075ced5bfa2",
+      "branch": "windows/0.1.14-stable-final",
+      "total": 2,
+      "artifacts": [
+        {
+          "id": 12029079514,
+          "name": "hongguotv-windows-release-evidence",
+          "bytes": 108163313,
+          "expires": "2026-10-30T06:32:30Z"
+        },
+        {
+          "id": 12029014400,
+          "name": "hongguotv-windows-x64",
+          "bytes": 100907624,
+          "expires": "2026-10-30T06:30:45Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 38857203639,
+      "conclusion": "failure",
+      "created": "2026-10-16T05:42:49Z",
+      "head": "d0442bb934603baf31010c6debed3a13badedd9f",
+      "branch": "windows/0.1.14-stable-final",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12027697828,
+          "name": "hongguotv-windows-x64",
+          "bytes": 100401692,
+          "expires": "2026-10-30T05:49:34Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 38857038304,
+      "conclusion": "cancelled",
+      "created": "2026-10-16T05:40:57Z",
+      "head": "f1935ae6923b88b77e3e2a7712cbab57862d4c7a",
+      "branch": "windows/0.1.14-stable-final",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38856245943,
+      "conclusion": "failure",
+      "created": "2026-10-16T05:31:43Z",
+      "head": "08e087b6335abc1f42f6d5f2c8dfc030c7c2334c",
+      "branch": "windows/0.1.14-stable-final",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12026853718,
+          "name": "hongguotv-windows-x64",
+          "bytes": 100400874,
+          "expires": "2026-10-30T05:38:34Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 38851459554,
+      "conclusion": "success",
+      "created": "2026-10-16T04:36:03Z",
+      "head": "56e976641cb6578cf063df67ec2d1909212d51df",
+      "branch": "windows/desktop-ui-updater-0.1.14",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12025267820,
+          "name": "hongguotv-windows-x64",
+          "bytes": 100380866,
+          "expires": "2026-10-30T04:46:16Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 38850848770,
+      "conclusion": "success",
+      "created": "2026-10-16T04:29:03Z",
+      "head": "9326cb199bd046bb7d6c2d3b057769e9c778131e",
+      "branch": "windows/desktop-ui-updater-0.1.14",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12024993520,
+          "name": "hongguotv-windows-x64",
+          "bytes": 100380394,
+          "expires": "2026-10-30T04:38:45Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 38849610551,
+      "conclusion": "success",
+      "created": "2026-10-16T04:14:37Z",
+      "head": "9f1a3711c012559efdbab949381f84e604816538",
+      "branch": "windows/desktop-ui-updater-0.1.14",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12024895859,
+          "name": "hongguotv-windows-x64",
+          "bytes": 100377569,
+          "expires": "2026-10-30T04:23:19Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 38847959214,
+      "conclusion": "failure",
+      "created": "2026-10-16T03:55:39Z",
+      "head": "d47d1a36b95624ab94e46b5dae9e448e7cdb0dc9",
+      "branch": "windows/desktop-ui-updater-0.1.14",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12023973380,
+          "name": "hongguotv-windows-x64",
+          "bytes": 100376281,
+          "expires": "2026-10-30T04:08:02Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 38847738037,
+      "conclusion": "cancelled",
+      "created": "2026-10-16T03:53:04Z",
+      "head": "77cef0e68b037ee1edd0831adc2f89f4085e1278",
+      "branch": "windows/desktop-ui-updater-0.1.14",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38847666408,
+      "conclusion": "cancelled",
+      "created": "2026-10-16T03:52:14Z",
+      "head": "b5b1c1eec5293cbbf008f227e4f8624e843bdcd1",
+      "branch": "windows/desktop-ui-updater-0.1.14",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38847396910,
+      "conclusion": "cancelled",
+      "created": "2026-10-16T03:49:03Z",
+      "head": "b94647bbad68aa50b3efe260e7660e57bf19c07a",
+      "branch": "windows/desktop-ui-updater-0.1.14",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38847340695,
+      "conclusion": "cancelled",
+      "created": "2026-10-16T03:48:22Z",
+      "head": "0513a23bd53152c219aa73c13937275970426bb7",
+      "branch": "windows/desktop-ui-updater-0.1.14",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38847118013,
+      "conclusion": "failure",
+      "created": "2026-10-16T03:45:39Z",
+      "head": "5a6b2ad08bd51a62c7b92df2d419d0606ce10f75",
+      "branch": "windows/desktop-ui-updater-0.1.14",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12023802616,
+          "name": "hongguotv-windows-x64",
+          "bytes": 100373813,
+          "expires": "2026-10-30T03:58:10Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 38846972238,
+      "conclusion": "cancelled",
+      "created": "2026-10-16T03:43:55Z",
+      "head": "7bbe417f99e4080d4e72fffda77bf1bcd547160d",
+      "branch": "windows/desktop-ui-updater-0.1.14",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38846930309,
+      "conclusion": "cancelled",
+      "created": "2026-10-16T03:43:24Z",
+      "head": "1b02c3eb0a2cb8a84f18ec679d5cfc94f36c4a90",
+      "branch": "windows/desktop-ui-updater-0.1.14",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38846885365,
+      "conclusion": "cancelled",
+      "created": "2026-10-16T03:42:53Z",
+      "head": "7b91b6bc671cbd162798a46e2cce6666ab5c09d7",
+      "branch": "windows/desktop-ui-updater-0.1.14",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38846515319,
+      "conclusion": "failure",
+      "created": "2026-10-16T03:38:22Z",
+      "head": "40a7dc723f0abb081eae9a2dc1d8d76cf3787418",
+      "branch": "windows/desktop-ui-updater-0.1.14",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12023114874,
+          "name": "hongguotv-windows-x64",
+          "bytes": 100256659,
+          "expires": "2026-10-30T03:45:22Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 38836167572,
+      "conclusion": "success",
+      "created": "2026-10-16T01:38:01Z",
+      "head": "8fcd73b80b49604832454f48e1e814eacbaad4a1",
+      "branch": "main",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12019122738,
+          "name": "readme-source-snapshot",
+          "bytes": 6706576,
+          "expires": "2026-10-30T01:38:08Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 38835239540,
+      "conclusion": "success",
+      "created": "2026-10-16T01:27:45Z",
+      "head": "6be3c8cbab8c197de5697de26067987d0a529aee",
+      "branch": "verify-windows/0.1.13-preview.1",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12018926676,
+          "name": "hongguotv-windows-verified",
+          "bytes": 100150167,
+          "expires": "2026-10-30T01:29:33Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 38835196389,
+      "conclusion": "success",
+      "created": "2026-10-16T01:27:16Z",
+      "head": "ed5930e054dca9f0b3eb28050778e654a723091e",
+      "branch": "windows/0.1.13-preview.1-final",
+      "total": 2,
+      "artifacts": [
+        {
+          "id": 12019072269,
+          "name": "hongguotv-windows-release-evidence",
+          "bytes": 106944774,
+          "expires": "2026-10-30T01:35:27Z"
+        },
+        {
+          "id": 12018847782,
+          "name": "hongguotv-windows-x64",
+          "bytes": 100150022,
+          "expires": "2026-10-30T01:33:35Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 38835195342,
+      "conclusion": "failure",
+      "created": "2026-10-16T01:27:15Z",
+      "head": "ed5930e054dca9f0b3eb28050778e654a723091e",
+      "branch": "verify-windows/0.1.13-preview.1",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12018797111,
+          "name": "hongguotv-windows-verified",
+          "bytes": 119691671,
+          "expires": "2026-10-30T01:27:52Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 38834843150,
+      "conclusion": "failure",
+      "created": "2026-10-16T01:23:20Z",
+      "head": "4191fc658103a3ef9c1a969f952581db2c380000",
+      "branch": "verify-windows/0.1.13-preview.1",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12019095337,
+          "name": "hongguotv-windows-verified",
+          "bytes": 100150014,
+          "expires": "2026-10-30T01:24:20Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 38834555378,
+      "conclusion": "failure",
+      "created": "2026-10-16T01:20:12Z",
+      "head": "7b5fbd5247faffdc4609018c10aa7e8d6af02e7d",
+      "branch": "verify-windows/0.1.13-preview.1",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12017684269,
+          "name": "hongguotv-windows-verified",
+          "bytes": 100150014,
+          "expires": "2026-10-30T01:21:21Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 38833380994,
+      "conclusion": "failure",
+      "created": "2026-10-16T01:07:15Z",
+      "head": "b2fd2e28d491dc4356546eb40339623b3b547721",
+      "branch": "windows/0.1.13-preview.1-release",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12018383694,
+          "name": "hongguotv-windows-x64",
+          "bytes": 100137135,
+          "expires": "2026-10-30T01:16:51Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 38833190362,
+      "conclusion": "cancelled",
+      "created": "2026-10-16T01:05:12Z",
+      "head": "39410bd6a20014781d6e808eba34f141dc905865",
+      "branch": "windows/0.1.13-preview.1-release",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38832356425,
+      "conclusion": "cancelled",
+      "created": "2026-10-16T00:56:39Z",
+      "head": "76433215a6828b9d82a68c06855efc3c1f7e3e3a",
+      "branch": "windows/0.1.13-preview.1-release",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38832213896,
+      "conclusion": "failure",
+      "created": "2026-10-16T00:55:07Z",
+      "head": "c1da5cc27815c830c9498e0de0ad09e9f517df8d",
+      "branch": "windows/0.1.13-preview.1-release",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12018406278,
+          "name": "hongguotv-windows-x64",
+          "bytes": 100156062,
+          "expires": "2026-10-30T01:02:24Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 38831999290,
+      "conclusion": "cancelled",
+      "created": "2026-10-16T00:52:52Z",
+      "head": "f8d9c3da6513eda4c23545eea4c560a2354431b3",
+      "branch": "windows/0.1.13-preview.1-release",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38831597726,
+      "conclusion": "failure",
+      "created": "2026-10-16T00:48:38Z",
+      "head": "446b5cf1d3cbbf82b5817af43cf7d9c11f2a1279",
+      "branch": "windows/0.1.13-preview.1-release",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12017397540,
+          "name": "hongguotv-windows-x64",
+          "bytes": 100156080,
+          "expires": "2026-10-30T00:53:45Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 38831134992,
+      "conclusion": "failure",
+      "created": "2026-10-16T00:43:49Z",
+      "head": "48537eccd726170f947f8110cc630b991cf7d8cc",
+      "branch": "windows/0.1.13-preview.1",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12017645646,
+          "name": "hongguotv-windows-x64",
+          "bytes": 100155895,
+          "expires": "2026-10-30T00:51:36Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 38831061676,
+      "conclusion": "cancelled",
+      "created": "2026-10-16T00:43:02Z",
+      "head": "581769e1d082fc185df376f68fd9d90aedde76d8",
+      "branch": "windows/0.1.13-preview.1",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38830873397,
+      "conclusion": "cancelled",
+      "created": "2026-10-16T00:41:05Z",
+      "head": "77c59855d2706b051178c3773e333bd232898e5b",
+      "branch": "windows/0.1.13-preview.1",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38830807540,
+      "conclusion": "cancelled",
+      "created": "2026-10-16T00:40:23Z",
+      "head": "17cdc9e9a43d2113ba9b00accdd4c41cca4c2a57",
+      "branch": "windows/0.1.13-preview.1",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38830729998,
+      "conclusion": "cancelled",
+      "created": "2026-10-16T00:39:37Z",
+      "head": "9e4555bf4638db8cf3ffda0875ea256602ff9cf3",
+      "branch": "windows/0.1.13-preview.1",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38830623452,
+      "conclusion": "cancelled",
+      "created": "2026-10-16T00:38:30Z",
+      "head": "ed2267513cefe7a06868d9c7dcdea4996ee5bc1e",
+      "branch": "windows/0.1.13-preview.1",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38830493118,
+      "conclusion": "cancelled",
+      "created": "2026-10-16T00:37:09Z",
+      "head": "66e4c2a43d0a8fc913847199b93ee714106ea0e1",
+      "branch": "windows/0.1.13-preview.1",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38828330354,
+      "conclusion": "success",
+      "created": "2026-10-16T00:14:20Z",
+      "head": "67547d2bff3c953e9816dae02fc52a978610e737",
+      "branch": "main",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 12015788113,
+          "name": "readme-source-snapshot",
+          "bytes": 6705980,
+          "expires": "2026-10-30T00:14:27Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 38826943867,
+      "conclusion": "success",
+      "created": "2026-10-16T00:00:26Z",
+      "head": "48d081cd916d01f41f6e9d0d543b0ae9d3e20026",
+      "branch": "fix/ui-lag-updater-0.1.12",
+      "total": 2,
+      "artifacts": [
+        {
+          "id": 12016365216,
+          "name": "hongguotv-android",
+          "bytes": 122943847,
+          "expires": "2026-10-30T00:10:43Z"
+        },
+        {
+          "id": 12015687892,
+          "name": "hongguotv-update-verification",
+          "bytes": 6772705,
+          "expires": "2027-01-14T00:00:26Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 38825973736,
+      "conclusion": "failure",
+      "created": "2026-10-15T23:50:33Z",
+      "head": "77901799ef9c926914807b2638942e74a96c2a91",
+      "branch": "fix/ui-lag-updater-0.1.12",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38768604905,
+      "conclusion": "success",
+      "created": "2026-10-15T16:23:35Z",
+      "head": "848d894451351255cdc82d21e1ee1ce87412ef19",
+      "branch": "main",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 11990530968,
+          "name": "readme-source-snapshot",
+          "bytes": 6705979,
+          "expires": "2026-10-29T16:23:42Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 38765700800,
+      "conclusion": "success",
+      "created": "2026-10-15T16:03:11Z",
+      "head": "fc5881406e1e06abadc32f381f9ce3c6593280c2",
+      "branch": "feature/series-follow-0.1.11",
+      "total": 2,
+      "artifacts": [
+        {
+          "id": 11989608758,
+          "name": "hongguotv-android",
+          "bytes": 122933083,
+          "expires": "2026-10-29T16:20:57Z"
+        },
+        {
+          "id": 11989528440,
+          "name": "hongguotv-update-verification",
+          "bytes": 6769631,
+          "expires": "2027-01-13T16:03:11Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 38764396334,
+      "conclusion": "failure",
+      "created": "2026-10-15T15:54:13Z",
+      "head": "9c56a3b0fb08cc442135cc6a2230799582cc8211",
+      "branch": "feature/series-follow-0.1.11",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38762611197,
+      "conclusion": "failure",
+      "created": "2026-10-15T15:41:57Z",
+      "head": "5b54951ac006c6fba63b7a13d2177efaa978fac1",
+      "branch": "feature/series-follow-0.1.11",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38752691934,
+      "conclusion": "success",
+      "created": "2026-10-15T14:35:02Z",
+      "head": "01f09a7e9836909de3217f9e5b1d476c1f6a6901",
+      "branch": "main",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 11981977697,
+          "name": "readme-source-snapshot",
+          "bytes": 6705769,
+          "expires": "2026-10-29T14:35:12Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 38752517953,
+      "conclusion": "success",
+      "created": "2026-10-15T14:33:51Z",
+      "head": "bb57cfd9a0d28d6efb4d5eab56cb9239f65fb5b0",
+      "branch": "fix/hongguo-playback-20261015",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 11981238566,
+          "name": "readme-source-snapshot",
+          "bytes": 6754188,
+          "expires": "2026-10-29T14:34:02Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 38752517730,
+      "conclusion": "skipped",
+      "created": "2026-10-15T14:33:51Z",
+      "head": "bb57cfd9a0d28d6efb4d5eab56cb9239f65fb5b0",
+      "branch": "fix/hongguo-playback-20261015",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38752517916,
+      "conclusion": "success",
+      "created": "2026-10-15T14:33:51Z",
+      "head": "bb57cfd9a0d28d6efb4d5eab56cb9239f65fb5b0",
+      "branch": "fix/hongguo-playback-20261015",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38752254138,
+      "conclusion": "success",
+      "created": "2026-10-15T14:32:04Z",
+      "head": "c8ec4e464d62ddf57ea400134d5cec31daea1db4",
+      "branch": "fix/hongguo-playback-20261015",
+      "total": 1,
+      "artifacts": [
+        {
+          "id": 11981687952,
+          "name": "readme-source-snapshot",
+          "bytes": 6753896,
+          "expires": "2026-10-29T14:32:12Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 38752254468,
+      "conclusion": "skipped",
+      "created": "2026-10-15T14:32:04Z",
+      "head": "c8ec4e464d62ddf57ea400134d5cec31daea1db4",
+      "branch": "fix/hongguo-playback-20261015",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38752254329,
+      "conclusion": "success",
+      "created": "2026-10-15T14:32:04Z",
+      "head": "c8ec4e464d62ddf57ea400134d5cec31daea1db4",
+      "branch": "fix/hongguo-playback-20261015",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38752130706,
+      "conclusion": "failure",
+      "created": "2026-10-15T14:31:14Z",
+      "head": "bfec70376b7ff1dfbd98225470bf24d5c46eea11",
+      "branch": "main",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38752083114,
+      "conclusion": "skipped",
+      "created": "2026-10-15T14:30:55Z",
+      "head": "0c263a232102a01125b09595275b9e59d3bea623",
+      "branch": "fix/hongguo-playback-20261015",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38752083280,
+      "conclusion": "success",
+      "created": "2026-10-15T14:30:55Z",
+      "head": "0c263a232102a01125b09595275b9e59d3bea623",
+      "branch": "fix/hongguo-playback-20261015",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38752083266,
+      "conclusion": "failure",
+      "created": "2026-10-15T14:30:55Z",
+      "head": "0c263a232102a01125b09595275b9e59d3bea623",
+      "branch": "fix/hongguo-playback-20261015",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38748052080,
+      "conclusion": "success",
+      "created": "2026-10-15T14:03:46Z",
+      "head": "3c0d3315160bb3e82859a9a7385d721d7f10ec43",
+      "branch": "fix/hongguo-playback-20261015",
+      "total": 2,
+      "artifacts": [
+        {
+          "id": 11980776111,
+          "name": "hongguotv-android",
+          "bytes": 122893379,
+          "expires": "2026-10-29T14:14:30Z"
+        },
+        {
+          "id": 11979719954,
+          "name": "hongguotv-update-verification",
+          "bytes": 6803603,
+          "expires": "2027-01-13T14:03:46Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 38748051966,
+      "conclusion": "success",
+      "created": "2026-10-15T14:03:45Z",
+      "head": "3c0d3315160bb3e82859a9a7385d721d7f10ec43",
+      "branch": "fix/hongguo-playback-20261015",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38740616116,
+      "conclusion": "success",
+      "created": "2026-10-15T13:11:34Z",
+      "head": "b6038a8f5f9bc6fdf7649a84543a8958ee16eb85",
+      "branch": "fix/hongguo-playback-20261015",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38740233576,
+      "conclusion": "success",
+      "created": "2026-10-15T13:08:46Z",
+      "head": "8255c43d551e0c1f7c514e041e3d5fdd31fefd49",
+      "branch": "fix/hongguo-playback-20261015",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38739886005,
+      "conclusion": "success",
+      "created": "2026-10-15T13:06:12Z",
+      "head": "8795bd048614e056f44209f01bf79acbdc6c9e85",
+      "branch": "fix/hongguo-playback-20261015",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38739178637,
+      "conclusion": "success",
+      "created": "2026-10-15T13:01:04Z",
+      "head": "d7238bac1628ccc6f6e7879fd01ed7b5d65d4434",
+      "branch": "fix/hongguo-playback-20261015",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38738692537,
+      "conclusion": "success",
+      "created": "2026-10-15T12:57:34Z",
+      "head": "d9925cd951630a56bb916f76552fe6576dcf2f0e",
+      "branch": "fix/hongguo-playback-20261015",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38732922712,
+      "conclusion": "success",
+      "created": "2026-10-15T12:12:42Z",
+      "head": "9bb0b4640ab09c13430ae53711334c2c3781af37",
+      "branch": "fix/hongguo-playback-20261015",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38732628002,
+      "conclusion": "failure",
+      "created": "2026-10-15T12:10:19Z",
+      "head": "1137655537d36bb162d02bcfa12fa053d0faac37",
+      "branch": "fix/hongguo-playback-20261015",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38732492190,
+      "conclusion": "failure",
+      "created": "2026-10-15T12:09:13Z",
+      "head": "d9f817c1e55d6a5b40a9e05db78ae62664039619",
+      "branch": "fix/hongguo-playback-20261015",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38719480588,
+      "conclusion": "failure",
+      "created": "2026-10-15T10:19:49Z",
+      "head": "1729ef4a55273fbf07fe805a5ef2bb712e72bd72",
+      "branch": "fix/hongguo-playback-20261015",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38718868511,
+      "conclusion": "failure",
+      "created": "2026-10-15T10:14:41Z",
+      "head": "1713ad68e45cec38fa15b51d6c7f4eb36fb29650",
+      "branch": "fix/hongguo-playback-20261015",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38718397464,
+      "conclusion": "failure",
+      "created": "2026-10-15T10:10:46Z",
+      "head": "4d6e02339ef85dff598cd7193b8c3310f4d203a0",
+      "branch": "fix/hongguo-playback-20261015",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38717892335,
+      "conclusion": "failure",
+      "created": "2026-10-15T10:06:32Z",
+      "head": "955632e6a217f96f3c490348af040c53ea22a77d",
+      "branch": "fix/hongguo-playback-20261015",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38716464009,
+      "conclusion": "success",
+      "created": "2026-10-15T09:55:01Z",
+      "head": "944084342310d5996925c3953f02c5e381ac4f18",
+      "branch": "fix/hongguo-playback-20261015",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38715644840,
+      "conclusion": "failure",
+      "created": "2026-10-15T09:48:23Z",
+      "head": "e4e78f764958fc511f126025bb39bbe98755e581",
+      "branch": "fix/hongguo-playback-20261015",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38704973730,
+      "conclusion": "failure",
+      "created": "2026-10-15T08:20:37Z",
+      "head": "5bf0e135b410df5b4ab756a741d9d5cf54d6db87",
+      "branch": "candidate/viewing-reminders-0.1.9-31",
+      "total": 2,
+      "artifacts": [
+        {
+          "id": 11958657747,
+          "name": "zhenguojian-android",
+          "bytes": 122892425,
+          "expires": "2026-10-29T08:35:07Z"
+        },
+        {
+          "id": 11958388502,
+          "name": "hongguojian-android",
+          "bytes": 122825910,
+          "expires": "2026-10-29T08:36:54Z"
+        }
+      ],
+      "expired": 0
+    },
+    {
+      "run": 38702751579,
+      "conclusion": "success",
+      "created": "2026-10-15T08:01:39Z",
+      "head": "5bf0e135b410df5b4ab756a741d9d5cf54d6db87",
+      "branch": "candidate/viewing-reminders-0.1.9-31",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38697589899,
+      "conclusion": "success",
+      "created": "2026-10-15T07:15:58Z",
+      "head": "24a4091761510ab6dbb7d4d0535e48fc7f8a3c8a",
+      "branch": "candidate/viewing-reminders-0.1.9-31",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38694853177,
+      "conclusion": "success",
+      "created": "2026-10-15T06:50:27Z",
+      "head": "6b1cb6e59a8d0399dff6bf004b5c0a8cd216a04f",
+      "branch": "candidate/viewing-reminders-0.1.9-31",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38576097457,
+      "conclusion": "success",
+      "created": "2026-10-14T13:56:31Z",
+      "head": "4df0999a49db0dcd19544349832ac5cd6d3ee466",
+      "branch": "candidate/viewing-reminders-0.1.9-31",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38411322436,
+      "conclusion": "success",
+      "created": "2026-10-13T14:12:08Z",
+      "head": "39b589fee70082b3a6ac6a687260c1a3ee6af3af",
+      "branch": "candidate/mobile-danmaku-0.1.7-29",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38409773179,
+      "conclusion": "failure",
+      "created": "2026-10-13T14:01:07Z",
+      "head": "ad8be5187ebe22b4aaebba8c0c9a00e5909ae636",
+      "branch": "candidate/mobile-danmaku-0.1.7-29",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    },
+    {
+      "run": 38409139202,
+      "conclusion": "cancelled",
+      "created": "2026-10-13T13:56:42Z",
+      "head": "fcfb230c1395c0abb749b82710d25d35fb1be54c",
+      "branch": "candidate/mobile-danmaku-0.1.7-29",
+      "total": 0,
+      "artifacts": [],
+      "expired": 0
+    }
+  ]
+}

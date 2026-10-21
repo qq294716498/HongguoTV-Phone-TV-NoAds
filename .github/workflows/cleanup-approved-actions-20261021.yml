@@ -1,0 +1,40 @@
+name: One-time approved Actions cleanup
+
+on:
+  push:
+    branches: [maintenance/cleanup-approved-actions-20261021-094700z]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cleanup-approved-actions-20261021-094700z
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    if: github.repository == 'qq294716498/HongguoTV-Phone-TV-NoAds' && github.event.created == true && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Delete only the fixed approved completed run IDs
+        run: python3 scripts/cleanup_approved_actions_20261021.py
+      - name: Record isolated cleanup source snapshot
+        if: always()
+        run: python3 scripts/finish_task.py --destination . --message "Record the one-time approved fixed-ID Actions cleanup"
+      - name: Preserve cleanup audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: approved-actions-cleanup-report-${{ github.run_id }}
+          path: ${{ runner.temp }}/approved-actions-cleanup-report.json
+          if-no-files-found: error
+          retention-days: 90
