@@ -19,7 +19,7 @@ class NextSeasonResolver {
     final info = hongguoSeriesInfo(anchor);
     final query = info?.baseTitle ?? anchor.title.trim();
     if (normalizedSearchText(query).isEmpty) return null;
-    final deadline = DateTime.now().add(const Duration(seconds: 25));
+    final deadline = DateTime.now().add(const Duration(seconds: 45));
     void checkCurrent() {
       if (!isCurrent()) {
         throw AppFailure('下一季续播已取消', code: 'next_season_cancelled');
@@ -54,12 +54,23 @@ class NextSeasonResolver {
         for (final drama in result.items) {
           candidates[drama.id] = drama;
         }
-        if (!result.hasMore) break;
-        if (page == 5) {
-          throw AppFailure('同名结果较多，请手动选择下一季', code: 'next_season_ambiguous');
+        if (_matches(anchor, candidates.values).isNotEmpty || !result.hasMore) {
+          break;
         }
       }
       matches = _matches(anchor, candidates.values);
+    }
+    if (matches.isEmpty) {
+      for (final targeted in hongguoNextSeasonQueries(anchor)) {
+        final result = await bounded(
+          () => repository.catalog(anchor.source, query: targeted, force: true),
+        );
+        for (final drama in result.items) {
+          candidates[drama.id] = drama;
+        }
+        matches = _matches(anchor, candidates.values);
+        if (matches.isNotEmpty) break;
+      }
     }
     if (matches.isEmpty) return null;
     if (matches.length != 1) {

@@ -25,6 +25,7 @@ class SeriesCatalog extends ChangeNotifier {
   String error = '';
   int _page = 0;
   int _generation = 0;
+  bool _targeted = false;
   bool _disposed = false;
 
   List<HongguoSeriesEntry> get entries {
@@ -48,6 +49,7 @@ class SeriesCatalog extends ChangeNotifier {
     if (_disposed || loading || !allowed() || (!refresh && !hasMore)) return;
     if (refresh) {
       _page = 0;
+      _targeted = false;
       hasMore = true;
     }
     final generation = ++_generation;
@@ -77,7 +79,23 @@ class SeriesCatalog extends ChangeNotifier {
         }
         notifyListeners();
       }
+      final next = (hongguoSeriesInfo(anchor)?.season ?? 1) + 1;
+      if (!_targeted && !entries.any((entry) => entry.season == next)) {
+        _targeted = true;
+        for (final query in hongguoNextSeasonQueries(anchor)) {
+          if (!_current(generation)) return;
+          final result = await repository
+              .catalog(anchor.source, query: query, force: true)
+              .timeout(const Duration(seconds: 20));
+          if (!_current(generation)) return;
+          for (final drama in result.items) {
+            _candidates[drama.id] = drama;
+          }
+          if (entries.any((entry) => entry.season == next)) break;
+        }
+      }
     } catch (_) {
+      _targeted = false;
       if (_current(generation)) {
         error = '部分季暂时未能加载，请重试';
       }

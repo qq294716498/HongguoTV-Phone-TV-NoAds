@@ -46,6 +46,12 @@ func TestHongguoBackupAddressesAndCodecAlternatives(t *testing.T) {
 	if selected := nativePlaybackChoices(media, 720); len(selected.media) != 1 || selected.media[0].Quality != 720 {
 		t.Fatal("manual 720p selection changed")
 	}
+	if selected := nativePlaybackChoices(media, 900); len(selected.media) != 1 || selected.media[0].Quality != 720 {
+		t.Fatal("missing requested resolution must choose a lower route, never 1080p")
+	}
+	if selected := nativePlaybackChoices(media, 360); len(selected.media) != 0 {
+		t.Fatal("a low resolution retry must not silently increase resolution")
+	}
 	if selected := nativePlaybackChoices(media, 2160); len(selected.media) != len(want) {
 		t.Fatal("an unavailable quality should use the episode's available routes")
 	}

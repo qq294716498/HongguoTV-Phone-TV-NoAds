@@ -260,3 +260,29 @@ func TestSourceBackoffUsesRelativeTimeAndRetainsTypedError(t *testing.T) {
 		t.Fatal("redaction discarded structured retry time")
 	}
 }
+
+func TestHongguoSourceHealthUsesSignedSearchBeforePlayback(t *testing.T) {
+	var searches atomic.Int32
+	engine := catalogFixtureEngine(t, func(request *http.Request) (*http.Response, error) {
+		for _, header := range []string{"X-Gorgon", "X-Khronos", "X-Ladon", "X-Argus", "X-Helios", "X-Medusa"} {
+			if request.Header.Get(header) == "" {
+				t.Errorf("missing signature %s on %s", header, request.URL.Path)
+			}
+		}
+		switch request.URL.Path {
+		case "/reading/distribution/category/landpage/v/":
+			return nativeHongguoResponse(request, 1, false, "fixture", "12345"), nil
+		case hongguoSearchAppPath:
+			searches.Add(1)
+			return searchFixtureTab(request, false, 0, "", `[]`), nil
+		default:
+			t.Errorf("unexpected unsigned or playback request %s", request.URL.Path)
+			return nil, errors.New("unexpected request")
+		}
+	})
+	err := engine.checkSource(context.Background(), sourceHongguo, nativeDrama{}, true)
+	health := engine.sourceStatus(sourceHongguo).Health
+	if err == nil || searches.Load() != 2 || health == nil || len(health.Steps) != 2 || health.Steps[1].Name != "App 签名搜索" || health.Steps[1].State != "failed" {
+		t.Fatalf("signed search failure was not isolated: %v %+v", err, health)
+	}
+}

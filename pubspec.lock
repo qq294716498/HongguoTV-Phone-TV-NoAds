@@ -881,7 +881,7 @@ packages:
     source: hosted
     version: "2.4.3"
   video_player:
-    dependency: "direct overridden"
+    dependency: "direct main"
     description:
       path: "packages/video_player"
       relative: true

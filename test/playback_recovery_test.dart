@@ -3,6 +3,17 @@ import 'package:duanju_app/playback_recovery.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test(
+    'quality reduction is bounded and never increases requested resolution',
+    () {
+      expect(lowerPlaybackQuality(0, 1080), 720);
+      expect(lowerPlaybackQuality(720, 1080), 480);
+      expect(lowerPlaybackQuality(480, 0), 360);
+      expect(lowerPlaybackQuality(360, 1080), isNull);
+      expect(lowerPlaybackQuality(0, 0), 720);
+    },
+  );
+
   PlaybackPlan route(int index, {int count = 3}) => PlaybackPlan(
     url: 'https://media.test/$index.mp4',
     session: 'session-$index',

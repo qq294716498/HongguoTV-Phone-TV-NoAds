@@ -62,6 +62,7 @@ class PlayerScreen extends StatefulWidget {
     this.playerFactory,
     this.videoBuilder,
     this.handoff,
+    this.healthClock,
   });
   final DramaDetail detail;
   final int initialIndex;
@@ -73,6 +74,8 @@ class PlayerScreen extends StatefulWidget {
   final AppRepository repository;
   final LocalStore store;
   final LanIncomingPlayback? handoff;
+  @visibleForTesting
+  final DateTime Function()? healthClock;
   @visibleForTesting
   final Player Function()? playerFactory;
   @visibleForTesting
@@ -482,9 +485,9 @@ class _PlayerScreenState extends State<PlayerScreen>
             position: _player.state.position,
             playing: _playIntent && !_player.state.completed,
             foreground: _foreground,
-            now: DateTime.now(),
+            now: widget.healthClock?.call() ?? DateTime.now(),
           )) {
-        unawaited(_recover());
+        unawaited(_recover(weakNetwork: true));
       }
     });
     final handoff = widget.handoff;
@@ -1290,7 +1293,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     });
   }
 
-  Future<void> _recover() async {
+  Future<void> _recover({bool weakNetwork = false}) async {
     final current = _plan;
     if (_closed ||
         !_acceptErrors ||
@@ -1300,6 +1303,12 @@ class _PlayerScreenState extends State<PlayerScreen>
       return;
     }
     _acceptErrors = false;
+    if (weakNetwork && !_lowerQualityOffered && _lowerQuality != null) {
+      _lowerQualityOffered = true;
+      final generation = _generation;
+      if (await _offerLowerQuality()) return;
+      if (_closed || !mounted || generation != _generation) return;
+    }
     _danmaku.setPlan(null);
     _errorTimer?.cancel();
     _pendingError = false;
@@ -1764,6 +1773,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     _resumePosition = position;
     _showControlsOnPlaybackReady = showControlsOnReady;
     setState(() {
+      if (changingSeason || _index != index) _lowerQualityOffered = false;
       _detail = detail;
       if (changingSeason) _mobileTab = 0;
       _index = index;
@@ -2068,6 +2078,47 @@ class _PlayerScreenState extends State<PlayerScreen>
   Future<void> _switchOnline() async {
     _forceOnline = true;
     await _retry();
+  }
+
+  bool _lowerQualityOffered = false;
+
+  int? get _lowerQuality =>
+      _localFailure ||
+          widget.localOnly ||
+          _plan?.local == true ||
+          _decoderFailure
+      ? null
+      : lowerPlaybackQuality(_requestedQuality, _plan?.quality ?? 0);
+
+  Future<bool> _offerLowerQuality() async {
+    final quality = _lowerQuality;
+    if (quality == null || !mounted || _closed) return false;
+    final generation = _generation;
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('尝试较低清晰度？'),
+        content: Text(
+          '网络较慢或播放地址获取失败时，可以重新获取 ${quality}P 片源尝试播放。上游未返回片源时，降低清晰度也可能无法恢复。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('暂不尝试'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text('尝试 ${quality}P'),
+          ),
+        ],
+      ),
+    );
+    if (accepted == true && mounted && !_closed && generation == _generation) {
+      _preloader.clear();
+      await _retry(quality: quality);
+      return true;
+    }
+    return false;
   }
 
   Future<void> _retry({int? quality}) async {
@@ -3242,8 +3293,10 @@ class _PlayerScreenState extends State<PlayerScreen>
                 ColoredBox(
                   color: Colors.black.withValues(alpha: .9),
                   child: StatusPanel(
-                    title: '暂时无法播放',
-                    message: _error!,
+                    title: _lowerQuality != null ? '是否尝试较低清晰度？' : '暂时无法播放',
+                    message: _lowerQuality != null
+                        ? '网络较慢或取流失败，可尝试重新获取较低清晰度片源。\n${_error!}'
+                        : _error!,
                     onRetry: () => _retry(),
                     action: _localFailure ? '重试本地播放' : '重试播放',
                     secondaryAction: Wrap(
@@ -3252,6 +3305,13 @@ class _PlayerScreenState extends State<PlayerScreen>
                       alignment: WrapAlignment.center,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
+                        if (_lowerQuality != null)
+                          FilledButton.icon(
+                            key: const ValueKey('player-lower-quality'),
+                            onPressed: _offerLowerQuality,
+                            icon: const Icon(Icons.network_check),
+                            label: Text('尝试 ${_lowerQuality}P'),
+                          ),
                         if (_televisionDevice)
                           _televisionRecoveryActions(context),
                         FilledButton.tonalIcon(

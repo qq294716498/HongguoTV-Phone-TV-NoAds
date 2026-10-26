@@ -46,10 +46,10 @@ func nativePlaybackChoices(media providerMedia, quality int) nativePlaybackChoic
 		choice.qualities = append(choice.qualities, value)
 	}
 	sort.Sort(sort.Reverse(sort.IntSlice(choice.qualities)))
-	if quality > 0 && qualities[quality] {
+	if quality > 0 && len(qualities) > 0 {
 		filtered := make([]providerMedia, 0, len(choice.media))
 		for _, option := range choice.media {
-			if option.Quality == quality {
+			if option.Quality == quality || !qualities[quality] && option.Quality > 0 && option.Quality <= quality {
 				filtered = append(filtered, option)
 			}
 		}

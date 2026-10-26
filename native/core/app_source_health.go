@@ -78,6 +78,9 @@ func (engine *nativeEngine) checkSource(ctx context.Context, source string, sele
 			record.Total = 1
 			if playback {
 				record.Total = 5
+				if source == sourceHongguo {
+					record.Total = 6
+				}
 			}
 		})
 		trace.mu.Lock()
@@ -126,6 +129,17 @@ func (engine *nativeEngine) checkSource(ctx context.Context, source string, sele
 		}
 	}
 	report.Sample = drama.Title
+	if source == sourceHongguo {
+		if !run("App 签名搜索", func() (string, error) {
+			entry, err := engine.downloader.fetchHongguoAppSearch(ctx, drama.Title, 1)
+			if err == nil && len(entry.Dramas) == 0 {
+				err = errors.New("签名搜索可达，但未返回有效剧集")
+			}
+			return fmt.Sprintf("使用已注册设备与 PureSign，返回 %d 部剧", len(entry.Dramas)), err
+		}) {
+			return failure
+		}
+	}
 	var chapter Chapter
 	if !run("分集目录", func() (string, error) {
 		_, id, _ := splitProviderDramaID(drama.ID)

@@ -173,6 +173,7 @@ void main() {
     ScriptedPlayer platform, {
     Size? size,
     FakeViewPadding? padding,
+    DateTime Function()? healthClock,
   }) async {
     SharedPreferences.setMockInitialValues({});
     final font = Platform.environment['HG_UI_FONT'];
@@ -218,6 +219,7 @@ void main() {
             initialPosition: 7,
             repository: repository,
             store: store,
+            healthClock: healthClock,
             playerFactory: () => Player(platformPlayer: platform),
             videoBuilder: (controls) =>
                 ColoredBox(color: const Color(0xFF17212A), child: controls),
@@ -272,6 +274,28 @@ void main() {
     },
   );
 
+  testWidgets('stalled playback asks before requesting lower quality', (
+    tester,
+  ) async {
+    final repository = RouteRepository();
+    final player = ScriptedPlayer();
+    var now = DateTime(2026);
+    await mount(tester, repository, player, healthClock: () => now);
+    await player.seek(const Duration(seconds: 28));
+    await tester.pump();
+    for (var i = 0; i < 22; i++) {
+      now = now.add(const Duration(seconds: 1));
+      await tester.pump(const Duration(seconds: 1));
+    }
+    expect(find.text('尝试较低清晰度？'), findsOneWidget);
+    expect(repository.requestedQualities, [0]);
+    await tester.tap(find.text('尝试 720P'));
+    await settleOperations(tester);
+    expect(repository.requestedQualities, [0, 720]);
+    expect(player.opened.last.start, const Duration(seconds: 28));
+    await unmount(tester, player);
+  });
+
   testWidgets(
     'duplicate errors switch once while keeping progress, rate and pause state',
     (tester) async {
@@ -316,7 +340,7 @@ void main() {
       }
       expect(repository.primaryCalls, 2);
       expect(repository.fallbackCalls, 2);
-      expect(find.text('暂时无法播放'), findsOneWidget);
+      expect(find.text('是否尝试较低清晰度？'), findsOneWidget);
       expect(repository.active, isEmpty);
       await tester.pump(const Duration(seconds: 25));
       expect(repository.primaryCalls + repository.fallbackCalls, 4);
@@ -500,7 +524,7 @@ void main() {
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
       await tester.pump(const Duration(seconds: 46));
       await settleOperations(tester);
-      expect(find.text('暂时无法播放'), findsOneWidget);
+      expect(find.text('是否尝试较低清晰度？'), findsOneWidget);
       player.opening.complete();
       await settleOperations(tester);
       expect(player.playCalls, 0);
@@ -547,7 +571,7 @@ void main() {
       await mount(tester, repository, player);
       await tester.pump(const Duration(seconds: 46));
       await settleOperations(tester);
-      expect(find.text('暂时无法播放'), findsOneWidget);
+      expect(find.text('是否尝试较低清晰度？'), findsOneWidget);
       expect(find.text('重试播放'), findsOneWidget);
       expect(repository.active, isEmpty);
       await tester.tap(find.text('重试播放'));

@@ -5,7 +5,7 @@ import 'models.dart';
 const _hongguoSeriesLimit = 200;
 
 final _seasonSuffix = RegExp(
-  r'第\s*([0-9零〇一二两兩三四五六七八九十百]+)\s*([季部])[\s\u3000，。！？、：；·「」『』（）【】《》“”‘’.,!?:;\-_/()\[\]{}]*$',
+  r'(?:第\s*)?([0-9零〇一二两兩三四五六七八九十百]+)\s*([季部])[\s\u3000，。！？、：；·「」『』（）【】《》“”‘’.,!?:;\-_/()\[\]{}]*$',
 );
 
 class HongguoSeriesInfo {
@@ -101,7 +101,10 @@ HongguoSeriesInfo? hongguoSeriesInfo(Drama drama, {String? unit}) {
       explicit: false,
     );
   }
-  final base = title.substring(0, match.start).trim();
+  final base = title
+      .substring(0, match.start)
+      .replaceFirst(RegExp(r'[\s\u3000·:：\-_/（(【\[]+$'), '')
+      .trim();
   final season = _seasonNumber(match[1]!);
   if (base.isEmpty || season == null) return null;
   return HongguoSeriesInfo(
@@ -220,4 +223,23 @@ FollowState observeHongguoSeriesSeasons({
   return identical(seasons, state.seriesSeasons)
       ? state
       : state.copyWith(seriesSeasons: seasons);
+}
+
+List<String> hongguoNextSeasonQueries(Drama anchor) {
+  final info = hongguoSeriesInfo(anchor);
+  final base = info?.baseTitle ?? anchor.title.trim();
+  final next = (info?.season ?? 1) + 1;
+  final unit = info?.unit ?? '季';
+  if (base.isEmpty || next > _hongguoSeriesLimit) return const [];
+  const digits = '零一二三四五六七八九';
+  String chinese(int value) {
+    if (value < 10) return digits[value];
+    if (value < 100) {
+      return '${value < 20 ? '' : digits[value ~/ 10]}十${value % 10 == 0 ? '' : digits[value % 10]}';
+    }
+    final rest = value % 100;
+    return '${digits[value ~/ 100]}百${rest == 0 ? '' : '${rest < 10 ? '零' : ''}${chinese(rest)}'}';
+  }
+
+  return ['$base 第${chinese(next)}$unit', '$base 第$next$unit'];
 }

@@ -500,6 +500,10 @@ void main() {
       );
       await tester.pump(const Duration(seconds: 1));
       await settle(tester);
+      expect(find.text('尝试较低清晰度？'), findsOneWidget);
+      expect(repository.fallbackCalls, 0);
+      await tester.tap(find.text('暂不尝试'));
+      await settle(tester);
       expect(repository.fallbackCalls, 1);
       expect(player.state.playing, true);
       await press(tester, LogicalKeyboardKey.select);

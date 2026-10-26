@@ -218,10 +218,10 @@ void main() {
       );
       addTearDown(catalog.dispose);
       await catalog.load();
-      expect(repository.catalogCalls, hasLength(5));
+      expect(repository.catalogCalls, hasLength(7));
       expect(catalog.hasMore, isTrue);
       await catalog.load();
-      expect(repository.catalogCalls, hasLength(7));
+      expect(repository.catalogCalls, hasLength(9));
       expect(catalog.hasMore, isFalse);
       expect(catalog.entries, hasLength(2));
     },
@@ -303,13 +303,13 @@ void main() {
       final updates = FollowUpdates(repository, store);
       addTearDown(updates.dispose);
       await updates.refresh();
-      expect(repository.catalogCalls, hasLength(2));
+      expect(repository.catalogCalls, hasLength(4));
       expect(repository.catalogCalls.every((call) => call.$3), isTrue);
       expect(repository.maximumCatalogs, 1);
       expect(store.hasNextSeason(firstSeason), isTrue);
       await updates.refresh();
-      expect(repository.catalogCalls, hasLength(3));
-      expect(repository.catalogCalls.last.$1, '另一个故事');
+      expect(repository.catalogCalls, hasLength(7));
+      expect(repository.catalogCalls.last.$1, '另一个故事 第3季');
       expect(updates.failed, 0);
     },
   );
@@ -347,7 +347,7 @@ void main() {
       expect(updates.failed, 1);
       repository.failingPage = null;
       await updates.refresh();
-      expect(repository.catalogCalls, hasLength(3));
+      expect(repository.catalogCalls, hasLength(7));
     },
   );
 
@@ -369,7 +369,7 @@ void main() {
     expect(repository.catalogCalls, hasLength(1));
     await store.saveWatch(watch(thirdSeason, 2, 3));
     await updates.refresh();
-    expect(repository.catalogCalls, hasLength(2));
+    expect(repository.catalogCalls, hasLength(4));
     expect(store.hasNextSeason(firstSeason), false);
   });
 
@@ -502,7 +502,7 @@ void main() {
       var writes = 0;
       store.addListener(() => writes++);
       await updates.refresh();
-      expect(repository.catalogCalls, hasLength(17));
+      expect(repository.catalogCalls, hasLength(51));
       expect(updates.checked, 17);
       expect(writes, lessThanOrEqualTo(3));
     },

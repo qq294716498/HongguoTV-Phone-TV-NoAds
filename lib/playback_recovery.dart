@@ -61,3 +61,15 @@ class PlaybackHealth {
     return now.difference(_lastProgress!) >= stallTimeout;
   }
 }
+
+int? lowerPlaybackQuality(int requested, int actual) {
+  final current = requested > 0
+      ? requested
+      : actual > 0
+      ? actual
+      : 1080;
+  for (final quality in [720, 480, 360]) {
+    if (quality < current) return quality;
+  }
+  return null;
+}
