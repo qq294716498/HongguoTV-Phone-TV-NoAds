@@ -260,6 +260,29 @@ class _SourcesScreenState extends State<SourcesScreen> {
             ),
             const SizedBox(height: 8),
             Text('最近更新：${sourceTimestamp(status?.updatedAt)}'),
+            if (source.id == SourceSite.hongguo.id && status?.signature != null)
+              ExpansionTile(
+                key: const ValueKey('hongguo-signature-status'),
+                tilePadding: EdgeInsets.zero,
+                title: Text(
+                  'PureSign · ${status!.signature!.registered ? '统一设备已注册' : '等待设备注册'}',
+                ),
+                subtitle: Text(
+                  status.signature!.lastResult.isEmpty
+                      ? '签名就绪，等待请求'
+                      : status.signature!.lastResult,
+                ),
+                children: [
+                  Text(
+                    '本次运行：生成 ${status.signature!.generated} 次 · 复用 ${status.signature!.reused} 次 · 连续失败后刷新 ${status.signature!.refreshed} 次',
+                  ),
+                  Text(
+                    '最近生成：${sourceTimestamp(status.signature!.generatedAt)}',
+                  ),
+                  Text('最近成功：${sourceTimestamp(status.signature!.successAt)}'),
+                  const Text('全软件共用设备身份与签名管理；相同请求短时间内复用，参数变化或过期时更新。'),
+                ],
+              ),
             if (status != null && status.count > 0)
               Text(
                 '已加载至第 ${status.page} 页${status.hasMore ? ' · 可继续加载' : ' · 当前分页已加载完'}',

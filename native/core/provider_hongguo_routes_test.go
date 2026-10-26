@@ -14,8 +14,8 @@ func TestHongguoPlaybackRouteBudgets(t *testing.T) {
 		background bool
 		first      time.Duration
 	}{
-		{name: "foreground", first: 6 * time.Second},
-		{name: "preload", background: true, first: 4 * time.Second},
+		{name: "foreground", first: 9 * time.Second},
+		{name: "preload", background: true, first: 6 * time.Second},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)

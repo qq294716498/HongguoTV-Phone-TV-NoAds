@@ -2,6 +2,8 @@ import 'tv_decoder_settings.dart';
 import 'video_enhancement_preferences.dart';
 import 'watch_reminder_models.dart';
 
+const playbackQualities = [0, 1080, 720, 480, 360];
+
 const playbackSpeeds = [.5, .75, 1.0, 1.25, 1.5, 2.0, 3.0];
 
 const danmakuOpacities = [.2, .35, .5, .55, .65, .8, .95, 1.0];

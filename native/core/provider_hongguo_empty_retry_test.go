@@ -44,7 +44,6 @@ func TestHongguoEmptyModelRetriesOnceWithSameIdentity(t *testing.T) {
 			device: request.URL.Query().Get("device_id"), install: request.URL.Query().Get("iid"),
 			ticket: request.URL.Query().Get("_rticket"), body: sha256.Sum256(body), at: time.Now(),
 		})
-		// 播放模型请求现在必须带齐签名头；重试沿用同一设备身份而不是同一签名值。
 		for _, header := range []string{"X-Gorgon", "X-Khronos", "X-Ladon", "X-Argus", "X-Helios", "X-Medusa"} {
 			if request.Header.Get(header) == "" {
 				t.Errorf("model request lost signature header %s", header)
@@ -64,15 +63,15 @@ func TestHongguoEmptyModelRetriesOnceWithSameIdentity(t *testing.T) {
 	if first.device == "" || first.install == "" || first.device != second.device || first.install != second.install || first.body != second.body {
 		t.Fatal("empty response retry changed device or episode identity")
 	}
-	if first.ticket == second.ticket || second.at.Sub(first.at) < hongguoEmptyResponseRetryDelay {
-		t.Fatal("empty response retry skipped its short backoff or reused its dispatch timestamp")
+	if first.ticket != second.ticket || second.at.Sub(first.at) < hongguoEmptyResponseRetryDelay {
+		t.Fatal("early retry must reuse its signature while retaining backoff")
 	}
 }
 
 func TestHongguoContinuousEmptyModelRespectsAttemptCap(t *testing.T) {
 	for _, scenario := range []struct {
 		retries, expected int
-	}{{1, 1}, {2, 2}, {3, 2}, {99, 2}} {
+	}{{1, 4}, {2, 4}, {3, 4}, {99, 4}} {
 		t.Run("retries-"+strconv.Itoa(scenario.retries), func(t *testing.T) {
 			calls := 0
 			d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
@@ -93,8 +92,6 @@ func TestHongguoOnlyEmptyModelUsesSoftRetry(t *testing.T) {
 		name, path, body, retryAfter, mitigation string
 		status                                   int
 	}{
-		{name: "detail", path: "/novel/player/video_detail/v1/", status: 200},
-		{name: "catalog", path: "/reading/distribution/category/landpage/v/", status: 200},
 		{name: "whitespace", body: " \n\t", status: 200},
 		{name: "html", body: "<html>temporarily unavailable</html>", status: 200},
 		{name: "business-error", body: `{"code":1001}`, status: 200},
@@ -328,5 +325,55 @@ func TestHongguoLateModelResponseAfterCancellationCannotSucceed(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("late-response result did not settle after cancellation")
+	}
+}
+
+func TestHongguoPlaybackRecoversAfterThreeEmptyResponses(t *testing.T) {
+	calls := 0
+	var tickets []string
+	var deviceID, installID string
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		calls++
+		ticket := request.URL.Query().Get("_rticket")
+		if ticket == "" || request.Header.Get("X-Medusa") == "" {
+			t.Error("retry lost its signature")
+		}
+		tickets = append(tickets, ticket)
+		if calls == 1 {
+			deviceID, installID = request.URL.Query().Get("device_id"), request.URL.Query().Get("iid")
+		}
+		if deviceID == "" || installID == "" || request.URL.Query().Get("device_id") != deviceID || request.URL.Query().Get("iid") != installID {
+			t.Error("retry or signature refresh changed the registered device identity")
+		}
+		if calls < 4 {
+			return sourceFixtureResponse(request, 200, " \n"), nil
+		}
+		return sourceFixtureResponse(request, 200, hongguoRetryModelFixture), nil
+	})
+	media, err := d.resolveHongguoAppMedia(context.Background(), "9001")
+	if err != nil || media.URL == "" || calls != 4 {
+		t.Fatalf("fourth signed attempt failed: calls=%d error=%v", calls, err)
+	}
+	if tickets[0] != tickets[1] || tickets[1] != tickets[2] || tickets[2] == tickets[3] {
+		t.Fatal("only the final empty-response retry should refresh its signature")
+	}
+}
+
+func TestHongguoReadOnlyEndpointsRecoverEmptyResponse(t *testing.T) {
+	for _, path := range []string{hongguoSearchAppPath, "/novel/player/video_detail/v1/", "/reading/distribution/category/landpage/v/"} {
+		t.Run(path, func(t *testing.T) {
+			calls := 0
+			d := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
+				calls++
+				if calls == 1 {
+					return sourceFixtureResponse(r, 200, ""), nil
+				}
+				return sourceFixtureResponse(r, 200, `{"code":0}`), nil
+			})
+			_, err := d.hongguoAppRequest(context.Background(), http.MethodPost, path, nil, map[string]any{})
+			if err != nil || calls != 2 {
+				t.Fatalf("read-only empty response did not recover: calls=%d error=%v", calls, err)
+			}
+		})
 	}
 }

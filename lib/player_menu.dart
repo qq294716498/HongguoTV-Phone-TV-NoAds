@@ -175,9 +175,9 @@ class _PlayerMenuState extends State<PlayerMenu> {
       height: 1.5,
     );
     final qualities = {
-      0,
+      ...playbackQualities,
       ...widget.qualities.where((quality) => quality > 0),
-    }.toList();
+    }.toList()..sort();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -236,11 +236,12 @@ class _PlayerMenuState extends State<PlayerMenu> {
                 ),
             ],
           ),
-          if (!qualities.contains(preferences.quality))
+          if (preferences.quality > 0 &&
+              !widget.qualities.contains(preferences.quality))
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Text(
-                '已保存 ${preferences.quality}P 偏好，本集暂无此画质。',
+                '已保存 ${preferences.quality}P 偏好，将重新获取片源；实际画质取决于本集提供的清晰度。',
                 style: helperStyle,
               ),
             ),

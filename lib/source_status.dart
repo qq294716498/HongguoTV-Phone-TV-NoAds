@@ -41,9 +41,29 @@ class SourceHealth {
   };
 }
 
+class SourceSignatureStatus {
+  SourceSignatureStatus.fromJson(Map<String, dynamic> json)
+    : registered = json['registered'] == true,
+      generated = intValue(json['generated']),
+      reused = intValue(json['reused']),
+      refreshed = intValue(json['refreshed']),
+      generatedAt = sourceTime(json['generatedAt']),
+      successAt = sourceTime(json['successAt']),
+      lastResult = json['lastResult'] as String? ?? '';
+  final bool registered;
+  final int generated, reused, refreshed;
+  final DateTime? generatedAt, successAt;
+  final String lastResult;
+}
+
 class SourceStatus {
   SourceStatus.fromJson(Map<String, dynamic> json)
-    : source = json['source'] as String? ?? '',
+    : signature = json['signature'] is Map
+          ? SourceSignatureStatus.fromJson(
+              Map<String, dynamic>.from(json['signature'] as Map),
+            )
+          : null,
+      source = json['source'] as String? ?? '',
       count = intValue(json['count']),
       unknownVip = intValue(json['unknownVip']),
       page = intValue(json['page']),
@@ -71,6 +91,7 @@ class SourceStatus {
   final bool hasMore, running;
   final DateTime? updatedAt, startedAt, finishedAt, retryAt;
   final SourceHealth? health;
+  final SourceSignatureStatus? signature;
 
   int get retrySeconds {
     if (retryAt == null) return 0;

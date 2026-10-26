@@ -814,6 +814,9 @@ func (engine *nativeEngine) nativeResolve(ctx context.Context, input nativeInput
 		return nativePlan{}, err
 	}
 	choice := nativePlaybackChoices(media, input.Quality)
+	if len(choice.media) == 0 && input.Quality > 0 && len(choice.qualities) > 0 {
+		return nativePlan{}, fmt.Errorf("本集未提供不高于 %dP 的片源，请选择其他清晰度", input.Quality)
+	}
 	if series, video, valid := hongguoPlaybackIDs(task); valid {
 		choice.danmakuSeries, choice.danmakuVideo = series, video
 	}

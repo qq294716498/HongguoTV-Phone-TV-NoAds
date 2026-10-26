@@ -62,6 +62,44 @@ class SourceFixtureRepository extends FixtureRepository {
 }
 
 void main() {
+  testWidgets('Hongguo source card exposes shared signature status', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final store = testStore(await SharedPreferences.getInstance());
+    final repository = SourceFixtureRepository();
+    repository.statuses['hongguo'] = SourceStatus.fromJson({
+      'source': 'hongguo',
+      'signature': {
+        'registered': true,
+        'generated': 3,
+        'reused': 7,
+        'refreshed': 1,
+        'generatedAt': '2026-10-26T12:00:00Z',
+        'successAt': '2026-10-26T12:00:01Z',
+        'lastResult': '请求成功',
+      },
+    });
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SourcesScreen(repository: repository, store: store),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final card = find.byKey(const ValueKey('hongguo-signature-status'));
+    expect(card, findsOneWidget);
+    expect(find.text('PureSign · 统一设备已注册'), findsOneWidget);
+    await tester.tap(card);
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('生成 3 次 · 复用 7 次 · 连续失败后刷新 1 次'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('最近成功：'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    store.dispose();
+  });
+
   testWidgets('source list keeps bottom content above system navigation', (
     tester,
   ) async {

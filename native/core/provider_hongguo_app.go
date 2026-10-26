@@ -39,6 +39,9 @@ type hongguoCatalogState struct {
 }
 
 type hongguoAppClient struct {
+	signatureMu             sync.Mutex
+	signatures              map[[32]byte]hongguoCachedSignature
+	signatureStatus         hongguoSignatureStatus
 	searchCursorMu          sync.Mutex
 	searchCursors           map[string]hongguoSearchCursor
 	deviceRegistration      chan struct{}
@@ -176,10 +179,15 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 		attempts = 2
 	}
 	playbackModel := method == http.MethodPost && path == hongguoVideoModelPath
-	if playbackModel && attempts > 2 {
+	emptyRetry := playbackModel || searchRequest || path == "/novel/player/video_detail/v1/" || path == "/reading/distribution/category/landpage/v/"
+	if emptyRetry && attempts < 2 {
 		attempts = 2
 	}
+	if playbackModel {
+		attempts = 4
+	}
 	var lastErr error
+	emptyResponses := 0
 	retryDelay := time.Second
 	for attempt := 0; attempt < attempts; attempt++ {
 		if err := ctx.Err(); err != nil {
@@ -224,10 +232,11 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 			if comment {
 				signHongguoCommentRequest(prepared, commentNonce, now)
 			} else if path != "/novel/player/video_model/v1/" {
-				signHongguoRequest(prepared, body, now)
+				client.prepareSignature(prepared, body, now, attempt == attempts-1 && emptyResponses >= 2)
 			}
 		})
 		if err != nil {
+			client.recordSignatureResult("网络请求失败")
 			lastErr = err
 			var backoff *requestBackoff
 			if errors.As(err, &backoff) || ctx.Err() != nil {
@@ -246,21 +255,24 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 		}
 		blockedResponse := catalogResponseBlockReason(response, content) != ""
 		if response.StatusCode != http.StatusOK || blockedResponse {
+			client.recordSignatureResult("上游拒绝或暂时无法响应")
 			lastErr = downloader.catalogResponseError(request, response, content)
 			if blockedResponse || response.StatusCode >= 400 && response.StatusCode < 500 {
 				return nil, lastErr
 			}
 			continue
 		}
-		if len(content) == 0 {
+		if len(bytes.TrimSpace(content)) == 0 {
+			emptyResponses++
+			client.recordSignatureResult("上游返回空响应")
 			downloader.recordDiagnostic(diagnosticEvent{
 				Event: "hongguo.app_empty_response", Level: "warning", Source: sourceHongguo,
 				Host: request.URL.Hostname(), HTTPStatus: response.StatusCode, Protocol: response.Proto,
 				Attempt: attempt + 1, Message: "App 接口返回空响应：" + request.URL.Path,
 			})
 			lastErr = fmt.Errorf("红果 App 接口返回空响应（HTTP %d，正文 0 字节）；未收到明确的登录错误", response.StatusCode)
-			if playbackModel && attempt+1 < attempts && response.Header.Get("Retry-After") == "" {
-				retryDelay = hongguoEmptyResponseRetryDelay
+			if emptyRetry && attempt+1 < attempts && response.Header.Get("Retry-After") == "" {
+				retryDelay = hongguoEmptyResponseRetryDelay * time.Duration(1<<attempt)
 				continue
 			}
 			return nil, lastErr
@@ -272,6 +284,7 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 		decoder := json.NewDecoder(bytes.NewReader(content))
 		decoder.UseNumber()
 		if err := decoder.Decode(&result); err != nil || result == nil {
+			client.recordSignatureResult("上游响应格式异常")
 			return nil, errors.New("红果 App 接口返回格式异常")
 		}
 		code := firstNonEmpty(mapString(result, "code", "Code", "status_code"), mapString(nestedMap(result, "BaseResp"), "StatusCode"))
@@ -281,8 +294,10 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 			continue
 		}
 		if code != "" && code != "0" {
+			client.recordSignatureResult("上游返回业务错误")
 			return nil, fmt.Errorf("红果 App 接口暂不可用（%s）", truncate(code, 20))
 		}
+		client.recordSignatureResult("请求成功")
 		return result, nil
 	}
 	return nil, lastErr

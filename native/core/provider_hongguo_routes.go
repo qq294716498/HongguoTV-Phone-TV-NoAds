@@ -35,7 +35,13 @@ func resolveHongguoMediaRoutes(ctx context.Context, routes []hongguoMediaRoute) 
 			failures = append(failures, err)
 			break
 		}
-		stage, finish := context.WithTimeout(ctx, time.Until(deadline)/time.Duration(len(routes)-index))
+		remainingRoutes := len(routes) - index
+		weight := 1
+		if index == 0 && remainingRoutes > 1 {
+			weight = 2
+			remainingRoutes++
+		}
+		stage, finish := context.WithTimeout(ctx, time.Until(deadline)*time.Duration(weight)/time.Duration(remainingRoutes))
 		media, err := route.resolve(stage)
 		if err == nil {
 			err = stage.Err()

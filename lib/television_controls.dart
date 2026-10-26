@@ -966,10 +966,10 @@ class TelevisionSettingsDialog extends StatelessWidget {
               spacing: 8,
               runSpacing: 8,
               children: [
-                for (final value in [
-                  0,
-                  ...qualities.where((value) => value > 0).toSet(),
-                ])
+                for (final value in {
+                  ...playbackQualities,
+                  ...qualities.where((value) => value > 0),
+                })
                   RemoteButton(
                     key: ValueKey('tv-quality-$value'),
                     label: value == 0 ? '自动（优先高清）' : '${value}P',

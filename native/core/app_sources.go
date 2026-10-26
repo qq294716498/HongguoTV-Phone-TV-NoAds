@@ -34,24 +34,25 @@ type nativeSourceRecord struct {
 }
 
 type nativeSourceStatus struct {
-	UnknownVIP   int                 `json:"unknownVip"`
-	Source       string              `json:"source"`
-	Count        int                 `json:"count"`
-	Page         int                 `json:"page"`
-	HasMore      bool                `json:"hasMore"`
-	UpdatedAt    time.Time           `json:"updatedAt"`
-	Operation    string              `json:"operation"`
-	Running      bool                `json:"running"`
-	Stage        string              `json:"stage"`
-	Completed    int                 `json:"completed"`
-	Total        int                 `json:"total"`
-	Added        int                 `json:"added"`
-	Error        string              `json:"error,omitempty"`
-	StorageError string              `json:"storageError,omitempty"`
-	StartedAt    time.Time           `json:"startedAt"`
-	FinishedAt   time.Time           `json:"finishedAt"`
-	RetryAt      time.Time           `json:"retryAt"`
-	Health       *nativeSourceHealth `json:"health,omitempty"`
+	Signature    *hongguoSignatureStatus `json:"signature,omitempty"`
+	UnknownVIP   int                     `json:"unknownVip"`
+	Source       string                  `json:"source"`
+	Count        int                     `json:"count"`
+	Page         int                     `json:"page"`
+	HasMore      bool                    `json:"hasMore"`
+	UpdatedAt    time.Time               `json:"updatedAt"`
+	Operation    string                  `json:"operation"`
+	Running      bool                    `json:"running"`
+	Stage        string                  `json:"stage"`
+	Completed    int                     `json:"completed"`
+	Total        int                     `json:"total"`
+	Added        int                     `json:"added"`
+	Error        string                  `json:"error,omitempty"`
+	StorageError string                  `json:"storageError,omitempty"`
+	StartedAt    time.Time               `json:"startedAt"`
+	FinishedAt   time.Time               `json:"finishedAt"`
+	RetryAt      time.Time               `json:"retryAt"`
+	Health       *nativeSourceHealth     `json:"health,omitempty"`
 }
 
 func (engine *nativeEngine) lockSourceCatalog(ctx context.Context, source string) (func(), error) {
@@ -145,7 +146,11 @@ func (engine *nativeEngine) sourceStatusLocked(source string) nativeSourceStatus
 	if warning != "" && !record.Running && stage == "已完成" {
 		stage = "等待保存"
 	}
-	return nativeSourceStatus{Source: source, Count: len(engine.catalogs[source]), UnknownVIP: unknownVIP, Page: max(1, state.Page), HasMore: !found || state.HasMore,
+	var signature *hongguoSignatureStatus
+	if source == sourceHongguo {
+		signature = engine.downloader.hongguoClient().signatureSnapshot()
+	}
+	return nativeSourceStatus{Signature: signature, Source: source, Count: len(engine.catalogs[source]), UnknownVIP: unknownVIP, Page: max(1, state.Page), HasMore: !found || state.HasMore,
 		UpdatedAt: state.UpdatedAt, Operation: record.Operation, Running: record.Running, Stage: stage,
 		Completed: record.Completed, Total: record.Total, Added: record.Added, Error: record.Error,
 		StorageError: warning,

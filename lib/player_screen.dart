@@ -1639,6 +1639,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       _smoothTransition = false;
       _transitionWaitVisible = false;
       _error = message;
+      _sourceBlocked = failure.code == 'source_blocked';
       _localFailure = false;
     });
     widget.handoff?.fail(message);
@@ -1779,6 +1780,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       _index = index;
       _loading = true;
       _error = null;
+      _sourceBlocked = false;
       _localFailure = false;
       _loadingMessage = switch (recoveryAction) {
         PlaybackRecoveryAction.alternative => '正在切换备用线路',
@@ -2081,9 +2083,11 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   bool _lowerQualityOffered = false;
+  bool _sourceBlocked = false;
 
   int? get _lowerQuality =>
-      _localFailure ||
+      _sourceBlocked ||
+          _localFailure ||
           widget.localOnly ||
           _plan?.local == true ||
           _decoderFailure
@@ -3295,7 +3299,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                   child: StatusPanel(
                     title: _lowerQuality != null ? '是否尝试较低清晰度？' : '暂时无法播放',
                     message: _lowerQuality != null
-                        ? '网络较慢或取流失败，可尝试重新获取较低清晰度片源。\n${_error!}'
+                        ? '多次尝试后播放仍未恢复。可以选择较低清晰度，重新获取片源再试一次。'
                         : _error!,
                     onRetry: () => _retry(),
                     action: _localFailure ? '重试本地播放' : '重试播放',
@@ -3305,12 +3309,41 @@ class _PlayerScreenState extends State<PlayerScreen>
                       alignment: WrapAlignment.center,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
+                        if (!_sourceBlocked &&
+                            !_localFailure &&
+                            !widget.localOnly)
+                          TextButton.icon(
+                            key: const ValueKey('player-error-quality'),
+                            onPressed: () =>
+                                _openPanel(PlayerMenuSection.quality),
+                            icon: const Icon(Icons.tune),
+                            label: const Text('选择清晰度'),
+                          ),
                         if (_lowerQuality != null)
                           FilledButton.icon(
                             key: const ValueKey('player-lower-quality'),
                             onPressed: _offerLowerQuality,
                             icon: const Icon(Icons.network_check),
                             label: Text('尝试 ${_lowerQuality}P'),
+                          ),
+                        if (_lowerQuality != null)
+                          TextButton(
+                            onPressed: () => showDialog<void>(
+                              context: context,
+                              builder: (context) => AlertDialog(
+                                title: const Text('播放失败详情'),
+                                content: SingleChildScrollView(
+                                  child: SelectableText(_error ?? ''),
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context),
+                                    child: const Text('关闭'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            child: const Text('查看失败详情'),
                           ),
                         if (_televisionDevice)
                           _televisionRecoveryActions(context),
