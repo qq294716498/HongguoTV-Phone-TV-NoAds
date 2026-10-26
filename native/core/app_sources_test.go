@@ -25,10 +25,21 @@ func sourceFixtureResponse(request *http.Request, status int, body string) *http
 	return &http.Response{StatusCode: status, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(body)), ContentLength: int64(len(body)), Request: request}
 }
 
-func sourceFixtureDownloader(t *testing.T, transport sourceFixtureTransport) *Downloader {
+func sourceFixtureDownloader(t *testing.T, transport sourceFixtureTransport, registered ...bool) *Downloader {
 	t.Helper()
-	return &Downloader{cfg: Config{dataDir: t.TempDir(), Retries: 1, PageSize: 30, MaxPagesPerSort: 1},
+	d := &Downloader{cfg: Config{dataDir: t.TempDir(), Retries: 1, PageSize: 30, MaxPagesPerSort: 1},
 		client: &http.Client{Transport: transport}, limiter: newRequestLimiter(3, 0), providerHosts: map[string]string{}}
+	if len(registered) == 0 || registered[0] {
+		seedHongguoFixtureIdentity(d)
+	}
+	return d
+}
+
+func seedHongguoFixtureIdentity(d *Downloader) {
+	client := d.hongguoClient()
+	client.deviceIdentityLoaded = true
+	client.deviceIdentityPersisted = true
+	client.deviceIdentity = hongguoDeviceIdentity{DeviceID: client.state.DeviceID, InstallID: client.state.InstallID, Cookie: "install_id=" + client.state.InstallID}
 }
 
 func sourceFixtureEngine(t *testing.T, transport sourceFixtureTransport) *nativeEngine {
@@ -41,6 +52,7 @@ func sourceFixtureEngine(t *testing.T, transport sourceFixtureTransport) *native
 	engine.downloader.client.Transport = transport
 	engine.downloader.limiter = newRequestLimiter(3, 0)
 	engine.downloader.cfg.Retries = 1
+	seedHongguoFixtureIdentity(engine.downloader)
 	return engine
 }
 

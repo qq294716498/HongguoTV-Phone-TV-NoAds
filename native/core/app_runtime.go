@@ -390,6 +390,12 @@ func nativeDispatch(input nativeInput) (any, error) {
 		ctx = work
 	}
 	switch input.Action {
+	case "registerDevice":
+		identity, err := engine.downloader.ensureHongguoDeviceIdentity(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]bool{"registered": identity.valid()}, nil
 	case "lan":
 		return engine.nativeLAN(ctx, input.Command, input.LAN)
 	case "updateSystemProxy":
@@ -530,14 +536,18 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 	d := engine.downloader
 	result := nativeCatalogResult{Items: []nativeDrama{}, Page: page}
 	if query != "" && source == sourceHongguo {
-		entry, err := d.searchHongguoDramas(ctx, query)
+		if input.Force && page == 1 {
+			d.invalidateHongguoSearch(query)
+		}
+		entry, err := d.searchHongguoDramasPage(ctx, query, page)
 		if err != nil {
 			return result, err
 		}
 		for _, drama := range entry.Dramas {
 			result.Items = append(result.Items, nativeNormalize(drama))
 		}
-		result.Warning, result.Page = entry.Warning, 1
+		result.Warning, result.Page = entry.Warning, page
+		result.HasMore = entry.HasMore
 		if entry.Limited && result.Warning == "" {
 			result.Warning = "已显示当前可获取的匹配结果，使用更完整的剧名可继续查找"
 		}

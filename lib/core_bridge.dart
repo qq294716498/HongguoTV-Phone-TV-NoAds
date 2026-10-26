@@ -529,6 +529,7 @@ class NativeRepository extends AppRepository {
       final unrestricted =
           {
             'initialize',
+            'registerDevice',
             'release',
             'cancelPlayback',
             'cancelRead',
@@ -670,6 +671,13 @@ class NativeRepository extends AppRepository {
       SystemProxyMonitor.start((value) async {
         await _call({'action': 'updateSystemProxy', 'systemProxy': value});
       });
+    }
+  }
+
+  Future<void> registerDevice() async {
+    final result = await _call({'action': 'registerDevice'});
+    if (result['registered'] != true) {
+      throw AppFailure('设备注册未完成，请重试');
     }
   }
 

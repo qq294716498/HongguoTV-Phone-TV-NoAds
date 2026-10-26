@@ -128,20 +128,25 @@ class AppBootstrap extends StatefulWidget {
     super.key,
     this.device = const AppDevice(),
     this.onReady,
+    this.repository,
   });
   final AppDevice device;
   final VoidCallback? onReady;
+  final NativeRepository? repository;
   @override
   State<AppBootstrap> createState() => _AppBootstrapState();
 }
 
 class _AppBootstrapState extends State<AppBootstrap>
     with WidgetsBindingObserver {
-  final repository = NativeRepository();
+  late final repository = widget.repository ?? NativeRepository();
   final navigator = GlobalKey<NavigatorState>();
   LocalStore? store;
   Object? error;
   bool _exiting = false;
+  bool _initializing = false;
+  bool _registeringDevice = false;
+  String _startupMessage = '正在准备应用';
   late AppDevice device = widget.device;
 
   @override
@@ -206,8 +211,12 @@ class _AppBootstrapState extends State<AppBootstrap>
   }
 
   Future<void> _initialize() async {
+    if (_initializing) return;
+    _initializing = true;
     setState(() {
       error = null;
+      _registeringDevice = false;
+      _startupMessage = '正在准备应用';
     });
     try {
       final preferences = await SharedPreferences.getInstance();
@@ -235,6 +244,18 @@ class _AppBootstrapState extends State<AppBootstrap>
         unawaited(AppUpdates.current!.check());
       }
       await repository.initialize();
+      if (!mounted) return;
+      setState(() {
+        _registeringDevice = true;
+        _startupMessage = '正在注册设备';
+      });
+      await repository.registerDevice();
+      if (!mounted) return;
+      setState(() {
+        _registeringDevice = false;
+        _startupMessage = '设备注册成功，正在进入应用';
+      });
+      await Future<void>.delayed(const Duration(milliseconds: 400));
       if (mounted) {
         setState(() {
           store = LocalStore(preferences);
@@ -312,9 +333,11 @@ class _AppBootstrapState extends State<AppBootstrap>
         );
       if (mounted) {
         setState(() {
-          error = failure;
+          error = _registeringDevice ? AppFailure('设备注册失败：$failure') : failure;
         });
       }
+    } finally {
+      _initializing = false;
     }
   }
 
@@ -382,6 +405,7 @@ class _AppBootstrapState extends State<AppBootstrap>
           repository: repository,
           store: store,
           bootstrapError: error?.toString(),
+          bootstrapStatus: _startupMessage,
           onRetry: _initialize,
           television: device.television,
           version: device.version,
@@ -396,6 +420,7 @@ class DuanjuApp extends StatefulWidget {
     required this.repository,
     this.store,
     this.bootstrapError,
+    this.bootstrapStatus,
     this.onRetry,
     this.television = false,
     this.version = appVersion,
@@ -405,6 +430,7 @@ class DuanjuApp extends StatefulWidget {
   final AppRepository repository;
   final LocalStore? store;
   final String? bootstrapError;
+  final String? bootstrapStatus;
   final VoidCallback? onRetry;
   final bool television;
   final String version;
@@ -518,7 +544,7 @@ class _DuanjuAppState extends State<DuanjuApp> {
             ),
             const SizedBox(height: 24),
             Text(
-              bootstrapError ?? '正在打开$appName',
+              bootstrapError ?? widget.bootstrapStatus ?? '正在打开$appName',
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 18),
             ),
@@ -526,7 +552,13 @@ class _DuanjuAppState extends State<DuanjuApp> {
             if (bootstrapError == null)
               const CircularProgressIndicator()
             else
-              FilledButton(onPressed: onRetry, child: const Text('重新打开')),
+              FilledButton(
+                autofocus: true,
+                onPressed: onRetry,
+                child: Text(
+                  bootstrapError!.startsWith('设备注册失败') ? '重新注册' : '重新打开',
+                ),
+              ),
           ],
         ),
       ),

@@ -39,26 +39,33 @@ type hongguoCatalogState struct {
 }
 
 type hongguoAppClient struct {
-	mu             sync.Mutex
-	catalogMu      sync.Mutex
-	baseURL        string
-	state          hongguoCatalogState
-	details        map[string]hongguoDetailEntry
-	pending        map[string]*hongguoDetailCall
-	searches       map[string]hongguoSearchEntry
-	searchPending  map[string]*hongguoSearchCall
-	suggestions    map[string]hongguoSuggestionEntry
-	suggestPending map[string]*hongguoSuggestionCall
-	danmaku        map[string]hongguoDanmakuCacheEntry
-	danmakuPending map[string]*hongguoDanmakuCall
+	searchCursorMu          sync.Mutex
+	searchCursors           map[string]hongguoSearchCursor
+	deviceRegistration      chan struct{}
+	deviceIdentity          hongguoDeviceIdentity
+	deviceIdentityLoaded    bool
+	deviceIdentityPersisted bool
+	mu                      sync.Mutex
+	catalogMu               sync.Mutex
+	baseURL                 string
+	state                   hongguoCatalogState
+	details                 map[string]hongguoDetailEntry
+	pending                 map[string]*hongguoDetailCall
+	searches                map[string]hongguoSearchEntry
+	searchPending           map[string]*hongguoSearchCall
+	suggestions             map[string]hongguoSuggestionEntry
+	suggestPending          map[string]*hongguoSuggestionCall
+	danmaku                 map[string]hongguoDanmakuCacheEntry
+	danmakuPending          map[string]*hongguoDanmakuCall
 }
 
 func (downloader *Downloader) hongguoClient() *hongguoAppClient {
 	downloader.hongguoOnce.Do(func() {
 		downloader.hongguo = &hongguoAppClient{
-			baseURL: hongguoAppBaseURL,
-			state:   hongguoCatalogState{Version: 1, DeviceID: newHongguoDeviceID(), InstallID: newHongguoDeviceID(), Feeds: map[string]hongguoCatalogCursor{}},
-			details: map[string]hongguoDetailEntry{}, pending: map[string]*hongguoDetailCall{},
+			baseURL:            hongguoAppBaseURL,
+			deviceRegistration: make(chan struct{}, 1),
+			state:              hongguoCatalogState{Version: 1, DeviceID: newHongguoDeviceID(), InstallID: newHongguoDeviceID(), Feeds: map[string]hongguoCatalogCursor{}},
+			details:            map[string]hongguoDetailEntry{}, pending: map[string]*hongguoDetailCall{},
 			searches: map[string]hongguoSearchEntry{}, searchPending: map[string]*hongguoSearchCall{},
 			suggestions: map[string]hongguoSuggestionEntry{}, suggestPending: map[string]*hongguoSuggestionCall{},
 		}
@@ -132,20 +139,25 @@ func hongguoCatalogHasMore(state *hongguoCatalogState) bool {
 func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, path string, extra url.Values, payload any) (map[string]any, error) {
 	client := downloader.hongguoClient()
 	client.mu.Lock()
-	base, deviceID, installID := client.baseURL, client.state.DeviceID, client.state.InstallID
+	base := client.baseURL
 	client.mu.Unlock()
+	identity, err := downloader.ensureHongguoDeviceIdentity(ctx)
+	if err != nil {
+		return nil, err
+	}
 	query := url.Values{
 		"aid": {"8662"}, "app_name": {"novelread"}, "version_code": {"73532"}, "version_name": {"7.3.5.32"},
 		"manifest_version_code": {"73532"}, "update_version_code": {"73532"}, "channel": {"update_64"},
 		"device_platform": {"android"}, "os": {"android"}, "ssmix": {"a"}, "device_type": {"25053RT47C"},
 		"device_brand": {"Redmi"}, "language": {"zh"}, "os_api": {"36"}, "os_version": {"16"},
-		"resolution": {"1280*2772"}, "dpi": {"520"}, "ac": {"wifi"}, "device_id": {deviceID}, "iid": {installID},
+		"resolution": {"1280*2772"}, "dpi": {"520"}, "ac": {"wifi"}, "device_id": {identity.DeviceID}, "iid": {identity.InstallID},
 	}
 	for key, values := range extra {
 		query[key] = append([]string(nil), values...)
 	}
+	query.Set("device_id", identity.DeviceID)
+	query.Set("iid", identity.InstallID)
 	var body []byte
-	var err error
 	if payload != nil {
 		body, err = json.Marshal(payload)
 		if err != nil {
@@ -158,6 +170,10 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 	}
 	if attempts > 3 {
 		attempts = 3
+	}
+	searchRequest := path == hongguoSearchAppPath
+	if searchRequest && attempts < 2 {
+		attempts = 2
 	}
 	playbackModel := method == http.MethodPost && path == hongguoVideoModelPath
 	if playbackModel && attempts > 2 {
@@ -185,6 +201,9 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 		request.Header.Set("Accept", "application/json")
 		request.Header.Set("X-XS-From-Web", "0")
 		request.Header.Set("Sdk-Version", "2")
+		if identity.Cookie != "" {
+			request.Header.Set("Cookie", identity.Cookie)
+		}
 		comment, _ := ctx.Value(hongguoCommentKey{}).(bool)
 		var commentNonce hongguoCommentNonce
 		if comment {
@@ -256,6 +275,11 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 			return nil, errors.New("红果 App 接口返回格式异常")
 		}
 		code := firstNonEmpty(mapString(result, "code", "Code", "status_code"), mapString(nestedMap(result, "BaseResp"), "StatusCode"))
+		if code == "100103" && searchRequest && attempt+1 < attempts {
+			lastErr = fmt.Errorf("红果搜索暂时繁忙（%s）", code)
+			retryDelay = 120 * time.Millisecond
+			continue
+		}
 		if code != "" && code != "0" {
 			return nil, fmt.Errorf("红果 App 接口暂不可用（%s）", truncate(code, 20))
 		}

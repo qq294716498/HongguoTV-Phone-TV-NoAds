@@ -47,6 +47,7 @@ func catalogFixtureEngine(t *testing.T, transport sourceFixtureTransport) *nativ
 	t.Helper()
 	engine := sourceFixtureEngine(t, transport)
 	engine.downloader.cfg.MaxPagesPerSort = 1
+	seedHongguoFixtureIdentity(engine.downloader)
 	return engine
 }
 
@@ -61,6 +62,7 @@ func reopenCatalogEngine(t *testing.T, directory string, transport sourceFixture
 	engine.downloader.limiter = newRequestLimiter(3, 0)
 	engine.downloader.cfg.Retries = 1
 	engine.downloader.cfg.MaxPagesPerSort = 1
+	seedHongguoFixtureIdentity(engine.downloader)
 	return engine
 }
 
