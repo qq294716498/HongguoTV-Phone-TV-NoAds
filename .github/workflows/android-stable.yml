@@ -123,6 +123,10 @@ jobs:
           packages: "platforms;android-36"
           accept-android-sdk-licenses: true
       - run: sdkmanager 'ndk;28.2.13676358'
+      - name: Select the installed Android NDK for native compilation
+        run: |
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/28.2.13676358" >> "$GITHUB_ENV"
+          test -x "$ANDROID_SDK_ROOT/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
       - name: Configure Android signing
         id: signing
         run: |
