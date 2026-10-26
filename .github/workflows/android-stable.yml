@@ -2,7 +2,7 @@ name: Android stable release
 
 on:
   push:
-    branches: [fix/hongguo-playback-release-0.1.22-47, release/windows-android-0.1.22-47, release/windows-android-0.1.23-48, release/windows-android-0.1.24-49, candidate/hongguo-retry-single-instance-0.1.23-48]
+    branches: [fix/hongguo-playback-release-0.1.22-47, release/windows-android-0.1.22-47, release/windows-android-0.1.23-48, release/windows-android-0.1.25-50, candidate/hongguo-retry-single-instance-0.1.23-48]
   workflow_dispatch:
     inputs:
       publish_release:
@@ -147,15 +147,15 @@ jobs:
           retention-days: 14
   release:
     needs: [checks, android]
-    if: github.ref == 'refs/heads/release/windows-android-0.1.24-49' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_release))
+    if: github.ref == 'refs/heads/release/windows-android-0.1.25-50' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_release))
     runs-on: ubuntu-latest
     timeout-minutes: 35
     permissions:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
-      EXPECTED_UPDATE_TAG: app-v0.1.24-49
-      EXPECTED_WINDOWS_TAG: windows-v0.1.24-49
+      EXPECTED_UPDATE_TAG: app-v0.1.25-50
+      EXPECTED_WINDOWS_TAG: windows-v0.1.25-50
       CHECK_LIVE_UPDATE: 'true'
       CHECK_UPDATE_DOWNLOAD: 'true'
     steps:
@@ -210,7 +210,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: android-0.1.24-release-evidence
+          name: android-0.1.25-release-evidence
           path: |
             dist/android/*
             dist/update-check/*-update-check.json

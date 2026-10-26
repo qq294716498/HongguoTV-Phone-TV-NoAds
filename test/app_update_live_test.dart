@@ -48,6 +48,8 @@ void main() {
           '0.1.18': 43,
           '0.1.19': 44,
           '0.1.22': 47,
+          '0.1.23': 48,
+          '0.1.24': 49,
         }.entries) {
           final upgrade = AppRelease.parse(
             stableData,
