@@ -21,7 +21,7 @@ verified_publication_note = '公开发布核验已完成：三 ABI 公网下载�
 windows_verified_publication_note = '公开发布核验已完成：Windows 公网 ZIP 下载与 SHA-256、正式升级通道和 API 限流回退检查通过；Android Latest 隔离及旧版本资产保持检查通过。'
 offsets = {'arm64-v8a': 2000, 'armeabi-v7a': 1000, 'x86_64': 4000}
 release_branch = 'release/windows-android-0.1.26-51'
-approved_source = 'ecc6ee66ea2ca3fdbd50e4d3fe3e1cc9aaecb245'
+approved_source = 'b77d118585be7be798afb7abfc4441a851912fd4'
 release_only_paths = frozenset({
     'README.md', '.github/workflows/android-stable.yml',
     '.github/workflows/windows-preview.yml',

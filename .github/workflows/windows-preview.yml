@@ -50,7 +50,18 @@ jobs:
       - run: flutter pub get --enforce-lockfile
       - run: dart format --output=none --set-exit-if-changed lib test integration_test test_driver
       - run: flutter analyze --no-pub --no-fatal-infos lib test integration_test test_driver
-      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install media test dependencies with bounded mirror retries
+        timeout-minutes: 5
+        run: |
+          if ! command -v ffmpeg >/dev/null; then
+            for source in /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+              if [ -f "$source" ]; then
+                sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' "$source"
+              fi
+            done
+            sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update
+            sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 install -y ffmpeg
+          fi
       - run: flutter test --no-pub --dart-define=DISABLE_REMOTE_IMAGES=true --concurrency=2
       - run: flutter test --no-pub --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true --concurrency=2
       - run: go test -race ./...
