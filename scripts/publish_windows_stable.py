@@ -12,8 +12,8 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[1]
 output = root / 'dist/windows'
 repository = 'qq294716498/HongguoTV-Phone-TV-NoAds'
-release_branch = 'release/windows-android-0.1.26-51'
-approved_source = 'b77d118585be7be798afb7abfc4441a851912fd4'
+release_branch = 'release/windows-android-0.1.29-54'
+approved_source = '4f90d9cbbf375c95aaab6d2ae8740a193da904ff'
 previous_windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48', 'windows-v0.1.24-49', 'windows-v0.1.25-50')
 previous_android_tag = 'app-v0.1.25-50'
 previous_android_commit = '71868ff6447431a12a925d784f553391e6f845a4'
@@ -48,7 +48,7 @@ def github(*arguments):
 
 def finalize_release_notes(tag):
     published = json.loads(github('api', f'repos/{repository}/releases/tags/{tag}'))
-    if tag != 'windows-v0.1.26-51' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
+    if tag != 'windows-v0.1.29-54' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
         raise ValueError('Only the current verified Windows stable release notes may be finalized')
     body = published['body']
     if body.count(pending_publication_note) != 1:
@@ -176,8 +176,8 @@ def main():
     version, build = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(encoding='utf-8'), re.MULTILINE).group(1).split('+')
     if not re.fullmatch(r'\d+\.\d+\.\d+', version):
         raise ValueError('Only Windows stable releases are allowed')
-    if version != '0.1.26' or build != '51':
-        raise ValueError('This workflow only publishes Windows 0.1.26+51')
+    if version != '0.1.29' or build != '54':
+        raise ValueError('This workflow only publishes Windows 0.1.29+54')
     tag = f'windows-v{version}-{build}'
     package = output / f'HongguoTV-{version}-windows-x64.zip'
     if sys.argv[1] == 'stage':
@@ -237,7 +237,7 @@ def main():
         write_json('Android-isolation.json', {'before': android, 'androidParserUnchanged': True,
                                               'parserSha256': hashlib.sha256(old.encode()).hexdigest()})
         subprocess.run([sys.executable, 'scripts/finish_task.py', '--message',
-                        '完成 Windows 0.1.26 x64 弱网降清晰度确认、签名站源检测与下一季查询的新构建、完整包、托盘、迷你窗及更新事务验证'], check=True)
+                        '完成 Windows 0.1.29 x64 单集播放器签名、注册设备恢复、播放下载与榜单菜单的新构建、完整包、托盘、迷你窗及更新事务验证'], check=True)
         subprocess.run([sys.executable, 'scripts/sync_source.py', '--check'], check=True)
         source = max(root.parent.glob('真果·鉴-*.zip'), key=lambda file: file.stat().st_mtime_ns)
         source_package = output / f'HongguoTV-{version}-source.zip'
@@ -257,12 +257,12 @@ def main():
             'nativeSingleInstancePassed': True,
             'nativeTrayAndMiniWindowPassed': True, 'unsigned': True,
             'sourceArchiveSha256': hashlib.file_digest(source_package.open('rb'), 'sha256').hexdigest(),
-            'notTested': ['real-provider playback', 'long-running episode/season transitions',
+            'notTested': ['real-provider playback on physical Windows hardware', 'long-running episode/season transitions',
                           'public-release-to-running-previous-client replacement', 'consumer Windows 10/11 GPU/CPU compatibility',
                           'audio device output']})
         readme = (root / 'README.md').read_text(encoding='utf-8')
         notes = readme.split('## Windows 正式版：', 1)[1].split('\n## ', 1)[0]
-        notes += f'\n构建及静态回归、Windows 完整包与合成媒体启动验证已通过。Windows 10 / 11 x64 版本仍未签名；真实站源、长时间连播、用户旧版原地替换和消费级 GPU / 音频设备仍未实测。\n\n源码提交：https://github.com/{repository}/commit/{commit}\n\nCI：{ci}\n\n校验：SHA256SUMS.txt。\n\n{pending_publication_note}\n'
+        notes += f'\n构建及静态回归、Windows 完整包与合成媒体启动验证已通过。Windows 10 / 11 x64 版本仍未签名；目标剧云端取流、解码与完整下载离线解码已通过；实体 Windows 长时间连播、用户旧版原地替换和消费级 GPU / 音频设备仍未实测。\n\n源码提交：https://github.com/{repository}/commit/{commit}\n\nCI：{ci}\n\n校验：SHA256SUMS.txt。\n\n{pending_publication_note}\n'
         notes_file = Path(os.environ['RUNNER_TEMP']) / 'windows-release-notes.md'
         notes_file.write_text(notes, encoding='utf-8')
         assets = [package, source_package] + [output / name for name in
