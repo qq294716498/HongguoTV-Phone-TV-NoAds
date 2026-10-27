@@ -23,6 +23,8 @@ const hongguoPlaybackUserAgent = "com.phoenix.read/71332 (Linux; U; Android 16; 
 
 const hongguoEmptyResponseRetryDelay = 250 * time.Millisecond
 
+var errHongguoEmptyResponse = errors.New("红果 App 接口返回空响应")
+
 type hongguoCatalogCursor struct {
 	Offset        int       `json:"offset"`
 	SessionID     string    `json:"sessionId,omitempty"`
@@ -146,13 +148,14 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 	client.mu.Lock()
 	base := client.baseURL
 	client.mu.Unlock()
-	identity, err := downloader.ensureHongguoDeviceIdentity(ctx)
-	if err != nil {
-		return nil, err
-	}
 	playbackModel := method == http.MethodPost && path == hongguoVideoModelPath
 	if playbackModel {
-		identity, err = newHongguoPlaybackIdentity()
+		ctx = context.WithValue(ctx, hongguoPlaybackTransportKey{}, true)
+	}
+	var identity hongguoDeviceIdentity
+	var err error
+	if !playbackModel {
+		identity, err = downloader.ensureHongguoDeviceIdentity(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -187,15 +190,6 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 	if searchRequest && attempts < 2 {
 		attempts = 2
 	}
-	if playbackModel {
-		for key, value := range map[string]string{
-			"version_code": "71332", "version_name": "7.1.3.32", "manifest_version_code": "71332", "update_version_code": "71332",
-			"host_abi": "arm64-v8a", "dragon_device_type": "phone", "pv_player": "71332",
-			"compliance_status": "0", "need_personal_recommend": "1", "player_so_load": "1", "is_android_pad_screen": "0",
-		} {
-			query.Set(key, value)
-		}
-	}
 	emptyRetry := playbackModel || searchRequest || path == "/novel/player/video_detail/v1/" || path == "/reading/distribution/category/landpage/v/"
 	if emptyRetry && attempts < 2 {
 		attempts = 2
@@ -218,6 +212,16 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 			}
 		}
 		retryDelay = time.Duration(attempt+1) * time.Second
+		var playbackIdentities [32]hongguoDeviceIdentity
+		if playbackModel {
+			for i := range playbackIdentities {
+				playbackIdentities[i], err = newHongguoPlaybackIdentity()
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
+
 		request, err := http.NewRequestWithContext(ctx, method, strings.TrimRight(base, "/")+path, bytes.NewReader(body))
 		if err != nil {
 			return nil, err
@@ -230,6 +234,7 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 			request.Header.Set("User-Agent", hongguoPlaybackUserAgent)
 			request.Header.Set("Accept", "application/json; charset=utf-8,application/x-protobuf")
 			request.Header.Set("X-Tt-Request-Tag", "t=0;n=0")
+			request.Header.Set("X-Tt-Dt", "")
 			request.Header.Set("Passport-Sdk-Version", "50561")
 			request.Header.Set("X-Vc-Bdturing-Sdk-Version", "3.7.2.cn")
 		}
@@ -252,11 +257,17 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 				request.Header.Set("Content-Type", "application/json; charset=UTF-8")
 			}
 		}
-		response, err := downloader.doPreparedCatalogRequest(request, 20*time.Second, func(prepared *http.Request) {
+		timeout := 20 * time.Second
+		if playbackModel {
+			timeout = 15 * time.Second
+		}
+		response, err := downloader.doPreparedCatalogRequest(request, timeout, func(prepared *http.Request) {
 			now := time.Now()
 			query.Set("_rticket", strconv.FormatInt(now.UnixMilli(), 10))
 			prepared.URL.RawQuery = query.Encode()
-			if comment {
+			if playbackModel {
+				client.preparePlaybackSignature(prepared, body, now, playbackIdentities)
+			} else if comment {
 				signHongguoCommentRequest(prepared, commentNonce, now)
 			} else if path != "/novel/player/video_model/v1/" {
 				client.prepareSignature(prepared, body, now, attempt == attempts-1 && emptyResponses >= 2)
@@ -297,7 +308,7 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 				Host: request.URL.Hostname(), HTTPStatus: response.StatusCode, Protocol: response.Proto,
 				Attempt: attempt + 1, Message: "App 接口返回空响应：" + request.URL.Path,
 			})
-			lastErr = fmt.Errorf("红果 App 接口返回空响应（HTTP %d，正文 0 字节）；未收到明确的登录错误", response.StatusCode)
+			lastErr = fmt.Errorf("%w（HTTP %d，正文 0 字节）；未收到明确的登录错误", errHongguoEmptyResponse, response.StatusCode)
 			if emptyRetry && attempt+1 < attempts && response.Header.Get("Retry-After") == "" {
 				retryDelay = hongguoEmptyResponseRetryDelay * time.Duration(1<<attempt)
 				continue

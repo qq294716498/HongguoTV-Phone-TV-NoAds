@@ -60,11 +60,11 @@ func TestHongguoFailedRegistrationBlocksAppRequestAndCanRetry(t *testing.T) {
 		requests++
 		return sourceFixtureResponse(r, 200, `{"code":0}`), nil
 	}, false)
-	_, err := d.hongguoAppRequest(context.Background(), http.MethodPost, hongguoVideoModelPath, nil, nil)
+	_, err := d.hongguoAppRequest(context.Background(), http.MethodPost, hongguoSearchAppPath, nil, nil)
 	if err == nil || requests != 0 {
 		t.Fatal("unregistered request escaped startup gate")
 	}
-	_, err = d.hongguoAppRequest(context.Background(), http.MethodPost, hongguoVideoModelPath, nil, nil)
+	_, err = d.hongguoAppRequest(context.Background(), http.MethodPost, hongguoSearchAppPath, nil, nil)
 	if err != nil || requests != 1 || registrations != 2 {
 		t.Fatalf("registration retry did not recover: %v", err)
 	}

@@ -2086,7 +2086,8 @@ class _PlayerScreenState extends State<PlayerScreen>
   bool _sourceBlocked = false;
 
   int? get _lowerQuality =>
-      _sourceBlocked ||
+      _plan == null ||
+          _sourceBlocked ||
           _localFailure ||
           widget.localOnly ||
           _plan?.local == true ||
@@ -2102,9 +2103,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('尝试较低清晰度？'),
-        content: Text(
-          '网络较慢或播放地址获取失败时，可以重新获取 ${quality}P 片源尝试播放。上游未返回片源时，降低清晰度也可能无法恢复。',
-        ),
+        content: Text('当前视频持续卡顿，可以尝试 ${quality}P 片源。是否降低清晰度并保留当前进度重试？'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -3297,10 +3296,10 @@ class _PlayerScreenState extends State<PlayerScreen>
                 ColoredBox(
                   color: Colors.black.withValues(alpha: .9),
                   child: StatusPanel(
-                    title: _lowerQuality != null ? '是否尝试较低清晰度？' : '暂时无法播放',
-                    message: _lowerQuality != null
-                        ? '多次尝试后播放仍未恢复。可以选择较低清晰度，重新获取片源再试一次。'
-                        : _error!,
+                    title: '暂时无法播放',
+                    message: _sourceBlocked || _localFailure || _decoderFailure
+                        ? _error!
+                        : '本集暂时无法播放，请稍后重试。具体原因可查看失败详情或播放日志。',
                     onRetry: () => _retry(),
                     action: _localFailure ? '重试本地播放' : '重试播放',
                     secondaryAction: Wrap(
@@ -3319,32 +3318,31 @@ class _PlayerScreenState extends State<PlayerScreen>
                             icon: const Icon(Icons.tune),
                             label: const Text('选择清晰度'),
                           ),
-                        if (_lowerQuality != null)
+                        if (_lowerQuality != null && !_lowerQualityOffered)
                           FilledButton.icon(
                             key: const ValueKey('player-lower-quality'),
                             onPressed: _offerLowerQuality,
                             icon: const Icon(Icons.network_check),
                             label: Text('尝试 ${_lowerQuality}P'),
                           ),
-                        if (_lowerQuality != null)
-                          TextButton(
-                            onPressed: () => showDialog<void>(
-                              context: context,
-                              builder: (context) => AlertDialog(
-                                title: const Text('播放失败详情'),
-                                content: SingleChildScrollView(
-                                  child: SelectableText(_error ?? ''),
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(context),
-                                    child: const Text('关闭'),
-                                  ),
-                                ],
+                        TextButton(
+                          onPressed: () => showDialog<void>(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              title: const Text('播放失败详情'),
+                              content: SingleChildScrollView(
+                                child: SelectableText(_error ?? ''),
                               ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  child: const Text('关闭'),
+                                ),
+                              ],
                             ),
-                            child: const Text('查看失败详情'),
                           ),
+                          child: const Text('查看失败详情'),
+                        ),
                         if (_televisionDevice)
                           _televisionRecoveryActions(context),
                         FilledButton.tonalIcon(

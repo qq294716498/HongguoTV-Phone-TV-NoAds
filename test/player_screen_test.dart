@@ -249,6 +249,27 @@ void main() {
     expect(tester.takeException(), isNull);
   }
 
+  testWidgets('empty source response does not suggest a lower resolution', (
+    tester,
+  ) async {
+    final repository = DeferredResolveRouteRepository();
+    final player = ScriptedPlayer();
+    await mount(tester, repository, player);
+    repository.pendingResolve.completeError(
+      AppFailure('红果 App 接口返回空响应（HTTP 200，正文 0 字节）'),
+    );
+    await settleOperations(tester);
+    expect(find.text('暂时无法播放'), findsOneWidget);
+    expect(find.byKey(const ValueKey('player-lower-quality')), findsNothing);
+    expect(find.text('尝试较低清晰度？'), findsNothing);
+    await tester.tap(find.text('查看失败详情'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('HTTP 200'), findsOneWidget);
+    await tester.tap(find.text('关闭'));
+    await tester.pumpAndSettle();
+    await unmount(tester, player);
+  });
+
   testWidgets(
     'fully buffered current episode immediately preloads and reuses the next session',
     (tester) async {
@@ -297,6 +318,35 @@ void main() {
   });
 
   testWidgets(
+    'declining lower quality does not prompt again in the same episode',
+    (tester) async {
+      final repository = RouteRepository();
+      final player = ScriptedPlayer();
+      var now = DateTime(2026);
+      await mount(tester, repository, player, healthClock: () => now);
+      await player.seek(const Duration(seconds: 28));
+      await tester.pump();
+      for (var i = 0; i < 22; i++) {
+        now = now.add(const Duration(seconds: 1));
+        await tester.pump(const Duration(seconds: 1));
+      }
+      expect(find.text('尝试较低清晰度？'), findsOneWidget);
+      await tester.tap(find.text('暂不尝试'));
+      await settleOperations(tester);
+      for (var i = 0; i < 22; i++) {
+        now = now.add(const Duration(seconds: 1));
+        await tester.pump(const Duration(seconds: 1));
+      }
+      expect(find.text('尝试较低清晰度？'), findsNothing);
+      expect(
+        repository.requestedQualities.every((quality) => quality == 0),
+        isTrue,
+      );
+      await unmount(tester, player);
+    },
+  );
+
+  testWidgets(
     'duplicate errors switch once while keeping progress, rate and pause state',
     (tester) async {
       final repository = RouteRepository();
@@ -340,7 +390,7 @@ void main() {
       }
       expect(repository.primaryCalls, 2);
       expect(repository.fallbackCalls, 2);
-      expect(find.text('是否尝试较低清晰度？'), findsOneWidget);
+      expect(find.text('暂时无法播放'), findsOneWidget);
       expect(repository.active, isEmpty);
       await tester.pump(const Duration(seconds: 25));
       expect(repository.primaryCalls + repository.fallbackCalls, 4);
@@ -524,7 +574,7 @@ void main() {
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
       await tester.pump(const Duration(seconds: 46));
       await settleOperations(tester);
-      expect(find.text('是否尝试较低清晰度？'), findsOneWidget);
+      expect(find.text('暂时无法播放'), findsOneWidget);
       player.opening.complete();
       await settleOperations(tester);
       expect(player.playCalls, 0);
@@ -571,7 +621,7 @@ void main() {
       await mount(tester, repository, player);
       await tester.pump(const Duration(seconds: 46));
       await settleOperations(tester);
-      expect(find.text('是否尝试较低清晰度？'), findsOneWidget);
+      expect(find.text('暂时无法播放'), findsOneWidget);
       expect(find.text('重试播放'), findsOneWidget);
       expect(repository.active, isEmpty);
       await tester.tap(find.text('重试播放'));

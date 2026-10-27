@@ -495,7 +495,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 10));
       }
       expect(find.text('正在衔接下一集…'), findsNothing);
-      expect(find.text('是否尝试较低清晰度？'), findsOneWidget);
+      expect(find.text('暂时无法播放'), findsOneWidget);
       expect(find.text('重试播放'), findsOneWidget);
       expect(platform.created, 3);
       pending.complete(response);

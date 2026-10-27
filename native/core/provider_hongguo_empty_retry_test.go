@@ -28,7 +28,7 @@ func (body *hongguoRetryObservedBody) Close() error {
 	return err
 }
 
-func TestHongguoEmptyModelRetriesOnceWithSameIdentity(t *testing.T) {
+func TestHongguoEmptyModelRetriesWithFreshIdentityAndSignature(t *testing.T) {
 	type identity struct {
 		device, install, ticket string
 		body                    [32]byte
@@ -60,11 +60,11 @@ func TestHongguoEmptyModelRetriesOnceWithSameIdentity(t *testing.T) {
 		t.Fatalf("empty response did not recover once: requests=%d error=%v", len(requests), err)
 	}
 	first, second := requests[0], requests[1]
-	if first.device == "" || first.install == "" || first.device != second.device || first.install != second.install || first.body != second.body {
-		t.Fatal("empty response retry changed device or episode identity")
+	if first.device == "" || first.install == "" || first.device == second.device || first.install == second.install || first.body != second.body {
+		t.Fatal("empty response retry must rotate temporary identity without changing the episode")
 	}
-	if first.ticket != second.ticket || second.at.Sub(first.at) < hongguoEmptyResponseRetryDelay {
-		t.Fatal("early retry must reuse its signature while retaining backoff")
+	if first.ticket == second.ticket || second.at.Sub(first.at) < hongguoEmptyResponseRetryDelay {
+		t.Fatal("each playback retry must refresh its signature while retaining backoff")
 	}
 }
 
@@ -339,12 +339,11 @@ func TestHongguoPlaybackRecoversAfterThreeEmptyResponses(t *testing.T) {
 			t.Error("retry lost its signature")
 		}
 		tickets = append(tickets, ticket)
-		if calls == 1 {
-			deviceID, installID = request.URL.Query().Get("device_id"), request.URL.Query().Get("iid")
+		device, install := request.URL.Query().Get("device_id"), request.URL.Query().Get("iid")
+		if device == "" || install == "" || device == deviceID || install == installID {
+			t.Error("playback retry reused a temporary identity")
 		}
-		if deviceID == "" || installID == "" || request.URL.Query().Get("device_id") != deviceID || request.URL.Query().Get("iid") != installID {
-			t.Error("retry or signature refresh changed the registered device identity")
-		}
+		deviceID, installID = device, install
 		if calls < 4 {
 			return sourceFixtureResponse(request, 200, " \n"), nil
 		}
@@ -354,8 +353,8 @@ func TestHongguoPlaybackRecoversAfterThreeEmptyResponses(t *testing.T) {
 	if err != nil || media.URL == "" || calls != 4 {
 		t.Fatalf("fourth signed attempt failed: calls=%d error=%v", calls, err)
 	}
-	if tickets[0] != tickets[1] || tickets[1] != tickets[2] || tickets[2] == tickets[3] {
-		t.Fatal("only the final empty-response retry should refresh its signature")
+	if tickets[0] == tickets[1] || tickets[1] == tickets[2] || tickets[2] == tickets[3] {
+		t.Fatal("each playback request must have a fresh signature")
 	}
 }
 

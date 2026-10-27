@@ -12,15 +12,18 @@ func TestHongguoPlaybackRouteBudgets(t *testing.T) {
 	for _, scenario := range []struct {
 		name       string
 		background bool
+		download   bool
 		first      time.Duration
 	}{
-		{name: "foreground", first: 9 * time.Second},
+		{name: "foreground", first: 24 * time.Second},
 		{name: "preload", background: true, first: 6 * time.Second},
+		{name: "download", download: true, first: 36 * time.Second},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 			defer cancel()
 			ctx = context.WithValue(ctx, backgroundCatalogKey{}, scenario.background)
+			ctx = context.WithValue(ctx, hongguoDownloadKey{}, scenario.download)
 			media, err := resolveHongguoMediaRoutes(ctx, []hongguoMediaRoute{
 				{name: "app", resolve: func(stage context.Context) (providerMedia, error) {
 					deadline, exists := stage.Deadline()

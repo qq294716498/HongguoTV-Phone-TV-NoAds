@@ -183,6 +183,7 @@ func hongguoVideoModel(value any) (map[string]any, error) {
 
 // hongguoFallbackJSON 跟随 fallback_api：普通 GET，不带签名头，只带 UA。
 func (downloader *Downloader) hongguoFallbackJSON(ctx context.Context, rawURL string) (map[string]any, error) {
+	ctx = context.WithValue(ctx, hongguoPlaybackTransportKey{}, true)
 	if err := hongguoCheckFallbackDomain(rawURL); err != nil {
 		return nil, err
 	}
@@ -191,8 +192,7 @@ func (downloader *Downloader) hongguoFallbackJSON(ctx context.Context, rawURL st
 		return nil, err
 	}
 	request.Header.Set("User-Agent", hongguoPlaybackUserAgent)
-	request.Header.Set("Accept", "application/json")
-	response, err := downloader.doPreparedCatalogRequest(request, 20*time.Second, nil)
+	response, err := downloader.doPreparedCatalogRequest(request, 15*time.Second, nil)
 	if err != nil {
 		return nil, err
 	}

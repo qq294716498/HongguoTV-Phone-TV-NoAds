@@ -53,20 +53,22 @@ type nativeDownloadResult struct {
 }
 
 type nativeDownloads struct {
-	mu          sync.Mutex
-	root        string
-	engine      *nativeEngine
-	jobs        map[string]*nativeDownloadRecord
-	active      map[string]context.CancelFunc
-	closed      bool
-	moving      bool
-	mediaBusy   bool
-	loadErr     error
-	workers     sync.WaitGroup
-	lastSaved   time.Time
-	concurrency int
-	bySource    bool
-	resolve     func(context.Context, nativeDownloadJob) (providerMedia, error)
+	mu                 sync.Mutex
+	root               string
+	engine             *nativeEngine
+	jobs               map[string]*nativeDownloadRecord
+	active             map[string]context.CancelFunc
+	closed             bool
+	moving             bool
+	mediaBusy          bool
+	loadErr            error
+	workers            sync.WaitGroup
+	lastSaved          time.Time
+	concurrency        int
+	bySource           bool
+	resolve            func(context.Context, nativeDownloadJob) (providerMedia, error)
+	hongguoResolveOnce sync.Once
+	hongguoResolveSlot chan struct{}
 }
 
 func nativeDownloadID(drama string, episode int) string {
@@ -515,7 +517,7 @@ func (manager *nativeDownloads) run(ctx context.Context, job nativeDownloadJob) 
 }
 
 func (manager *nativeDownloads) transfer(ctx context.Context, job nativeDownloadJob) (nativeDownloadResult, error) {
-	media, err := manager.resolve(ctx, job)
+	media, err := manager.resolveDownloadMedia(ctx, job)
 	if err != nil {
 		return nativeDownloadResult{}, err
 	}

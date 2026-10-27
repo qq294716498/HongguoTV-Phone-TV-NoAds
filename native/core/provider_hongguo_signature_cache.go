@@ -32,10 +32,6 @@ type hongguoSignatureStatus struct {
 func (client *hongguoAppClient) prepareSignature(request *http.Request, body []byte, now time.Time, refresh bool) {
 	query := request.URL.Query()
 	query.Del("_rticket")
-	playbackModel := request.Method == http.MethodPost && request.URL.Path == hongguoVideoModelPath
-	if playbackModel {
-		query.Del("ts")
-	}
 	canonical := *request.URL
 	canonical.RawQuery = query.Encode()
 	key := sha256.Sum256(append([]byte(request.Method+"\x00"+canonical.String()+"\x00"), body...))
@@ -55,9 +51,6 @@ func (client *hongguoAppClient) prepareSignature(request *http.Request, body []b
 		}
 		client.signatureStatus.Reused++
 	} else {
-		if playbackModel {
-			query.Set("ts", strconv.FormatInt(now.Unix(), 10))
-		}
 		query.Set("_rticket", strconv.FormatInt(now.UnixMilli(), 10))
 		request.URL.RawQuery = query.Encode()
 		signHongguoRequest(request, body, now)

@@ -8,9 +8,12 @@ import (
 )
 
 const (
-	hongguoPlaybackBudget = 18 * time.Second
+	hongguoPlaybackBudget = 30 * time.Second
 	hongguoPreloadBudget  = 12 * time.Second
+	hongguoDownloadBudget = 45 * time.Second
 )
+
+type hongguoDownloadKey struct{}
 
 type hongguoMediaRoute struct {
 	name    string
@@ -20,8 +23,13 @@ type hongguoMediaRoute struct {
 func resolveHongguoMediaRoutes(ctx context.Context, routes []hongguoMediaRoute) (providerMedia, error) {
 	parent := ctx
 	budget := hongguoPlaybackBudget
-	if background, _ := ctx.Value(backgroundCatalogKey{}).(bool); background {
+	background, _ := ctx.Value(backgroundCatalogKey{}).(bool)
+	if background {
 		budget = hongguoPreloadBudget
+	}
+	download, _ := ctx.Value(hongguoDownloadKey{}).(bool)
+	if download {
+		budget = hongguoDownloadBudget
 	}
 	ctx, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
@@ -39,7 +47,10 @@ func resolveHongguoMediaRoutes(ctx context.Context, routes []hongguoMediaRoute) 
 		weight := 1
 		if index == 0 && remainingRoutes > 1 {
 			weight = 2
-			remainingRoutes++
+			if download || !background {
+				weight = 8
+			}
+			remainingRoutes += weight - 1
 		}
 		stage, finish := context.WithTimeout(ctx, time.Until(deadline)*time.Duration(weight)/time.Duration(remainingRoutes))
 		media, err := route.resolve(stage)
