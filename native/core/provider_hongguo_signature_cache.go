@@ -93,8 +93,6 @@ func (client *hongguoAppClient) signatureSnapshot() *hongguoSignatureStatus {
 	client.signatureMu.Lock()
 	status := client.signatureStatus
 	client.signatureMu.Unlock()
-	client.mu.Lock()
-	status.Registered = client.deviceIdentity.DeviceID != "" && client.deviceIdentity.InstallID != "" && client.deviceIdentityPersisted
-	client.mu.Unlock()
+
 	return &status
 }

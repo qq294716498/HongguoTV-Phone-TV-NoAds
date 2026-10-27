@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
 import 'lan_controller.dart';
+import 'player_choice_menu.dart';
+import 'playback_preferences.dart';
 import 'windows_player_controls.dart';
 import 'player_device_status.dart';
 import 'player_interactions.dart';
@@ -55,8 +57,16 @@ class PlayerControls extends StatefulWidget {
     this.enhancement,
     this.portraitFooter,
     this.quietEpisodeChange,
+    this.onSelectSpeed,
+    this.onSelectQuality,
+    this.qualities = const [],
+    this.selectedQuality = 0,
   });
 
+  final ValueChanged<double>? onSelectSpeed;
+  final ValueChanged<int>? onSelectQuality;
+  final List<int> qualities;
+  final int selectedQuality;
   final Player player;
   final Future<void> Function()? onMini;
   final bool desktopMini;
@@ -111,6 +121,7 @@ class _PlayerControlsState extends State<PlayerControls> {
   double? _seekValue;
   Offset? _doubleTapPosition;
   bool _locked = false;
+  bool _choiceMenuOpen = false;
 
   @override
   void initState() {
@@ -195,12 +206,61 @@ class _PlayerControlsState extends State<PlayerControls> {
     _scheduleHide();
   }
 
+  void _choiceOpen(bool open) {
+    _choiceMenuOpen = open;
+    if (open) widget.interactions.cancel();
+    _show();
+  }
+
+  Widget _speedChoice() => widget.onSelectSpeed == null
+      ? _toolText(
+          key: const ValueKey('player-speed'),
+          tooltip: '倍速',
+          label: '${widget.speed}x',
+          width: 50,
+          onPressed: widget.enabled ? () => _panel(widget.onSpeed) : null,
+        )
+      : PlayerChoiceMenu<double>(
+          buttonKey: const ValueKey('player-speed'),
+          tooltip: '倍速',
+          label: '${widget.speed}x',
+          width: 50,
+          values: playbackSpeeds.reversed.toList(),
+          selected: widget.speed,
+          format: (value) => '${value}x',
+          enabled: widget.enabled,
+          onSelected: widget.onSelectSpeed!,
+          onOpenChanged: _choiceOpen,
+        );
+
+  Widget _qualityChoice() => widget.onSelectQuality == null
+      ? _toolText(
+          key: const ValueKey('player-quality'),
+          tooltip: '清晰度',
+          label: widget.qualityLabel,
+          width: 52,
+          onPressed: widget.enabled ? () => _panel(widget.onQuality) : null,
+        )
+      : PlayerChoiceMenu<int>(
+          buttonKey: const ValueKey('player-quality'),
+          tooltip: '清晰度',
+          label: widget.qualityLabel,
+          width: 72,
+          values: [...widget.qualities, 0],
+          selected: widget.selectedQuality,
+          format: (value) => value == 0 ? '自动' : '${value}P',
+          enabled: widget.enabled,
+          onSelected: widget.onSelectQuality!,
+          onOpenChanged: _choiceOpen,
+        );
+
   void _scheduleHide() {
     _hideTimer?.cancel();
     if (defaultTargetPlatform == TargetPlatform.windows && !widget.swipeEnabled)
       return;
     if (!widget.enabled ||
         widget.panelOpen ||
+        _choiceMenuOpen ||
         !widget.player.state.playing ||
         _seekValue != null) {
       return;
@@ -209,6 +269,7 @@ class _PlayerControlsState extends State<PlayerControls> {
       if (mounted &&
           widget.enabled &&
           !widget.panelOpen &&
+          !_choiceMenuOpen &&
           widget.player.state.playing &&
           !widget.player.state.buffering &&
           !widget.interactions.boosting &&
@@ -936,22 +997,7 @@ class _PlayerControlsState extends State<PlayerControls> {
               }
             : null,
       ),
-      if (showSpeedQuality) ...[
-        _toolText(
-          key: const ValueKey('player-speed'),
-          tooltip: '倍速',
-          label: '${widget.speed}x',
-          onPressed: widget.enabled ? () => _panel(widget.onSpeed) : null,
-          width: 50,
-        ),
-        _toolText(
-          key: const ValueKey('player-quality'),
-          tooltip: '清晰度',
-          label: widget.qualityLabel,
-          onPressed: widget.enabled ? () => _panel(widget.onQuality) : null,
-          width: 52,
-        ),
-      ],
+      if (showSpeedQuality) ...[_speedChoice(), _qualityChoice()],
       if (showPush) _lanPushTool(const ValueKey('fullscreen-lan-push')),
       if (showEpisodes)
         _toolIcon(
@@ -1048,20 +1094,8 @@ class _PlayerControlsState extends State<PlayerControls> {
                 }
               : null,
         ),
-      _toolText(
-        key: const ValueKey('player-speed'),
-        tooltip: '倍速',
-        label: '${widget.speed}x',
-        onPressed: widget.enabled ? () => _panel(widget.onSpeed) : null,
-        width: 46,
-      ),
-      _toolText(
-        key: const ValueKey('player-quality'),
-        tooltip: '清晰度',
-        label: widget.qualityLabel,
-        onPressed: widget.enabled ? () => _panel(widget.onQuality) : null,
-        width: 46,
-      ),
+      _speedChoice(),
+      _qualityChoice(),
       if (widget.onPush != null)
         _lanPushTool(const ValueKey('fullscreen-lan-push')),
       if (fullscreen)

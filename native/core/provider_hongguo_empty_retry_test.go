@@ -92,7 +92,7 @@ func TestHongguoOnlyEmptyModelUsesSoftRetry(t *testing.T) {
 		name, path, body, retryAfter, mitigation string
 		status                                   int
 	}{
-		{name: "whitespace", body: " \n\t", status: 200},
+		{name: "whitespace", path: "/novel/fixture/unhandled/v1/", body: " \n\t", status: 200},
 		{name: "html", body: "<html>temporarily unavailable</html>", status: 200},
 		{name: "business-error", body: `{"code":1001}`, status: 200},
 		{name: "forbidden", status: 403},

@@ -200,7 +200,7 @@ func (d *Downloader) resolveHongguoMedia(ctx context.Context, task Task) (provid
 	}
 	return resolveHongguoMediaRoutes(ctx, []hongguoMediaRoute{
 		{name: "红果 App 取流失败", resolve: func(stage context.Context) (providerMedia, error) {
-			return d.resolveHongguoAppMedia(stage, videoID, task.Chapter.ContentType)
+			return d.resolveHongguoRegisteredMedia(stage, videoID)
 		}},
 		{name: "网页取流失败", resolve: func(stage context.Context) (providerMedia, error) {
 			return d.resolveHongguoWebMedia(stage, seriesID, videoID)

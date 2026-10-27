@@ -1,3 +1,5 @@
+import 'player_choice_menu.dart';
+import 'playback_preferences.dart';
 import 'dart:async';
 
 import 'package:flutter/gestures.dart';
@@ -190,6 +192,19 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
       if (!_keyboard) c.onFocusSurface();
       _scheduleHide();
     });
+  }
+
+  void _choiceOpen(bool open) {
+    if (!mounted) return;
+    if (open) {
+      _closeVolume();
+      c.interactions.cancel();
+    }
+    setState(() {
+      _menuOpen = open;
+      _visible = true;
+    });
+    _scheduleHide();
   }
 
   Future<void> _panel(Future<void> Function() open) async {
@@ -532,20 +547,49 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
                             selected: c.danmakuEnabled,
                           ),
                         ],
-                        TextButton(
-                          key: const ValueKey('player-speed'),
-                          onPressed: c.enabled ? () => _panel(c.onSpeed) : null,
-                          style: TextButton.styleFrom(
-                            foregroundColor: Colors.white,
-                            minimumSize: const Size(44, 32),
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                        if (c.onSelectQuality != null)
+                          PlayerChoiceMenu<int>(
+                            buttonKey: const ValueKey('player-quality'),
+                            tooltip: '清晰度',
+                            label: c.qualityLabel,
+                            values: [...c.qualities, 0],
+                            selected: c.selectedQuality,
+                            format: (value) => value == 0 ? '自动' : '${value}P',
+                            enabled: c.enabled,
+                            onSelected: c.onSelectQuality!,
+                            onOpenChanged: _choiceOpen,
                           ),
-                          child: Tooltip(
-                            message: '播放倍速',
-                            child: Text('${c.speed}x'),
+                        if (c.onSelectSpeed != null)
+                          PlayerChoiceMenu<double>(
+                            buttonKey: const ValueKey('player-speed'),
+                            tooltip: '倍速',
+                            label: '${c.speed}x',
+                            values: playbackSpeeds.reversed.toList(),
+                            selected: c.speed,
+                            format: (value) => '${value}x',
+                            enabled: c.enabled,
+                            onSelected: c.onSelectSpeed!,
+                            onOpenChanged: _choiceOpen,
+                          )
+                        else
+                          TextButton(
+                            key: const ValueKey('player-speed'),
+                            onPressed: c.enabled
+                                ? () => _panel(c.onSpeed)
+                                : null,
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.white,
+                              minimumSize: const Size(44, 32),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                              ),
+                            ),
+                            child: Tooltip(
+                              message: '播放倍速',
+                              child: Text('${c.speed}x'),
+                            ),
                           ),
-                        ),
                         _volume(),
                         if (c.onPush != null)
                           _button(

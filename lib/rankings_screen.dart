@@ -16,10 +16,14 @@ class RankingsScreen extends StatefulWidget {
     required this.repository,
     required this.store,
     required this.initialGroup,
+    this.initialBoard,
+    this.embedded = false,
   });
   final AppRepository repository;
   final LocalStore store;
   final String initialGroup;
+  final String? initialBoard;
+  final bool embedded;
 
   @override
   State<RankingsScreen> createState() => _RankingsScreenState();
@@ -31,6 +35,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
   RankingBoard? _board;
   List<RankingItem> _items = [];
   bool _loading = true;
+  late bool _grid = widget.embedded;
   bool _more = false;
   bool _hasMore = false;
   bool _failedMore = false;
@@ -85,6 +90,9 @@ class _RankingsScreenState extends State<RankingsScreen> {
       setState(() {
         _boards = boards;
         _board =
+            boards
+                .where((board) => board.id == widget.initialBoard)
+                .firstOrNull ??
             boards
                 .where((board) => board.groupId == widget.initialGroup)
                 .firstOrNull ??
@@ -184,71 +192,87 @@ class _RankingsScreenState extends State<RankingsScreen> {
         )
         .toList();
     return Scaffold(
-      appBar: AppBar(
-        title: television && groups.length > 1
-            ? RemoteButton(
-                key: const ValueKey('ranking-source-switch'),
-                label:
-                    '${_board == null ? '短剧' : SourceSite.byId(_board!.source).groupName}榜单',
-                icon: groups.length > 1 ? Icons.expand_more_rounded : null,
-                onPressed: groups.length > 1
-                    ? () async {
-                        final group = await showRemoteChoice<SourceGroup>(
-                          context: context,
-                          title: '切换榜单站源',
-                          values: groups,
-                          selected: groups.firstWhere(
-                            (group) => group.id == _board?.groupId,
-                            orElse: () => groups.first,
+      appBar: widget.embedded
+          ? null
+          : AppBar(
+              title: television && groups.length > 1
+                  ? RemoteButton(
+                      key: const ValueKey('ranking-source-switch'),
+                      label:
+                          '${_board == null ? '短剧' : SourceSite.byId(_board!.source).groupName}榜单',
+                      icon: groups.length > 1
+                          ? Icons.expand_more_rounded
+                          : null,
+                      onPressed: groups.length > 1
+                          ? () async {
+                              final group = await showRemoteChoice<SourceGroup>(
+                                context: context,
+                                title: '切换榜单站源',
+                                values: groups,
+                                selected: groups.firstWhere(
+                                  (group) => group.id == _board?.groupId,
+                                  orElse: () => groups.first,
+                                ),
+                                label: (group) => group.name,
+                              );
+                              if (group != null && mounted) {
+                                _select(
+                                  _boards.firstWhere(
+                                    (board) => board.groupId == group.id,
+                                  ),
+                                );
+                              }
+                            }
+                          : null,
+                    )
+                  : PopupMenuButton<SourceGroup>(
+                      tooltip: '切换榜单站源',
+                      enabled: groups.length > 1,
+                      onSelected: (group) => _select(
+                        _boards.firstWhere(
+                          (board) => board.groupId == group.id,
+                        ),
+                      ),
+                      itemBuilder: (_) => [
+                        for (final group in groups)
+                          PopupMenuItem(value: group, child: Text(group.name)),
+                      ],
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _board == null
+                                ? '榜单'
+                                : '${SourceSite.byId(_board!.source).groupName}榜单',
                           ),
-                          label: (group) => group.name,
-                        );
-                        if (group != null && mounted) {
-                          _select(
-                            _boards.firstWhere(
-                              (board) => board.groupId == group.id,
-                            ),
-                          );
-                        }
-                      }
-                    : null,
-              )
-            : PopupMenuButton<SourceGroup>(
-                tooltip: '切换榜单站源',
-                enabled: groups.length > 1,
-                onSelected: (group) => _select(
-                  _boards.firstWhere((board) => board.groupId == group.id),
-                ),
-                itemBuilder: (_) => [
-                  for (final group in groups)
-                    PopupMenuItem(value: group, child: Text(group.name)),
-                ],
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      _board == null
-                          ? '榜单'
-                          : '${SourceSite.byId(_board!.source).groupName}榜单',
+                          if (groups.length > 1)
+                            const Icon(Icons.expand_more_rounded),
+                        ],
+                      ),
                     ),
-                    if (groups.length > 1)
-                      const Icon(Icons.expand_more_rounded),
-                  ],
+              actions: [
+                if (!television)
+                  IconButton(
+                    tooltip: _grid ? '列表视图' : '海报视图',
+                    onPressed: () => setState(() => _grid = !_grid),
+                    icon: Icon(
+                      _grid ? Icons.view_list_rounded : Icons.grid_view_rounded,
+                    ),
+                  ),
+                RefreshAction(
+                  loading: _loading || _more,
+                  tooltip: '更新榜单',
+                  onPressed: _board == null
+                      ? _initialize
+                      : () => _load(force: true),
                 ),
-              ),
-        actions: [
-          RefreshAction(
-            loading: _loading || _more,
-            tooltip: '更新榜单',
-            onPressed: _board == null ? _initialize : () => _load(force: true),
-          ),
-        ],
-      ),
+              ],
+            ),
       body: SafeArea(
         top: false,
         child: Column(
           children: [
-            if (boards.isNotEmpty)
+            if (boards.isNotEmpty && !widget.embedded)
               CatalogFilters(
                 key: ValueKey('ranking-boards-${_board!.groupId}'),
                 categories: [
@@ -260,7 +284,39 @@ class _RankingsScreenState extends State<RankingsScreen> {
                     _select(boards.firstWhere((board) => board.id == id)),
                 onRetry: () => _load(force: true),
               ),
-            if (_board != null)
+            if (widget.embedded)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        [
+                          _board?.description ?? '',
+                          _updated,
+                        ].where((text) => text.isNotEmpty).join(' '),
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                    if (!television)
+                      IconButton(
+                        tooltip: _grid ? '列表视图' : '海报视图',
+                        onPressed: () => setState(() => _grid = !_grid),
+                        icon: Icon(
+                          _grid
+                              ? Icons.view_list_rounded
+                              : Icons.grid_view_rounded,
+                        ),
+                      ),
+                    RefreshAction(
+                      loading: _loading || _more,
+                      tooltip: '更新榜单',
+                      onPressed: () => _load(force: true),
+                    ),
+                  ],
+                ),
+              ),
+            if (_board != null && !widget.embedded)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                 child: Align(
@@ -362,6 +418,60 @@ class _RankingsScreenState extends State<RankingsScreen> {
                             onFocus: onFocus,
                           ),
                     )
+                  : _grid
+                  ? LayoutBuilder(
+                      builder: (context, constraints) => RefreshIndicator(
+                        onRefresh: () => _load(force: true),
+                        child: CustomScrollView(
+                          controller: _scroll,
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          slivers: [
+                            SliverPadding(
+                              padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                              sliver: SliverGrid(
+                                gridDelegate: dramaGridDelegate(
+                                  context,
+                                  constraints.maxWidth - 40,
+                                ),
+                                delegate: SliverChildBuilderDelegate((
+                                  context,
+                                  index,
+                                ) {
+                                  final item = items[index];
+                                  return DramaTile(
+                                    key: ValueKey(
+                                      'rank-${item.rank}-${item.drama.id}',
+                                    ),
+                                    drama: item.drama,
+                                    repository: widget.repository,
+                                    rank: item.rank,
+                                    subtitle: item.metric.isEmpty
+                                        ? item.drama.category
+                                        : item.metric,
+                                    onTap: () => _openDrama(item),
+                                  );
+                                }, childCount: items.length),
+                              ),
+                            ),
+                            SliverToBoxAdapter(
+                              child: Center(
+                                child: _more
+                                    ? const CircularProgressIndicator()
+                                    : _hasMore
+                                    ? TextButton(
+                                        onPressed: () => _load(more: true),
+                                        child: const Text('加载更多'),
+                                      )
+                                    : const Padding(
+                                        padding: EdgeInsets.all(16),
+                                        child: Text('已显示全部榜单'),
+                                      ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
                   : RefreshIndicator(
                       onRefresh: () => _load(force: true),
                       child: ListView.builder(
@@ -401,22 +511,24 @@ class _RankingsScreenState extends State<RankingsScreen> {
     );
   }
 
+  void _openDrama(RankingItem item) => Navigator.push<void>(
+    context,
+    MaterialPageRoute(
+      builder: (_) => DetailScreen(
+        drama: item.drama,
+        repository: widget.repository,
+        store: widget.store,
+      ),
+    ),
+  );
+
   Widget _rankingTile(
     RankingItem item, {
     bool television = false,
     FocusNode? node,
     VoidCallback? onFocus,
   }) {
-    void open() => Navigator.push<void>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => DetailScreen(
-          drama: item.drama,
-          repository: widget.repository,
-          store: widget.store,
-        ),
-      ),
-    );
+    void open() => _openDrama(item);
     final colors = Theme.of(context).colorScheme;
     final content = Padding(
       padding: EdgeInsets.all(television ? 4 : 12),

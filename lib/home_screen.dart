@@ -75,6 +75,8 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _refreshingUpdatedCache = false;
   bool _selectionMode = false;
   bool _showRecommendations = false;
+  String? _rankingBoard;
+  bool get _specialFeed => _showRecommendations || _rankingBoard != null;
   final _recentTaps = RepeatTapGate();
   String _sourceSignature = '';
   bool _catalogLoadScheduled = false;
@@ -113,11 +115,18 @@ class _HomeScreenState extends State<HomeScreen> {
   String get _category => _categorySelections[_group.id] ?? '';
   List<CatalogCategory> get _categories => _browser.categories(_group);
   String get _displayCategory =>
-      _showRecommendations ? _recommendationCategory : _category;
+      _rankingBoard ??
+      (_showRecommendations ? _recommendationCategory : _category);
   List<CatalogCategory> get _displayCategories => [
     CatalogCategory.all,
     if (_group.id == 'hongguo')
       const CatalogCategory(_recommendationCategory, '推荐'),
+    if (_group.id == 'hongguo') ...[
+      const CatalogCategory('hongguo-hot', '总热播榜'),
+      const CatalogCategory('hongguo-real', '真人剧榜'),
+      const CatalogCategory('hongguo-comic', '漫剧榜'),
+      const CatalogCategory('hongguo-ai', 'AI剧榜'),
+    ],
     ..._categories.where((entry) => entry.id.isNotEmpty),
   ];
 
@@ -145,7 +154,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _categoriesLoading = false;
       _categoriesError = error;
     });
-    if (!_showRecommendations &&
+    if (!_specialFeed &&
         _category.isNotEmpty &&
         !_categories.any((entry) => entry.id == _category)) {
       _changeCategory('');
@@ -273,10 +282,31 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _changeCategory(String category) {
+    if (_group.id == 'hongguo' &&
+        const [
+          'hongguo-hot',
+          'hongguo-real',
+          'hongguo-comic',
+          'hongguo-ai',
+        ].contains(category)) {
+      if (_rankingBoard == category) return;
+      _pauseCatalog();
+      setState(() {
+        _rankingBoard = category;
+        _showRecommendations = false;
+        _selectionMode = false;
+        _selectedDramas.clear();
+        _search.clear();
+        _submittedQuery = '';
+        _searchVisible = false;
+      });
+      return;
+    }
     if (category == _recommendationCategory && _group.id == 'hongguo') {
       if (_showRecommendations) return;
       _pauseCatalog();
       setState(() {
+        _rankingBoard = null;
         _showRecommendations = true;
         _selectionMode = false;
         _selectedDramas.clear();
@@ -286,9 +316,10 @@ class _HomeScreenState extends State<HomeScreen> {
       });
       return;
     }
-    if (_category == category && !_showRecommendations) return;
+    if (_category == category && !_specialFeed) return;
     _debounce?.cancel();
     setState(() {
+      _rankingBoard = null;
       _showRecommendations = false;
       _selectionMode = false;
       _selectedDramas.clear();
@@ -323,7 +354,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _televisionSearch();
       return;
     }
-    if (_showRecommendations) _changeCategory('');
+    if (_specialFeed) _changeCategory('');
     final hadQuery = _search.text.isNotEmpty;
     setState(() {
       _searchVisible = !_searchVisible;
@@ -482,7 +513,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _onCatalogScroll() {
     if (!mounted ||
-        _showRecommendations ||
+        _specialFeed ||
         !_hasMore ||
         _loading ||
         _loadingMore ||
@@ -496,7 +527,7 @@ class _HomeScreenState extends State<HomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _catalogLoadScheduled = false;
       if (!mounted ||
-          _showRecommendations ||
+          _specialFeed ||
           !_hasMore ||
           _loading ||
           _loadingMore ||
@@ -529,7 +560,7 @@ class _HomeScreenState extends State<HomeScreen> {
     bool cacheOnly = false,
     bool startup = false,
   }) async {
-    if (_showRecommendations) return;
+    if (_specialFeed) return;
     if (more && (_loading || _loadingMore || !_hasMore)) return;
     _initialRetryTimer?.cancel();
     if (!startup) _initialRetries = 0;
@@ -621,6 +652,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _debounce?.cancel();
     _search.clear();
     setState(() {
+      _rankingBoard = null;
       _showRecommendations = false;
       _selectionMode = false;
       _selectedDramas.clear();
@@ -660,7 +692,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _submitSearch(String query) {
-    if (_showRecommendations) {
+    if (_specialFeed) {
+      _rankingBoard = null;
       _showRecommendations = false;
       _categorySelections[_group.id] = '';
     }
@@ -731,7 +764,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _selectedDramas.clear();
     });
     if (tab == 0 &&
-        !_showRecommendations &&
+        !_specialFeed &&
         _items.isEmpty &&
         widget.store.sources.isNotEmpty) {
       unawaited(_load(useCache: true));
@@ -973,7 +1006,29 @@ class _HomeScreenState extends State<HomeScreen> {
                     icon: const Icon(Icons.sync_rounded),
                   ),
                 if (_tab == 0) ...[
-                  if (!_showRecommendations)
+                  if (desktop && !television)
+                    SizedBox(
+                      width: 300,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 6,
+                          horizontal: 8,
+                        ),
+                        child: SearchInput(
+                          key: ValueKey('desktop-search-${_group.id}'),
+                          controller: _search,
+                          hint: _searchHint,
+                          suggestions: _searchSuggestions
+                              ? widget.repository.suggestions
+                              : null,
+                          onChanged: _searchChanged,
+                          onSearch: _submitSearch,
+                          onCancel: () =>
+                              unawaited(widget.repository.cancelSuggestions()),
+                        ),
+                      ),
+                    ),
+                  if (!_specialFeed)
                     IconButton(
                       tooltip: '排序与筛选 · ${widget.store.catalogView.sort.label}',
                       onPressed: _chooseCatalogView,
@@ -992,7 +1047,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         : _openRankings,
                     icon: const Icon(Icons.leaderboard_outlined),
                   ),
-                  if (!_showRecommendations &&
+                  if (!_specialFeed &&
                       widget.store.canDownload &&
                       widget.repository.supportsDownloads)
                     IconButton(
@@ -1001,20 +1056,19 @@ class _HomeScreenState extends State<HomeScreen> {
                       onPressed: () => setState(() => _selectionMode = true),
                       icon: const Icon(Icons.checklist_rounded),
                     ),
-                  IconButton(
-                    key: const ValueKey('toggle-search'),
-                    tooltip: _searchVisible ? '收起搜索' : '搜索',
-                    icon: Icon(
-                      _searchVisible
-                          ? Icons.search_off_rounded
-                          : Icons.search_rounded,
+                  if (!desktop || television)
+                    IconButton(
+                      key: const ValueKey('toggle-search'),
+                      tooltip: _searchVisible ? '收起搜索' : '搜索',
+                      icon: Icon(
+                        _searchVisible
+                            ? Icons.search_off_rounded
+                            : Icons.search_rounded,
+                      ),
+                      onPressed: _toggleSearch,
                     ),
-                    onPressed: _toggleSearch,
-                  ),
                 ],
-                if (_tab == 0 &&
-                    !_showRecommendations &&
-                    constraints.maxWidth >= 400)
+                if (_tab == 0 && !_specialFeed && constraints.maxWidth >= 400)
                   RefreshAction(
                     key: const ValueKey('catalog-refresh'),
                     loading:
@@ -1090,7 +1144,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   },
                   itemBuilder: (_) => [
                     if (_tab == 0 &&
-                        !_showRecommendations &&
+                        !_specialFeed &&
                         constraints.maxWidth < 400)
                       PopupMenuItem(
                         value: 'update',
@@ -1163,7 +1217,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   NavigationRail(
                     selectedIndex: _tab,
                     onDestinationSelected: _onNavSelected,
-                    labelType: NavigationRailLabelType.all,
+                    labelType: NavigationRailLabelType.none,
+                    minWidth: 80,
                     groupAlignment: -.8,
                     destinations: [
                       NavigationRailDestination(
@@ -1287,7 +1342,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final television = AppLayout.isTelevision(context);
     return Column(
       children: [
-        if (_searchVisible && !television)
+        if (_searchVisible &&
+            !television &&
+            MediaQuery.sizeOf(context).width < 840)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
             child: SearchInput(
@@ -1362,7 +1419,18 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
         ),
-        if (_showRecommendations)
+        if (_rankingBoard != null)
+          Expanded(
+            child: RankingsScreen(
+              key: ValueKey('inline-$_rankingBoard'),
+              repository: widget.repository,
+              store: widget.store,
+              initialGroup: 'hongguo',
+              initialBoard: _rankingBoard,
+              embedded: true,
+            ),
+          )
+        else if (_showRecommendations)
           Expanded(
             child: GestureDetector(
               onHorizontalDragEnd: television ? null : _swipeCategory,

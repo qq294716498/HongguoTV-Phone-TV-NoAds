@@ -1,12 +1,7 @@
 package core
 
 import (
-	"bytes"
-	"compress/gzip"
 	"context"
-	"crypto/aes"
-	"crypto/cipher"
-	"crypto/sha512"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -158,7 +153,7 @@ func TestHongguoSearchParsesLynxCellsAndDeduplicates(t *testing.T) {
 	}
 }
 
-func TestHongguoSearchRegistrationEncryptsAndPersistsIdentity(t *testing.T) {
+func TestHongguoSearchRegistrationMatchesReferenceAndPersistsIdentity(t *testing.T) {
 	var registrations atomic.Int32
 	d := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
 		registrations.Add(1)
@@ -169,30 +164,15 @@ func TestHongguoSearchRegistrationEncryptsAndPersistsIdentity(t *testing.T) {
 		if err != nil {
 			return nil, err
 		}
-		if len(body) < 54 || !bytes.Equal(body[:6], []byte{0x74, 0x63, 5, 0x10, 0, 0}) {
-			t.Fatal("registration body is not raw ttEncrypt bytes")
-		}
-		seedHash := sha512.Sum512(body[6:38])
-		material := sha512.Sum512(append(seedHash[:], hongguoSpadeURLConstants...))
-		block, _ := aes.NewCipher(material[:16])
-		plain := make([]byte, len(body)-38)
-		cipher.NewCBCDecrypter(block, material[16:32]).CryptBlocks(plain, body[38:])
-		plain = plain[:len(plain)-int(plain[len(plain)-1])]
-		digest := sha512.Sum512(plain[64:])
-		if !bytes.Equal(digest[:], plain[:64]) {
-			t.Fatal("registration digest mismatch")
-		}
-		reader, err := gzip.NewReader(bytes.NewReader(plain[64:]))
-		if err != nil {
-			t.Fatal(err)
+		if r.URL.Host != "log.snssdk.com" || r.Header.Get("Content-Type") != "application/json; charset=utf-8" {
+			t.Fatal("registration does not match reference")
 		}
 		var payload map[string]any
-		if err = json.NewDecoder(reader).Decode(&payload); err != nil {
+		if err := json.Unmarshal(body, &payload); err != nil {
 			t.Fatal(err)
 		}
-		reader.Close()
 		header := nestedMap(payload, "header")
-		if header["os_version"] != "16" || header["device_id"] != nil || payload["magic_tag"] != "ss_app_log" {
+		if header["app_version"] != "7.3.5.32" || header["channel"] != "update_64" || header["os_version"] != "16" || header["device_id"] != nil || payload["magic_tag"] != "ss_app_log" {
 			t.Fatal("invalid registration profile")
 		}
 		response := sourceFixtureResponse(r, 200, `{"device_id_str":"3456789012345678","install_id":4567890123456789}`)

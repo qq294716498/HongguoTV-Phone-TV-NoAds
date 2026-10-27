@@ -21,6 +21,7 @@ func (manager *nativeDownloads) resolveDownloadMedia(ctx context.Context, job na
 		return providerMedia{}, ctx.Err()
 	}
 	defer func() { <-manager.hongguoResolveSlot }()
+	ctx = context.WithValue(ctx, backgroundCatalogKey{}, true)
 	ctx, cancel := context.WithTimeout(context.WithValue(ctx, hongguoDownloadKey{}, true), 2*hongguoDownloadBudget+hongguoDownloadRetryDelay)
 	defer cancel()
 	var lastErr error

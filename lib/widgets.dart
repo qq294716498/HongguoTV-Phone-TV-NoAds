@@ -333,6 +333,7 @@ class DramaTile extends StatelessWidget {
     this.actions,
     this.badge,
     this.badgeRibbon = false,
+    this.rank,
     this.selected,
     this.onMore,
     this.onLongPress,
@@ -346,6 +347,7 @@ class DramaTile extends StatelessWidget {
   final Widget? actions;
   final String? badge;
   final bool badgeRibbon;
+  final int? rank;
   final bool? selected;
   final VoidCallback? onMore;
   final VoidCallback? onLongPress;
@@ -378,6 +380,40 @@ class DramaTile extends StatelessWidget {
             fit: StackFit.expand,
             children: [
               DramaCover(drama: drama, repository: repository),
+              if (rank != null)
+                Positioned(
+                  left: 0,
+                  top: 0,
+                  child: Container(
+                    constraints: const BoxConstraints(
+                      minWidth: 28,
+                      minHeight: 28,
+                    ),
+                    alignment: Alignment.center,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: rank! <= 3
+                          ? Theme.of(context).colorScheme.primary
+                          : Colors.black.withValues(alpha: .72),
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(14),
+                        bottomRight: Radius.circular(12),
+                      ),
+                    ),
+                    child: Text(
+                      '$rank',
+                      style: TextStyle(
+                        color: rank! <= 3
+                            ? Theme.of(context).colorScheme.onPrimary
+                            : Colors.white,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ),
               if (badge != null && badge!.isNotEmpty && badgeRibbon)
                 Positioned.fill(
                   child: IgnorePointer(
@@ -581,7 +617,7 @@ class StatusPanel extends StatelessWidget {
 }
 
 SliverGridDelegate dramaGridDelegate(BuildContext context, double width) {
-  final columns = width < 600 ? 3 : (width / 180).floor().clamp(4, 9);
+  final columns = width < 600 ? 3 : ((width + 18) / 178).floor().clamp(3, 12);
   final spacing = width < 600 ? 10.0 : 18.0;
   final tileWidth = (width - (columns - 1) * spacing) / columns;
   return SliverGridDelegateWithFixedCrossAxisCount(

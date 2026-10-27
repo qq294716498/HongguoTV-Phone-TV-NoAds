@@ -281,7 +281,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
                   ),
                   Text('最近成功：${sourceTimestamp(status.signature!.successAt)}'),
                   const Text(
-                    '取流每次请求及重试均重新生成临时设备身份和签名，不使用签名缓存。搜索等功能保留注册身份及短时签名复用。',
+                    '播放和下载复用已注册设备，使用 7.3.5.32 播放器签名；空响应时才尝试重新注册，最多恢复 3 次。搜索继续复用注册身份和短时签名。',
                   ),
                 ],
               ),

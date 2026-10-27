@@ -220,8 +220,10 @@ class _PlayerScreenState extends State<PlayerScreen>
   String get _qualityLabel => _plan?.local == true
       ? '本地原画'
       : _requestedQuality == 0
-      ? '自动'
-      : '${_requestedQuality}P';
+      ? ((_plan?.quality ?? 0) > 0 ? '自动（${_plan!.quality}P）' : '自动')
+      : ((_plan?.quality ?? 0) > 0 && _plan!.quality != _requestedQuality
+            ? '${_requestedQuality}P（实际 ${_plan!.quality}P）'
+            : '${_requestedQuality}P');
   String get _session => _plan?.session ?? '';
   bool get _openedCurrent =>
       identical(_openedDetail, _detail) && _openedIndex == _index;
@@ -2259,6 +2261,16 @@ class _PlayerScreenState extends State<PlayerScreen>
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  Future<void> _selectPlaybackPreference({double? speed, int? quality}) async {
+    try {
+      await _setPreferences(
+        _preferences.copyWith(speed: speed, quality: quality),
+      );
+    } catch (_) {
+      _notice('播放偏好未能保存，请重试');
+    }
+  }
+
   Future<void> _setPreferences(PlaybackPreferences preferences) async {
     if (_closed || widget.store.profileEpoch != _profileEpoch) {
       throw StateError('当前用户已变更');
@@ -3107,6 +3119,14 @@ class _PlayerScreenState extends State<PlayerScreen>
                 : _windowsEpisodesExpanded
                 ? '收起选集栏'
                 : '展开选集栏',
+            onSelectSpeed: (speed) => _selectPlaybackPreference(speed: speed),
+            onSelectQuality: _plan?.local == true
+                ? null
+                : (quality) => _selectPlaybackPreference(quality: quality),
+            qualities: (_plan?.qualities.isNotEmpty ?? false)
+                ? _plan!.qualities
+                : playbackQualities.where((value) => value > 0).toList(),
+            selectedQuality: _requestedQuality,
             onSpeed: () => _openPanel(PlayerMenuSection.speed),
             onQuality: () => _openPanel(PlayerMenuSection.quality),
             onSettings: () => _openPanel(PlayerMenuSection.settings),

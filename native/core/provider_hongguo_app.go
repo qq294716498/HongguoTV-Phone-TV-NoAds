@@ -43,27 +43,28 @@ type hongguoCatalogState struct {
 }
 
 type hongguoAppClient struct {
-	signatureMu             sync.Mutex
-	signatures              map[[32]byte]hongguoCachedSignature
-	signatureStatus         hongguoSignatureStatus
-	searchCursorMu          sync.Mutex
-	searchCursors           map[string]hongguoSearchCursor
-	deviceRegistration      chan struct{}
-	deviceIdentity          hongguoDeviceIdentity
-	deviceIdentityLoaded    bool
-	deviceIdentityPersisted bool
-	mu                      sync.Mutex
-	catalogMu               sync.Mutex
-	baseURL                 string
-	state                   hongguoCatalogState
-	details                 map[string]hongguoDetailEntry
-	pending                 map[string]*hongguoDetailCall
-	searches                map[string]hongguoSearchEntry
-	searchPending           map[string]*hongguoSearchCall
-	suggestions             map[string]hongguoSuggestionEntry
-	suggestPending          map[string]*hongguoSuggestionCall
-	danmaku                 map[string]hongguoDanmakuCacheEntry
-	danmakuPending          map[string]*hongguoDanmakuCall
+	signatureMu               sync.Mutex
+	signatures                map[[32]byte]hongguoCachedSignature
+	signatureStatus           hongguoSignatureStatus
+	searchCursorMu            sync.Mutex
+	searchCursors             map[string]hongguoSearchCursor
+	deviceRegistration        chan struct{}
+	deviceIdentity            hongguoDeviceIdentity
+	deviceRotationPausedUntil time.Time
+	deviceIdentityLoaded      bool
+	deviceIdentityPersisted   bool
+	mu                        sync.Mutex
+	catalogMu                 sync.Mutex
+	baseURL                   string
+	state                     hongguoCatalogState
+	details                   map[string]hongguoDetailEntry
+	pending                   map[string]*hongguoDetailCall
+	searches                  map[string]hongguoSearchEntry
+	searchPending             map[string]*hongguoSearchCall
+	suggestions               map[string]hongguoSuggestionEntry
+	suggestPending            map[string]*hongguoSuggestionCall
+	danmaku                   map[string]hongguoDanmakuCacheEntry
+	danmakuPending            map[string]*hongguoDanmakuCall
 }
 
 func (downloader *Downloader) hongguoClient() *hongguoAppClient {
@@ -148,6 +149,7 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 	client.mu.Lock()
 	base := client.baseURL
 	client.mu.Unlock()
+	singlePlayback := method == http.MethodPost && path == hongguoSingleVideoModelPath
 	playbackModel := method == http.MethodPost && path == hongguoVideoModelPath
 	if playbackModel {
 		ctx = context.WithValue(ctx, hongguoPlaybackTransportKey{}, true)
@@ -190,7 +192,7 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 	if searchRequest && attempts < 2 {
 		attempts = 2
 	}
-	emptyRetry := playbackModel || searchRequest || path == "/novel/player/video_detail/v1/" || path == "/reading/distribution/category/landpage/v/"
+	emptyRetry := singlePlayback || playbackModel || searchRequest || path == "/novel/player/video_detail/v1/" || path == "/reading/distribution/category/landpage/v/"
 	if emptyRetry && attempts < 2 {
 		attempts = 2
 	}
@@ -199,6 +201,7 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 	}
 	var lastErr error
 	emptyResponses := 0
+	rotations := 0
 	retryDelay := time.Second
 	for attempt := 0; attempt < attempts; attempt++ {
 		if err := ctx.Err(); err != nil {
@@ -238,7 +241,7 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 			request.Header.Set("Passport-Sdk-Version", "50561")
 			request.Header.Set("X-Vc-Bdturing-Sdk-Version", "3.7.2.cn")
 		}
-		if identity.Cookie != "" {
+		if identity.Cookie != "" && !singlePlayback {
 			request.Header.Set("Cookie", identity.Cookie)
 		}
 		comment, _ := ctx.Value(hongguoCommentKey{}).(bool)
@@ -269,7 +272,14 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 				client.preparePlaybackSignature(prepared, body, now, playbackIdentities)
 			} else if comment {
 				signHongguoCommentRequest(prepared, commentNonce, now)
-			} else if path != "/novel/player/video_model/v1/" {
+			} else if singlePlayback {
+				signHongguoPlayerRequest(prepared, body, now)
+				client.signatureMu.Lock()
+				client.signatureStatus.Generated++
+				client.signatureStatus.GeneratedAt = now
+				client.signatureStatus.UsedAt = now
+				client.signatureMu.Unlock()
+			} else {
 				client.prepareSignature(prepared, body, now, attempt == attempts-1 && emptyResponses >= 2)
 			}
 		})
@@ -309,6 +319,17 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 				Attempt: attempt + 1, Message: "App 接口返回空响应：" + request.URL.Path,
 			})
 			lastErr = fmt.Errorf("%w（HTTP %d，正文 0 字节）；未收到明确的登录错误", errHongguoEmptyResponse, response.StatusCode)
+			if singlePlayback && rotations < 3 && response.Header.Get("Retry-After") == "" {
+				rotations++
+				if renewed, renewErr := downloader.ensureHongguoDeviceIdentity(ctx, identity.DeviceID); renewErr == nil {
+					identity = renewed
+					query.Set("device_id", identity.DeviceID)
+					query.Set("iid", identity.InstallID)
+					attempt--
+					retryDelay = time.Second
+					continue
+				}
+			}
 			if emptyRetry && attempt+1 < attempts && response.Header.Get("Retry-After") == "" {
 				retryDelay = hongguoEmptyResponseRetryDelay * time.Duration(1<<attempt)
 				continue

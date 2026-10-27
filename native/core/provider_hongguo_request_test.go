@@ -38,62 +38,37 @@ func TestHongguoEpisodeContentTypeSurvivesDetailAndSerialization(t *testing.T) {
 	}
 }
 
-func TestHongguoPlaybackRoutesEpisodeIntoMixedVideoIDMap(t *testing.T) {
-	// 播放模型接口已迁到 multi_video_model/v1：分集 ID 通过 mixed_video_id_map 的
-	// 1004 槽位传递，biz_param.video_platform 固定 1024，且必须带齐六个签名头。
+func TestHongguoPlaybackRoutesUseRegisteredSingleEpisode(t *testing.T) {
 	for _, contentType := range []int{1, 1004, 1007, 0, -1} {
-		t.Run(fmt.Sprintf("content-type-%d", contentType), func(t *testing.T) {
-			d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
-				if request.URL.Path != hongguoVideoModelPath {
-					t.Fatalf("unexpected route: %s", request.URL.Path)
+		t.Run(fmt.Sprint(contentType), func(t *testing.T) {
+			d := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
+				if r.URL.Path != hongguoSingleVideoModelPath {
+					t.Fatalf("unexpected route %s", r.URL.Path)
 				}
-				for key, expected := range map[string]string{
-					"version_code": "71332", "version_name": "7.1.3.32", "manifest_version_code": "71332", "update_version_code": "71332",
-					"host_abi": "arm64-v8a", "dragon_device_type": "phone", "pv_player": "71332",
-					"compliance_status": "0", "need_personal_recommend": "1", "player_so_load": "1", "is_android_pad_screen": "0",
-				} {
-					if request.URL.Query().Get(key) != expected {
-						t.Fatalf("playback profile lost %s", key)
+				if r.URL.Query().Get("version_name") != "7.3.5.32" || r.URL.Query().Get("device_id") != "1234567890123456" || r.Header.Get("Cookie") != "" {
+					t.Fatal("incorrect reference identity/profile")
+				}
+				for _, key := range []string{"X-Gorgon", "X-Argus", "X-Ladon", "X-Khronos", "X-SS-STUB"} {
+					if r.Header.Get(key) == "" {
+						t.Fatal("missing signature", key)
 					}
 				}
-				for key, expected := range map[string]string{
-					"Passport-Sdk-Version": "50561", "X-Vc-Bdturing-Sdk-Version": "3.7.2.cn", "X-Tt-Request-Tag": "t=0;n=0",
-				} {
-					if request.Header.Get(key) != expected {
-						t.Fatalf("playback profile lost %s", key)
-					}
+				if r.Header.Get("X-Medusa") != "" {
+					t.Fatal("mixed incompatible signature profiles")
 				}
-				if request.URL.Query().Get("ts") == "" || request.URL.Query().Get("ts") != request.Header.Get("X-Khronos") {
-					t.Fatal("playback timestamp missing or inconsistent")
-				}
-				for _, header := range []string{"X-Gorgon", "X-Khronos", "X-Ladon", "X-Argus", "X-Helios", "X-Medusa", "X-SS-STUB", "X-SS-Req-Ticket"} {
-					if request.Header.Get(header) == "" {
-						t.Fatalf("playback model request lost required header %s", header)
-					}
-				}
-				var payload struct {
-					BizParam struct {
-						VideoPlatform int `json:"video_platform"`
-					} `json:"biz_param"`
-					MixedVideoIDMap map[string][]string `json:"mixed_video_id_map"`
-				}
-				if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+				var payload map[string]any
+				if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 					t.Fatal(err)
 				}
-				if payload.BizParam.VideoPlatform != 1024 {
-					t.Fatalf("wrong video platform: %d", payload.BizParam.VideoPlatform)
+				if payload["video_id"] != "9001" || payload["content_type"] != float64(1) || nestedMap(payload, "biz_param")["video_platform"] != float64(3) {
+					t.Fatalf("incorrect single episode request: %v", payload)
 				}
-				if len(payload.MixedVideoIDMap["1004"]) != 1 || payload.MixedVideoIDMap["1004"][0] != "9001" {
-					t.Fatalf("episode was not routed into the 1004 slot: %+v", payload.MixedVideoIDMap)
-				}
-				return sourceFixtureResponse(request, http.StatusOK, `{"code":0,"data":{"9001":{"video_model":{"video_list":[{"main_url":"https://media.example.test/episode.mp4","video_meta":{"codec_type":"h264","definition":"720p"}}]}}}}`), nil
+				return sourceFixtureResponse(r, 200, `{"data":{"video_model":{"video_list":[{"main_url":"https://media.example.test/episode.mp4","video_meta":{"codec_type":"h264","definition":"1080p"}}]}}}`), nil
 			})
-			media, err := d.resolveHongguoMedia(context.Background(), Task{
-				DramaID: providerDramaID(sourceHongguo, "12345"),
-				Chapter: Chapter{VideoURL: "hongguo-cenc://9001", ContentType: contentType},
-			})
-			if err != nil || media.URL != "https://media.example.test/episode.mp4" {
-				t.Fatalf("matching episode media was not selected: %v", err)
+			searchFixtureIdentity(d)
+			media, err := d.resolveHongguoMedia(context.Background(), Task{DramaID: providerDramaID(sourceHongguo, "12345"), Chapter: Chapter{VideoURL: "hongguo-cenc://9001", ContentType: contentType}})
+			if err != nil || media.Quality != 1080 {
+				t.Fatalf("single episode failed: %v", err)
 			}
 		})
 	}
@@ -140,7 +115,7 @@ func TestHongguoPlaybackHTTPBackoffSurvivesFallback(t *testing.T) {
 			calls := 0
 			d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
 				calls++
-				if request.URL.Path != hongguoVideoModelPath {
+				if request.URL.Path != hongguoSingleVideoModelPath {
 					if status == http.StatusTooManyRequests {
 						t.Fatalf("429 issued another route: %s", request.URL)
 					}
@@ -169,7 +144,7 @@ func TestHongguoSlowHTTPRoutesReachBackupWithinCallerBudget(t *testing.T) {
 	appCalls, webCalls, apiCalls := 0, 0, 0
 	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
 		switch request.URL.Path {
-		case hongguoVideoModelPath:
+		case hongguoSingleVideoModelPath:
 			appCalls++
 			<-request.Context().Done()
 			return nil, request.Context().Err()
@@ -202,7 +177,7 @@ func TestHongguoHTTPForbiddenAllowsIndependentWebPlayback(t *testing.T) {
 	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
 		calls++
 		switch request.URL.Path {
-		case hongguoVideoModelPath:
+		case hongguoSingleVideoModelPath:
 			return sourceFixtureResponse(request, http.StatusForbidden, "{}"), nil
 		case "/player/12345/9001":
 			return sourceFixtureResponse(request, http.StatusOK, `<script>_ROUTER_DATA = {"loaderData":{"player_page":{"series_id":"12345","vid":"9001","video_player_info":{"main_url":"https://media.example.test/fallback.mp4"}}}}};</script>`), nil

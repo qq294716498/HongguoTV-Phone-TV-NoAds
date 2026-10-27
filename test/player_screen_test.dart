@@ -356,8 +356,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('1.5x').last);
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('关闭菜单'));
-      await tester.pumpAndSettle();
+      expect(find.byType(Dialog), findsNothing);
       await player.seek(const Duration(seconds: 28));
       await tester.pump();
       await tester.tap(find.byTooltip('暂停播放'));
