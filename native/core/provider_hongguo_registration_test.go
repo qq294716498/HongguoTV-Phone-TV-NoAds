@@ -21,6 +21,12 @@ func TestHongguoRegisteredIdentitySharedAcrossAppRoutes(t *testing.T) {
 			return response, nil
 		}
 		requests++
+		if r.URL.Path == hongguoVideoModelPath {
+			if r.URL.Query().Get("device_id") == "3456789012345678" || r.URL.Query().Get("iid") == "4567890123456789" || r.Header.Get("Cookie") != "" {
+				t.Error("playback leaked registered identity into temporary profile")
+			}
+			return sourceFixtureResponse(r, 200, `{"code":0}`), nil
+		}
 		if r.URL.Query().Get("device_id") != "3456789012345678" || r.URL.Query().Get("iid") != "4567890123456789" || r.Header.Get("Cookie") != "install_id=4567890123456789" {
 			t.Error("App request lost shared registered identity")
 		}

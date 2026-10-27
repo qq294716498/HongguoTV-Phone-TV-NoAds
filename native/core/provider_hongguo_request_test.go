@@ -47,6 +47,25 @@ func TestHongguoPlaybackRoutesEpisodeIntoMixedVideoIDMap(t *testing.T) {
 				if request.URL.Path != hongguoVideoModelPath {
 					t.Fatalf("unexpected route: %s", request.URL.Path)
 				}
+				for key, expected := range map[string]string{
+					"version_code": "71332", "version_name": "7.1.3.32", "manifest_version_code": "71332", "update_version_code": "71332",
+					"host_abi": "arm64-v8a", "dragon_device_type": "phone", "pv_player": "71332",
+					"compliance_status": "0", "need_personal_recommend": "1", "player_so_load": "1", "is_android_pad_screen": "0",
+				} {
+					if request.URL.Query().Get(key) != expected {
+						t.Fatalf("playback profile lost %s", key)
+					}
+				}
+				for key, expected := range map[string]string{
+					"Passport-Sdk-Version": "50561", "X-Vc-Bdturing-Sdk-Version": "3.7.2.cn", "X-Tt-Request-Tag": "t=0;n=0",
+				} {
+					if request.Header.Get(key) != expected {
+						t.Fatalf("playback profile lost %s", key)
+					}
+				}
+				if request.URL.Query().Get("ts") == "" || request.URL.Query().Get("ts") != request.Header.Get("X-Khronos") {
+					t.Fatal("playback timestamp missing or inconsistent")
+				}
 				for _, header := range []string{"X-Gorgon", "X-Khronos", "X-Ladon", "X-Argus", "X-Helios", "X-Medusa", "X-SS-STUB", "X-SS-Req-Ticket"} {
 					if request.Header.Get(header) == "" {
 						t.Fatalf("playback model request lost required header %s", header)

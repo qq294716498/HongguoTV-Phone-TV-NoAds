@@ -9,6 +9,17 @@ import (
 	"time"
 )
 
+func newHongguoPlaybackIdentity() (hongguoDeviceIdentity, error) {
+	var random [16]byte
+	if _, err := rand.Read(random[:]); err != nil {
+		return hongguoDeviceIdentity{}, err
+	}
+	id := func(part []byte) string {
+		return strconv.FormatUint(1_000_000_000_000_000+(binary.BigEndian.Uint64(part)&((1<<48)-1)), 10)
+	}
+	return hongguoDeviceIdentity{DeviceID: id(random[:8]), InstallID: id(random[8:])}, nil
+}
+
 func newHongguoDeviceID() string {
 	var random [8]byte
 	if _, err := rand.Read(random[:]); err != nil {

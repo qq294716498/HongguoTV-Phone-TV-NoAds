@@ -280,7 +280,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
                     '最近生成：${sourceTimestamp(status.signature!.generatedAt)}',
                   ),
                   Text('最近成功：${sourceTimestamp(status.signature!.successAt)}'),
-                  const Text('全软件共用设备身份与签名管理；相同请求短时间内复用，参数变化或过期时更新。'),
+                  const Text('取流使用随机临时设备身份；搜索等功能保留注册身份。同次取流重试优先复用签名，新的取流重新生成。'),
                 ],
               ),
             if (status != null && status.count > 0)

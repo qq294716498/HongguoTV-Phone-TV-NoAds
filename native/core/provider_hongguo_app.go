@@ -19,6 +19,8 @@ const hongguoAppBaseURL = "https://api5-normal-sinfonlineb.fqnovel.com"
 
 const hongguoAppUserAgent = "com.phoenix.read/73532 (Linux; U; Android 16; zh_CN; 25053RT47C; Build/BP2A.250605.031.A3; Cronet/TTNetVersion:04657795 2026-01-23 QuicVersion:c67e9834 2025-09-08)"
 
+const hongguoPlaybackUserAgent = "com.phoenix.read/71332 (Linux; U; Android 16; zh_CN; 25053RT47C; Build/BP2A.250605.031.A3; Cronet/TTNetVersion:04657795 2026-01-23 QuicVersion:c67e9834 2025-09-08)"
+
 const hongguoEmptyResponseRetryDelay = 250 * time.Millisecond
 
 type hongguoCatalogCursor struct {
@@ -148,6 +150,13 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 	if err != nil {
 		return nil, err
 	}
+	playbackModel := method == http.MethodPost && path == hongguoVideoModelPath
+	if playbackModel {
+		identity, err = newHongguoPlaybackIdentity()
+		if err != nil {
+			return nil, err
+		}
+	}
 	query := url.Values{
 		"aid": {"8662"}, "app_name": {"novelread"}, "version_code": {"73532"}, "version_name": {"7.3.5.32"},
 		"manifest_version_code": {"73532"}, "update_version_code": {"73532"}, "channel": {"update_64"},
@@ -178,7 +187,15 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 	if searchRequest && attempts < 2 {
 		attempts = 2
 	}
-	playbackModel := method == http.MethodPost && path == hongguoVideoModelPath
+	if playbackModel {
+		for key, value := range map[string]string{
+			"version_code": "71332", "version_name": "7.1.3.32", "manifest_version_code": "71332", "update_version_code": "71332",
+			"host_abi": "arm64-v8a", "dragon_device_type": "phone", "pv_player": "71332",
+			"compliance_status": "0", "need_personal_recommend": "1", "player_so_load": "1", "is_android_pad_screen": "0",
+		} {
+			query.Set(key, value)
+		}
+	}
 	emptyRetry := playbackModel || searchRequest || path == "/novel/player/video_detail/v1/" || path == "/reading/distribution/category/landpage/v/"
 	if emptyRetry && attempts < 2 {
 		attempts = 2
@@ -209,6 +226,13 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 		request.Header.Set("Accept", "application/json")
 		request.Header.Set("X-XS-From-Web", "0")
 		request.Header.Set("Sdk-Version", "2")
+		if playbackModel {
+			request.Header.Set("User-Agent", hongguoPlaybackUserAgent)
+			request.Header.Set("Accept", "application/json; charset=utf-8,application/x-protobuf")
+			request.Header.Set("X-Tt-Request-Tag", "t=0;n=0")
+			request.Header.Set("Passport-Sdk-Version", "50561")
+			request.Header.Set("X-Vc-Bdturing-Sdk-Version", "3.7.2.cn")
+		}
 		if identity.Cookie != "" {
 			request.Header.Set("Cookie", identity.Cookie)
 		}
@@ -224,6 +248,9 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 		}
 		if payload != nil {
 			request.Header.Set("Content-Type", "application/json; charset=utf-8")
+			if playbackModel {
+				request.Header.Set("Content-Type", "application/json; charset=UTF-8")
+			}
 		}
 		response, err := downloader.doPreparedCatalogRequest(request, 20*time.Second, func(prepared *http.Request) {
 			now := time.Now()

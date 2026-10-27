@@ -90,7 +90,7 @@ func (downloader *Downloader) resolveHongguoAppMedia(ctx context.Context, videoI
 	if hongguoModelHasVideoList(model) {
 		return selectHongguoAppMedia(model)
 	}
-	fallback := strings.TrimSpace(mapString(model, "fallback_api"))
+	fallback := hongguoFallbackAddress(model["fallback_api"])
 	if fallback == "" {
 		return providerMedia{}, errors.New("红果 App 接口未返回本集片源地址")
 	}
@@ -122,6 +122,31 @@ func (downloader *Downloader) resolveHongguoAppMedia(ctx context.Context, videoI
 		merged[key] = value
 	}
 	return selectHongguoAppMedia(merged, seed)
+}
+
+func hongguoFallbackAddress(value any) string {
+	for depth := 0; depth < 4; depth++ {
+		switch typed := value.(type) {
+		case string:
+			trimmed := strings.TrimSpace(typed)
+			if strings.HasPrefix(trimmed, "https://") {
+				return trimmed
+			}
+			if json.Unmarshal([]byte(trimmed), &value) != nil {
+				return ""
+			}
+		case map[string]any:
+			value = typed["fallback_api"]
+		case []any:
+			if len(typed) == 0 {
+				return ""
+			}
+			value = typed[0]
+		default:
+			return ""
+		}
+	}
+	return ""
 }
 
 func hongguoModelHasVideoList(model map[string]any) bool {
@@ -165,7 +190,7 @@ func (downloader *Downloader) hongguoFallbackJSON(ctx context.Context, rawURL st
 	if err != nil {
 		return nil, err
 	}
-	request.Header.Set("User-Agent", hongguoAppUserAgent)
+	request.Header.Set("User-Agent", hongguoPlaybackUserAgent)
 	request.Header.Set("Accept", "application/json")
 	response, err := downloader.doPreparedCatalogRequest(request, 20*time.Second, nil)
 	if err != nil {
