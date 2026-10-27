@@ -4,6 +4,45 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('closing a choice menu does not toggle the video behind it', (
+    tester,
+  ) async {
+    var videoTaps = 0;
+    var opened = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => videoTaps++,
+            child: Align(
+              alignment: Alignment.bottomRight,
+              child: PlayerChoiceMenu<int>(
+                buttonKey: const ValueKey('quality'),
+                label: '1080P',
+                tooltip: '清晰度',
+                values: const [1080, 720, 0],
+                selected: 1080,
+                format: (v) => '$v',
+                onSelected: (_) {},
+                onOpenChanged: (value) => opened = value,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('quality')));
+    await tester.pumpAndSettle();
+    expect(opened, isTrue);
+    await tester.tapAt(const Offset(20, 20));
+    await tester.pumpAndSettle();
+    expect(opened, isFalse);
+    expect(videoTaps, 0);
+    await tester.tapAt(const Offset(20, 20));
+    await tester.pumpAndSettle();
+    expect(videoTaps, 1);
+  });
   for (final width in [360.0, 1264.0]) {
     testWidgets('quality menu is anchored and selects actual 540P at $width', (
       tester,

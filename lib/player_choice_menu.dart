@@ -27,6 +27,7 @@ class PlayerChoiceMenu<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => MenuAnchor(
+    consumeOutsideTap: true,
     onOpen: () => onOpenChanged(true),
     onClose: () => onOpenChanged(false),
     style: MenuStyle(
