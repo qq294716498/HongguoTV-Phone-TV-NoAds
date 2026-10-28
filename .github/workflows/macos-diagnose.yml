@@ -1,0 +1,38 @@
+name: macOS playback diagnostics
+on:
+  push:
+    branches: ['diagnose/macos-*']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  diagnose:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-universal
+          path: package
+          run-id: 40628594634
+          github-token: ${{ github.token }}
+      - name: Collect native stack
+        run: |
+          cd package
+          ditto -x -k HongguoTV-*-macos-universal.zip extracted
+          cat macOS-validation.json
+          lldb --batch -o 'run' -o 'thread backtrace all' -- extracted/HongguoTV.app/Contents/MacOS/HongguoTV --package-smoke "$PWD/macOS-smoke.json" "$PWD/synthetic.mp4" > stack.txt 2>&1 || true
+          cat stack.txt
+          if [ -f macOS-smoke.json ]; then cat macOS-smoke.json; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-native-stack-${{ matrix.runner }}
+          path: |
+            package/stack.txt
+            package/macOS-smoke.json
+            ~/Library/Logs/DiagnosticReports/HongguoTV*
