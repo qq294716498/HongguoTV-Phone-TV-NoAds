@@ -2,11 +2,17 @@
 
 基于 [guoapp](https://github.com/zhoufuweigg/guoapp) 的非官方独立客户端。手机与 Android TV 共用 Android 应用，另提供 Windows x64 与 macOS 通用客户端；支持浏览、搜索、播放、弹幕、追剧和下载。
 
-## 0.1.34+59（验证中，尚未发布）
+## 0.1.34+59（已正式发布）
 
 - 下一季搜索增加从长剧名提取副标题的定向查询，兼容中文 / 阿拉伯数字及省略“第”的季数；定向搜索最多检查三页，追剧与自动续播共用查询词。查询保留取消与总超时，已发现下一季时不再因其他搜索页未读完而记为检测失败。
-- 实际签名搜索确认《谁说没灵根不能修仙的？之无灵证道第42季》与《谁说没灵根不能修仙的？之无灵证道43季》简介一致。完整长标题搜索会漏掉后续季，副标题“无灵证道 第43季”返回第 43 季。真实文本与分集数据回放到追剧更新、自动续播和重启恢复后通过；未请求站源图片。
+- 实际签名搜索确认《谁说没灵根不能修仙的？之无灵证道第42季》与《谁说没灵根不能修仙的？之无灵证道43季》简介一致。完整长标题搜索可能漏掉后续季，副标题“无灵证道 第43季”返回第 43 季。真实文本与分集数据回放到追剧更新、自动续播和重启恢复后通过；未请求站源图片。
 - 各平台弹幕基础移动速度提高 15%，保持用户速度档位和播放倍速独立。电视端的实时弹幕不再因播放进度漂移校正反复重启动画，缓存未变化的弹幕索引，减少重复分配；暂停、跳转和换集仍按状态同步。真实电视流畅度待实机验收。
+
+验证与发布：Android / Windows 默认 Flutter 回归 742 项通过、5 项跳过，全站源 743 项通过、4 项跳过；Python 86 项运行、19 项按环境跳过，静态检查无错误和警告，两种 Go race 通过。真实第 42 / 43 季签名搜索、详情核对和本地入口回放通过；新增副标题第二页恢复、同名异剧过滤、重启追剧提示和电视进度漂移动画回归。Mac 741 项通过、6 项跳过，Apple 芯片 / Intel 各三次原生媒体验证通过。APK 原签名、Windows 更新回滚与两端公网下载校验通过；Mac 通用包公网 SHA-256 通过。自动化结果不等同实体手机、电视或消费级电脑的长期播放验收；Mac 仍为 ad-hoc 签名，未公证。
+
+下载：[Android 64 位 APK](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.34-59/HongguoTV-0.1.34-arm64-v8a.apk) · [Android 32 位 APK](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.34-59/HongguoTV-0.1.34-armeabi-v7a.apk) · [Windows x64](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.34-59/HongguoTV-0.1.34-windows-x64.zip) · [Mac 通用包](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/macos-v0.1.34-59/HongguoTV-0.1.34-macos-universal.zip)。
+
+运行源码 `d8178b996953eb000381e1e42ef4c93610dc96cf`；Android / Windows 发布提交 `03245b6c814da9201a011ec8ddbc85f5139a1cab` 仅增加发布门禁。[Android CI](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/40646438022)、[Windows CI](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/40646438055)、[Mac 构建与双架构验证](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/40646317995)、[Mac 发布校验](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/40647710494) 均通过。Android 为 Latest；Windows / Mac 使用独立发布标签，既有资产保持。
 
 ## macOS 正式版：0.1.33+58（已发布）
 
