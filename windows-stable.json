@@ -1,17 +1,17 @@
 {
   "schema": 1,
   "release": {
-    "tag_name": "windows-v0.1.29-54",
+    "tag_name": "windows-v0.1.30-55",
     "draft": false,
     "prerelease": false,
-    "body": "0.1.29+54\n\n- 修复红果播放和下载取流，采用 Xanerix/guoapp 的单集接口、播放器签名和注册设备恢复逻辑。\n- 首页直达四类红果榜单，海报 / 列表切换、排名与热度展示、紧凑导航和常驻搜索。\n- 播放器清晰度、倍速改为锚定菜单，自动显示实际分辨率；保留下一集预载、拖动恢复与下载低优先级取址。\n- 沿用 Windows 更新通道、单实例和更新回滚；x64 完整 ZIP 仍未签名。\n\n已验证目标剧真实取流、音视频解码及完整下载后离线解码；真实 Windows 设备的长时间播放、音频输出与旧版原地升级仍未实测。构建、启动、更新下载及完整性结果见本次 Release 附件。\n\n构建及静态回归、Windows 完整包与合成媒体启动验证已通过。Windows 10 / 11 x64 版本仍未签名；目标剧云端取流、解码与完整下载离线解码已通过；实体 Windows 长时间连播、用户旧版原地替换和消费级 GPU / 音频设备仍未实测。\n\n源码提交：https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/commit/fc0b54ce049c78dadb5eca4937b7b23cec02e762\n\nCI：https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/40485975583\n\n校验：SHA256SUMS.txt。",
+    "body": "0.1.30+55\n\n- 红果空响应在当前播放页进行最多三轮自动恢复，显示重试进度，统一取址时限并支持取消。\n- 数字季数、近似剧名及简介同人物匹配统一用于追剧和自动续播；修复追剧持久化索引与搜索失败恢复。\n- 下载视频可加载原集弹幕，弹幕失败不影响本地播放；手机横屏选集面板收窄，站源检测增加有界自动重试。\n- Windows x64 完整 ZIP 仍未签名。\n\n自动化和两端包校验结果见 Release 附件；用户设备间歇性空响应与长时间播放仍未实测，不承诺消除上游空响应。\n\n构建及静态回归、Windows 完整包与合成媒体启动验证已通过。Windows 10 / 11 x64 版本仍未签名；目标剧云端取流、解码与完整下载离线解码已通过；实体 Windows 长时间连播、用户旧版原地替换和消费级 GPU / 音频设备仍未实测。\n\n源码提交：https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/commit/259190d77185051386bf8edc2c32f6f270260e9b\n\nCI：https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/40614984633\n\n校验：SHA256SUMS.txt。",
     "assets": [
       {
-        "name": "HongguoTV-0.1.29-windows-x64.zip",
-        "size": 101083202,
-        "digest": "sha256:1f728b3d199e25e5ce3c1068cfee1c648629153e25270bbcc879827f0f19afac",
+        "name": "HongguoTV-0.1.30-windows-x64.zip",
+        "size": 101094225,
+        "digest": "sha256:dd8efc3385aa4dabc95104496e0c53242042de0da71115b71d8b9ef66a74bb28",
         "state": "uploaded",
-        "browser_download_url": "https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.29-54/HongguoTV-0.1.29-windows-x64.zip"
+        "browser_download_url": "https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.30-55/HongguoTV-0.1.30-windows-x64.zip"
       }
     ]
   }
