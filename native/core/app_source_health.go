@@ -55,6 +55,9 @@ func (engine *nativeEngine) checkSource(ctx context.Context, source string, sele
 	report := nativeSourceHealth{CheckedAt: time.Now(), State: "checking", Steps: []nativeHealthStep{}}
 	trace := &sourceResponseTrace{}
 	ctx = context.WithValue(ctx, sourceTraceKey{}, trace)
+	if source == sourceHongguo {
+		ctx = context.WithValue(ctx, libraryHealthKey{}, true)
+	}
 	publish := func() {
 		copy := report
 		copy.Steps = append([]nativeHealthStep{}, report.Steps...)
@@ -72,7 +75,7 @@ func (engine *nativeEngine) checkSource(ctx context.Context, source string, sele
 		}
 		publish()
 	}()
-	run := func(name string, action func() (string, error)) bool {
+	run := func(name string, action func(context.Context) (string, error)) bool {
 		engine.changeSourceRecord(source, func(record *nativeSourceRecord) {
 			record.Stage, record.Completed = name, len(report.Steps)
 			record.Total = 1
@@ -87,7 +90,17 @@ func (engine *nativeEngine) checkSource(ctx context.Context, source string, sele
 		trace.last = nativeHealthStep{}
 		trace.mu.Unlock()
 		start := time.Now()
-		message, err := action()
+		var message string
+		var err error
+		if source == sourceHongguo {
+			message, err = retryHongguoHealthStep(ctx, func(round int) {
+				engine.changeSourceRecord(source, func(record *nativeSourceRecord) {
+					record.Stage = fmt.Sprintf("%s · 正在重试（%d/3）", name, round)
+				})
+			}, action)
+		} else {
+			message, err = action(ctx)
+		}
 		trace.mu.Lock()
 		step := trace.last
 		trace.mu.Unlock()
@@ -105,11 +118,14 @@ func (engine *nativeEngine) checkSource(ctx context.Context, source string, sele
 		return err == nil
 	}
 	var page nativeCatalogResult
-	if !run("入口与目录", func() (string, error) {
+	if !run("入口与目录", func(stage context.Context) (string, error) {
 		var err error
-		page, err = engine.nativeCatalog(ctx, nativeInput{Source: source, Page: 1, Force: true})
+		page, err = engine.nativeCatalog(stage, nativeInput{Source: source, Page: 1, Force: true})
 		if err == nil && page.Warning != "" {
-			err = errors.New(page.Warning)
+			err = page.warningCause
+			if err == nil {
+				err = errors.New(page.Warning)
+			}
 		}
 		if err == nil && len(page.Items) == 0 {
 			err = errors.New("入口可达，但没有解析到有效剧集")
@@ -130,8 +146,8 @@ func (engine *nativeEngine) checkSource(ctx context.Context, source string, sele
 	}
 	report.Sample = drama.Title
 	if source == sourceHongguo {
-		if !run("App 签名搜索", func() (string, error) {
-			entry, err := engine.downloader.fetchHongguoAppSearch(ctx, drama.Title, 1)
+		if !run("App 签名搜索", func(stage context.Context) (string, error) {
+			entry, err := engine.downloader.fetchHongguoAppSearch(stage, drama.Title, 1)
 			if err == nil && len(entry.Dramas) == 0 {
 				err = errors.New("签名搜索可达，但未返回有效剧集")
 			}
@@ -141,9 +157,9 @@ func (engine *nativeEngine) checkSource(ctx context.Context, source string, sele
 		}
 	}
 	var chapter Chapter
-	if !run("分集目录", func() (string, error) {
+	if !run("分集目录", func(stage context.Context) (string, error) {
 		_, id, _ := splitProviderDramaID(drama.ID)
-		_, chapters, err := engine.downloader.GetHuangguoChapters(ctx, source, id)
+		_, chapters, err := engine.downloader.GetHuangguoChapters(stage, source, id)
 		if err != nil {
 			return "", err
 		}
@@ -159,19 +175,19 @@ func (engine *nativeEngine) checkSource(ctx context.Context, source string, sele
 	}
 	var media providerMedia
 	var keyURL, segmentURL string
-	if !run("播放地址与播放列表", func() (string, error) {
+	if !run("播放地址与播放列表", func(stage context.Context) (string, error) {
 		var err error
-		media, err = engine.downloader.resolveProviderMedia(ctx, Task{DramaID: drama.ID, Chapter: chapter, Index: 1})
+		media, err = engine.downloader.resolveProviderMedia(stage, Task{DramaID: drama.ID, Chapter: chapter, Index: 1})
 		if err != nil {
 			return "", err
 		}
 		ctx = providerMediaContext(ctx, media.credentials)
-		keyURL, segmentURL, err = engine.downloader.sourceProbeResources(ctx, media)
+		keyURL, segmentURL, err = engine.downloader.sourceProbeResources(providerMediaContext(stage, media.credentials), media)
 		return "已取得可识别的播放地址", err
 	}) {
 		return failure
 	}
-	if !run("播放密钥", func() (string, error) {
+	if !run("播放密钥", func(stage context.Context) (string, error) {
 		if len(media.CENCKey) == 16 || len(media.HLSKey) == 16 {
 			return "密钥长度有效", nil
 		}
@@ -186,7 +202,7 @@ func (engine *nativeEngine) checkSource(ctx context.Context, source string, sele
 			}
 			return "内嵌密钥有效", nil
 		}
-		body, err := engine.downloader.sourceProbeBytes(ctx, keyURL, media.Referer, true)
+		body, err := engine.downloader.sourceProbeBytes(stage, keyURL, media.Referer, true)
 		if err == nil && len(body) != 16 {
 			err = errors.New("返回的播放密钥不是 16 字节")
 		}
@@ -194,8 +210,8 @@ func (engine *nativeEngine) checkSource(ctx context.Context, source string, sele
 	}) {
 		return failure
 	}
-	run("媒体连接", func() (string, error) {
-		body, err := engine.downloader.sourceProbeBytes(ctx, segmentURL, media.Referer, false)
+	run("媒体连接", func(stage context.Context) (string, error) {
+		body, err := engine.downloader.sourceProbeBytes(stage, segmentURL, media.Referer, false)
 		if err == nil && len(body) == 0 {
 			err = errors.New("媒体服务器返回空内容")
 		}
@@ -289,4 +305,35 @@ func (d *Downloader) sourceProbeBytes(ctx context.Context, address, referer stri
 		return nil, errors.New("媒体接口返回了网页或错误信息")
 	}
 	return io.ReadAll(io.LimitReader(response.Body, limit))
+}
+
+func retryHongguoHealthStep(ctx context.Context, onRetry func(int), action func(context.Context) (string, error)) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 65*time.Second)
+	defer cancel()
+	var last error
+	for round := 0; round < 3; round++ {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
+		if round > 0 {
+			onRetry(round + 1)
+			timer := time.NewTimer(time.Duration(round) * 2 * time.Second)
+			select {
+			case <-timer.C:
+			case <-ctx.Done():
+				timer.Stop()
+				return "", ctx.Err()
+			}
+		}
+		message, err := action(ctx)
+		if err == nil {
+			return message, ctx.Err()
+		}
+		last = err
+		var blocked *requestBackoff
+		if ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.As(err, &blocked) || !errors.Is(err, errHongguoEmptyResponse) {
+			return "", err
+		}
+	}
+	return "", last
 }

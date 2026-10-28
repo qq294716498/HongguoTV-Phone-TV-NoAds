@@ -229,7 +229,7 @@ void main() {
   );
 
   test(
-    'local playback and unsupported sessions make no danmaku requests',
+    'local media without source identity and unsupported sessions skip danmaku',
     () async {
       final repository = DanmakuFixtureRepository();
       final controller = DanmakuController(repository);
@@ -239,7 +239,6 @@ void main() {
           url: 'file:///synthetic.mp4',
           local: true,
           session: 'local',
-          danmakuId: '1001',
         ),
         const PlaybackPlan(
           url: 'https://media.example.test/other.mp4',

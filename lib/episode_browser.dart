@@ -17,12 +17,14 @@ class EpisodeRangeBar extends StatelessWidget {
     required this.onLocate,
     this.currentNumber,
     this.title = '选集',
+    this.compact = false,
   });
   final List<Episode> episodes;
   final int page;
   final ValueChanged<int> onLocate;
   final int? currentNumber;
   final String title;
+  final bool compact;
 
   Future<void> _jump(BuildContext context) async {
     var value = '';
@@ -80,13 +82,22 @@ class EpisodeRangeBar extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(
-                child: Text(
-                  '$title · ${episodes.length} 集',
-                  style: Theme.of(context).textTheme.titleMedium,
+              if (compact)
+                const Spacer()
+              else
+                Expanded(
+                  child: Text(
+                    '$title · ${episodes.length} 集',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
                 ),
-              ),
-              if (current >= 0)
+              if (current >= 0 && compact)
+                IconButton(
+                  tooltip: '定位当前',
+                  onPressed: () => onLocate(current),
+                  icon: const Icon(Icons.my_location_rounded),
+                ),
+              if (current >= 0 && !compact)
                 TextButton(
                   onPressed: () => onLocate(current),
                   child: const Text('定位当前'),
@@ -178,6 +189,7 @@ class EpisodeBrowser extends StatefulWidget {
     this.compact = false,
     this.preserveScrollOnResize = false,
     this.denseDesktop = false,
+    this.compactHeader = false,
   });
   final List<Episode> episodes;
   final ValueChanged<int> onSelected;
@@ -188,6 +200,7 @@ class EpisodeBrowser extends StatefulWidget {
   final bool compact;
   final bool preserveScrollOnResize;
   final bool denseDesktop;
+  final bool compactHeader;
   @override
   State<EpisodeBrowser> createState() => _EpisodeBrowserState();
 }
@@ -240,6 +253,7 @@ class _EpisodeBrowserState extends State<EpisodeBrowser> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         EpisodeRangeBar(
+          compact: widget.compactHeader,
           episodes: widget.episodes,
           page: _page,
           title: widget.title,

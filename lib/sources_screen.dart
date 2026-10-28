@@ -265,7 +265,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
                 key: const ValueKey('hongguo-signature-status'),
                 tilePadding: EdgeInsets.zero,
                 title: Text(
-                  'PureSign · ${status!.signature!.registered ? '统一设备已注册' : '等待设备注册'}',
+                  '红果签名 · ${status!.signature!.registered ? '统一设备已注册' : '等待设备注册'}',
                 ),
                 subtitle: Text(
                   status.signature!.lastResult.isEmpty
@@ -281,7 +281,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
                   ),
                   Text('最近成功：${sourceTimestamp(status.signature!.successAt)}'),
                   const Text(
-                    '播放和下载复用已注册设备，使用 7.3.5.32 播放器签名；空响应时才尝试重新注册，最多恢复 3 次。搜索继续复用注册身份和短时签名。',
+                    '目录、分集、播放和下载复用已注册设备，使用 7.3.5.32 签名；空响应时才尝试重新注册，最多恢复 3 次。搜索继续复用注册身份和短时签名。',
                   ),
                 ],
               ),

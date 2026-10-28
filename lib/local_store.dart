@@ -38,6 +38,7 @@ class LocalStore extends ChangeNotifier {
   final Map<String, FollowState> _followStates = {};
   final Map<String, Drama> _seriesCandidates = {};
   final _seriesIndex = <String, List<Drama>>{};
+  final _seriesCharacterIndex = <String, List<Drama>>{};
   final _seriesEntriesCache =
       <(String, String, String), List<HongguoSeriesEntry>>{};
   final _seriesWatchCache = <(String, String, String), WatchEntry?>{};
@@ -125,6 +126,7 @@ class LocalStore extends ChangeNotifier {
   void _invalidateSeries() {
     _seriesIndexReady = false;
     _seriesIndex.clear();
+    _seriesCharacterIndex.clear();
     _favoriteRanks.clear();
     _seriesEntriesCache.clear();
     _seriesWatchCache.clear();
@@ -391,6 +393,9 @@ class LocalStore extends ChangeNotifier {
     for (final drama in items.values) {
       if (drama.source == SourceSite.hongguo.id && allowsSource(drama.source)) {
         (_seriesIndex[_seriesKey(drama)] ??= []).add(drama);
+        for (final name in hongguoSeriesCharacters(drama.description)) {
+          (_seriesCharacterIndex[name] ??= []).add(drama);
+        }
       }
     }
     _seriesIndexReady = true;
@@ -402,7 +407,13 @@ class LocalStore extends ChangeNotifier {
       return const [];
     }
     _ensureSeriesIndex();
-    final candidates = _seriesIndex[_seriesKey(anchor)] ?? const <Drama>[];
+    final candidates = <String, Drama>{
+      for (final drama in _seriesIndex[_seriesKey(anchor)] ?? const <Drama>[])
+        drama.id: drama,
+      for (final name in hongguoSeriesCharacters(anchor.description))
+        for (final drama in _seriesCharacterIndex[name] ?? const <Drama>[])
+          if (hongguoSameSeries(anchor, drama)) drama.id: drama,
+    }.values;
     final current = candidates
         .where((drama) => drama.id == anchor.id)
         .firstOrNull;

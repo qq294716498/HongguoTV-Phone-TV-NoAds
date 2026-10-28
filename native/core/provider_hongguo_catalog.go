@@ -24,6 +24,8 @@ var hongguoAppGenres = []struct {
 
 type libraryMoreKey struct{}
 
+type libraryHealthKey struct{}
+
 type libraryUpdateKey struct{}
 
 type libraryKnownKey struct{}
@@ -64,6 +66,9 @@ func (downloader *Downloader) fetchHongguoAppCatalogCategory(ctx context.Context
 	}
 	if pageLimit > 200 {
 		pageLimit = 200
+	}
+	if health, _ := ctx.Value(libraryHealthKey{}).(bool); health {
+		pageLimit = 1
 	}
 	headLimit := min(pageLimit, 3)
 	roundLimit := pageLimit

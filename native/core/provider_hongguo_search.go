@@ -168,6 +168,11 @@ func (downloader *Downloader) fetchHongguoSearch(ctx context.Context, keyword st
 	}
 	if page > 1 {
 		if appErr != nil {
+			if len(entry.Dramas) > 0 {
+				entry.Limited = true
+				entry.Warning = "App 搜索部分分类未完成，已保留本页结果，可重试或定向搜索下一季"
+				return entry, nil
+			}
 			return entry, appErr
 		}
 		return entry, nil

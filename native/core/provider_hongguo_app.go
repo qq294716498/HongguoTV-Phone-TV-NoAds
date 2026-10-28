@@ -150,6 +150,7 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 	base := client.baseURL
 	client.mu.Unlock()
 	singlePlayback := method == http.MethodPost && path == hongguoSingleVideoModelPath
+	registeredProtocol := singlePlayback || path == "/reading/distribution/category/landpage/v/" || path == "/novel/player/video_detail/v1/"
 	playbackModel := method == http.MethodPost && path == hongguoVideoModelPath
 	if playbackModel {
 		ctx = context.WithValue(ctx, hongguoPlaybackTransportKey{}, true)
@@ -205,13 +206,13 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 	retryDelay := time.Second
 	for attempt := 0; attempt < attempts; attempt++ {
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			return nil, errors.Join(lastErr, err)
 		}
-		if attempt > 0 {
+		if attempt > 0 || rotations > 0 {
 			select {
 			case <-time.After(retryDelay):
 			case <-ctx.Done():
-				return nil, ctx.Err()
+				return nil, errors.Join(lastErr, ctx.Err())
 			}
 		}
 		retryDelay = time.Duration(attempt+1) * time.Second
@@ -241,7 +242,7 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 			request.Header.Set("Passport-Sdk-Version", "50561")
 			request.Header.Set("X-Vc-Bdturing-Sdk-Version", "3.7.2.cn")
 		}
-		if identity.Cookie != "" && !singlePlayback {
+		if identity.Cookie != "" && !registeredProtocol {
 			request.Header.Set("Cookie", identity.Cookie)
 		}
 		comment, _ := ctx.Value(hongguoCommentKey{}).(bool)
@@ -272,7 +273,7 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 				client.preparePlaybackSignature(prepared, body, now, playbackIdentities)
 			} else if comment {
 				signHongguoCommentRequest(prepared, commentNonce, now)
-			} else if singlePlayback {
+			} else if registeredProtocol {
 				signHongguoPlayerRequest(prepared, body, now)
 				client.signatureMu.Lock()
 				client.signatureStatus.Generated++
@@ -295,7 +296,7 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 		content, readErr := io.ReadAll(io.LimitReader(response.Body, providerMaxBodyBytes+1))
 		response.Body.Close()
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			return nil, errors.Join(lastErr, err)
 		}
 		if readErr != nil {
 			lastErr = readErr
@@ -319,6 +320,9 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 				Attempt: attempt + 1, Message: "App 接口返回空响应：" + request.URL.Path,
 			})
 			lastErr = fmt.Errorf("%w（HTTP %d，正文 0 字节）；未收到明确的登录错误", errHongguoEmptyResponse, response.StatusCode)
+			if response.Header.Get("Retry-After") != "" {
+				return nil, fmt.Errorf("红果 App 接口返回空响应（HTTP %d，正文 0 字节）；上游要求稍后重试", response.StatusCode)
+			}
 			if singlePlayback && rotations < 3 && response.Header.Get("Retry-After") == "" {
 				rotations++
 				if renewed, renewErr := downloader.ensureHongguoDeviceIdentity(ctx, identity.DeviceID); renewErr == nil {

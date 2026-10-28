@@ -20,6 +20,20 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'fixtures.dart';
 import 'player_fixtures.dart';
 
+class EmptyRecoveringRouteRepository extends RouteRepository {
+  int attempts = 0;
+  @override
+  Future<PlaybackPlan> resolve(
+    Drama drama,
+    Episode episode, {
+    int quality = 0,
+  }) async {
+    if (++attempts < 3)
+      throw AppFailure('HTTP 200 empty', code: 'hongguo_empty_response');
+    return super.resolve(drama, episode, quality: quality);
+  }
+}
+
 class PreloadingRouteRepository extends RouteRepository {
   final preloadedEpisodes = <int>[];
 
@@ -565,13 +579,33 @@ void main() {
   });
 
   testWidgets(
+    'empty responses recover in the same player without showing an error page',
+    (tester) async {
+      final repository = EmptyRecoveringRouteRepository();
+      final player = ScriptedPlayer();
+      await mount(tester, repository, player);
+      expect(find.text('片源暂未响应，正在重试（2/3）'), findsOneWidget);
+      expect(find.text('暂时无法播放'), findsNothing);
+      await tester.pump(const Duration(seconds: 2));
+      await settleOperations(tester);
+      expect(find.text('片源暂未响应，正在重试（3/3）'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 4));
+      await settleOperations(tester);
+      expect(repository.attempts, 3);
+      expect(player.state.playing, isTrue);
+      expect(find.text('暂时无法播放'), findsNothing);
+      await unmount(tester, player);
+    },
+  );
+
+  testWidgets(
     'a background pending open keeps its deadline and cannot resume late',
     (tester) async {
       final repository = RouteRepository();
       final player = DeferredOpenPlayer();
       await mount(tester, repository, player);
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
-      await tester.pump(const Duration(seconds: 46));
+      await tester.pump(const Duration(seconds: 76));
       await settleOperations(tester);
       expect(find.text('暂时无法播放'), findsOneWidget);
       player.opening.complete();
@@ -618,7 +652,7 @@ void main() {
       final repository = RouteRepository();
       final player = DeferredOpenPlayer();
       await mount(tester, repository, player);
-      await tester.pump(const Duration(seconds: 46));
+      await tester.pump(const Duration(seconds: 76));
       await settleOperations(tester);
       expect(find.text('暂时无法播放'), findsOneWidget);
       expect(find.text('重试播放'), findsOneWidget);

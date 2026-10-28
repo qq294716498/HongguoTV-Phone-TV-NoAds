@@ -347,7 +347,7 @@ void main() {
       expect(updates.failed, 1);
       repository.failingPage = null;
       await updates.refresh();
-      expect(repository.catalogCalls, hasLength(7));
+      expect(repository.catalogCalls, hasLength(9));
     },
   );
 

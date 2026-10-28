@@ -4,6 +4,7 @@ import 'catalog_sort.dart';
 import 'core_bridge.dart';
 import 'hongguo_series.dart';
 import 'models.dart';
+import 'series_catalog.dart';
 
 class NextSeasonResolver {
   const NextSeasonResolver(this.repository);
@@ -40,20 +41,49 @@ class NextSeasonResolver {
     final candidates = <String, Drama>{
       for (final drama in knownDramas) drama.id: drama,
     };
-    var matches = _matches(anchor, candidates.values);
-    if (matches.isEmpty) {
-      for (var page = 1; page <= 5; page++) {
+    Object? searchFailure;
+    var receivedResults = false;
+    Future<CatalogPage?> search(String text, int page) async {
+      try {
         final result = await bounded(
           () => repository.catalog(
             anchor.source,
-            query: query,
+            query: text,
             page: page,
             force: page == 1,
           ),
         );
+        receivedResults = true;
+        return result;
+      } catch (failure) {
+        checkCurrent();
+        if (failure is AppFailure && failure.code == 'source_blocked') rethrow;
+        searchFailure = failure;
+        return null;
+      }
+    }
+
+    final hydrated = <String>{};
+    Future<void> hydrate() async {
+      anchor = await hydrateHongguoNextSeason(
+        anchor,
+        candidates,
+        hydrated,
+        (drama) => bounded(() => repository.detail(drama)),
+      );
+      checkCurrent();
+    }
+
+    await hydrate();
+    var matches = _matches(anchor, candidates.values);
+    if (matches.isEmpty) {
+      for (var page = 1; page <= 5; page++) {
+        final result = await search(query, page);
+        if (result == null) break;
         for (final drama in result.items) {
           candidates[drama.id] = drama;
         }
+        await hydrate();
         if (_matches(anchor, candidates.values).isNotEmpty || !result.hasMore) {
           break;
         }
@@ -62,17 +92,20 @@ class NextSeasonResolver {
     }
     if (matches.isEmpty) {
       for (final targeted in hongguoNextSeasonQueries(anchor)) {
-        final result = await bounded(
-          () => repository.catalog(anchor.source, query: targeted, force: true),
-        );
+        final result = await search(targeted, 1);
+        if (result == null) continue;
         for (final drama in result.items) {
           candidates[drama.id] = drama;
         }
+        await hydrate();
         matches = _matches(anchor, candidates.values);
         if (matches.isNotEmpty) break;
       }
     }
-    if (matches.isEmpty) return null;
+    if (matches.isEmpty) {
+      if (!receivedResults && searchFailure != null) throw searchFailure!;
+      return null;
+    }
     if (matches.length != 1) {
       final narrowed = _disambiguate(anchor, matches);
       if (narrowed == null) {
@@ -105,14 +138,13 @@ class NextSeasonResolver {
 
   List<Drama> _matches(Drama anchor, Iterable<Drama> candidates) {
     final current = hongguoSeriesInfo(anchor);
-    final key = current?.key ?? normalizedSearchText(anchor.title);
     final next = (current?.season ?? 1) + 1;
     final matches = <String, Drama>{};
     for (final drama in candidates) {
       if (drama.id == anchor.id || drama.source != anchor.source) continue;
       final info = hongguoSeriesInfo(drama);
       if (info == null ||
-          info.key != key ||
+          !hongguoSameSeries(anchor, drama) ||
           info.season != next ||
           (current != null && info.unit != current.unit)) {
         continue;

@@ -8,6 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestHongguoSingleEpisodeRecoversAndKeepsRegisteredIdentity(t *testing.T) {
@@ -85,6 +86,62 @@ func TestHongguoSingleEpisodeRotationBoundedAndRestrictionsStop(t *testing.T) {
 				}
 			} else if registrations != 0 || requests != 1 {
 				t.Fatal("restriction retried", registrations, requests)
+			}
+		})
+	}
+}
+
+func TestHongguoRotationBackoffPreservesEmptyResponseOnDeadline(t *testing.T) {
+	requests := 0
+	d := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
+		if r.URL.Path == "/service/2/device_register/" {
+			return sourceFixtureResponse(r, 200, `{"device_id":"3456789012345678","install_id":"4567890123456789"}`), nil
+		}
+		requests++
+		return sourceFixtureResponse(r, 200, ""), nil
+	})
+	searchFixtureIdentity(d)
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+	_, err := d.resolveHongguoRegisteredMedia(ctx, "9001")
+	if !errors.Is(err, errHongguoEmptyResponse) || !errors.Is(err, context.DeadlineExceeded) || requests != 1 {
+		t.Fatalf("empty response or rotation backoff lost: requests=%d err=%v", requests, err)
+	}
+}
+
+func TestHongguoRetryAfterEmptyIsNotEligibleForPlayerRecovery(t *testing.T) {
+	d := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
+		response := sourceFixtureResponse(r, 200, "")
+		response.Header.Set("Retry-After", "120")
+		return response, nil
+	})
+	searchFixtureIdentity(d)
+	_, err := d.resolveHongguoRegisteredMedia(context.Background(), "9001")
+	if err == nil || errors.Is(err, errHongguoEmptyResponse) {
+		t.Fatalf("upstream retry instruction marked auto-retryable: %v", err)
+	}
+}
+
+func TestHongguoCatalogAndDetailUseReferenceSignatureProfile(t *testing.T) {
+	for _, path := range []string{"/reading/distribution/category/landpage/v/", "/novel/player/video_detail/v1/"} {
+		t.Run(path, func(t *testing.T) {
+			d := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
+				if r.Header.Get("Cookie") != "" || r.Header.Get("X-Medusa") != "" || r.Header.Get("X-Helios") != "" {
+					t.Fatal("mixed legacy and reference request profiles")
+				}
+				for _, name := range []string{"X-Gorgon", "X-Argus", "X-Ladon", "X-Khronos", "X-SS-STUB"} {
+					if r.Header.Get(name) == "" {
+						t.Fatal("missing reference signature", name)
+					}
+				}
+				if r.URL.Query().Get("device_id") != "1234567890123456" {
+					t.Fatal("registered device changed")
+				}
+				return sourceFixtureResponse(r, 200, `{"code":0}`), nil
+			})
+			searchFixtureIdentity(d)
+			if _, err := d.hongguoAppRequest(context.Background(), http.MethodPost, path, nil, map[string]any{}); err != nil {
+				t.Fatal(err)
 			}
 		})
 	}

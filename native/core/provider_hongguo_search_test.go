@@ -283,3 +283,26 @@ func TestHongguoSearchRetriesBusyCodeWithoutChangingDevice(t *testing.T) {
 		t.Fatalf("busy retry failed: %v", err)
 	}
 }
+
+func TestHongguoPartialSecondPageRetainsSuccessfulTab(t *testing.T) {
+	d := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
+		if r.URL.Path != hongguoSearchAppPath {
+			t.Fatalf("unexpected webpage fallback: %s", r.URL.Path)
+		}
+		if r.URL.Query().Get("offset") == "0" {
+			return searchFixtureTab(r, true, 20, "page-one", `[{"video_data":[{"series_id":"12345","title":"合成故事第一季"}]}]`), nil
+		}
+		if r.URL.Query().Get("tab_type") == "11" {
+			return sourceFixtureResponse(r, 200, `{"code":1001}`), nil
+		}
+		return searchFixtureTab(r, false, 21, "", `[{"video_data":[{"series_id":"12346","title":"合成故事第二季"}]}]`), nil
+	})
+	searchFixtureIdentity(d)
+	if _, err := d.searchHongguoDramasPage(context.Background(), "合成故事", 1); err != nil {
+		t.Fatal(err)
+	}
+	result, err := d.searchHongguoDramasPage(context.Background(), "合成故事", 2)
+	if err != nil || len(result.Dramas) != 1 || result.Dramas[0].SourceID != "12346" || !result.Limited || result.Warning == "" {
+		t.Fatalf("partial next season lost: %+v %v", result, err)
+	}
+}

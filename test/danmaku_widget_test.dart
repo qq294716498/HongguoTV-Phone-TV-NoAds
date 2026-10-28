@@ -452,17 +452,31 @@ void main() {
     },
   );
 
-  testWidgets('local playback skips danmaku even when the switch is on', (
+  testWidgets('downloaded video keeps playing when optional danmaku fails', (
+    tester,
+  ) async {
+    final repository = DanmakuFixtureRepository()
+      ..local = true
+      ..failDanmaku = true;
+    final player = ScriptedPlayer();
+    await mount(tester, repository, player);
+    expect(repository.danmakuCalls, isNotEmpty);
+    expect(player.state.playing, isTrue);
+    expect(find.text('暂时无法播放'), findsNothing);
+    await unmount(tester, player);
+  });
+
+  testWidgets('downloaded playback loads source danmaku and can disable it', (
     tester,
   ) async {
     final repository = DanmakuFixtureRepository()..local = true;
     final player = ScriptedPlayer();
     final store = await mount(tester, repository, player);
-    expect(repository.danmakuCalls, isEmpty);
+    expect(repository.danmakuCalls, isNotEmpty);
     await tester.tap(find.byKey(const ValueKey('player-danmaku-toggle')));
     await settle(tester);
     expect(store.playbackPreferences.danmaku, isFalse);
-    expect(repository.danmakuCalls, isEmpty);
+    expect(find.text('合成弹幕 1001'), findsNothing);
     await unmount(tester, player);
   });
 

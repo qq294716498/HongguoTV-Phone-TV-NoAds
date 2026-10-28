@@ -87,6 +87,17 @@ class _PlayerMenuState extends State<PlayerMenu> {
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
     final landscape = size.width > size.height;
+    final compactEpisodes =
+        widget.mobile &&
+        landscape &&
+        widget.section == PlayerMenuSection.episodes;
+    final availableWidth =
+        size.width - MediaQuery.paddingOf(context).horizontal;
+    final panelWidth = compactEpisodes
+        ? (availableWidth * .34).clamp(240.0, 320.0)
+        : landscape
+        ? math.min(440.0, size.width * .6)
+        : 600.0;
     final colors = Theme.of(context).colorScheme;
     final title = switch (widget.section) {
       PlayerMenuSection.episodes => '选集 · 共 ${widget.episodes.length} 集',
@@ -98,10 +109,19 @@ class _PlayerMenuState extends State<PlayerMenu> {
     return Dialog(
       key: const ValueKey('player-menu'),
       alignment: landscape ? Alignment.centerRight : Alignment.bottomCenter,
-      insetPadding: const EdgeInsets.all(12),
+      insetPadding: compactEpisodes
+          ? EdgeInsets.fromLTRB(
+              6 + MediaQuery.paddingOf(context).left,
+              6,
+              6 + MediaQuery.paddingOf(context).right,
+              6,
+            )
+          : const EdgeInsets.all(12),
+      constraints: compactEpisodes ? const BoxConstraints(minWidth: 0) : null,
       backgroundColor: colors.surface,
       child: SizedBox(
-        width: landscape ? math.min(440, size.width * .6) : 600,
+        key: const ValueKey('player-menu-panel'),
+        width: panelWidth,
         height: landscape ? size.height : size.height * .72,
         child: Column(
           children: [
@@ -152,6 +172,7 @@ class _PlayerMenuState extends State<PlayerMenu> {
                       episodes: widget.episodes,
                       currentIndex: widget.currentIndex,
                       keyPrefix: 'menu-episode',
+                      dense: compactEpisodes,
                       onSelected: widget.onEpisode,
                     )
                   : SingleChildScrollView(
@@ -421,6 +442,7 @@ class PlayerEpisodeGrid extends StatelessWidget {
     required this.onSelected,
     this.keyPrefix = 'play-episode',
     this.compact = false,
+    this.dense = false,
     this.title = '选集',
     this.preserveScrollOnResize = false,
   });
@@ -429,6 +451,7 @@ class PlayerEpisodeGrid extends StatelessWidget {
   final ValueChanged<int> onSelected;
   final String keyPrefix;
   final bool compact;
+  final bool dense;
   final String title;
   final bool preserveScrollOnResize;
   @override
@@ -440,10 +463,12 @@ class PlayerEpisodeGrid extends StatelessWidget {
     onSelected: onSelected,
     keyPrefix: keyPrefix,
     compact: compact,
+    compactHeader: dense,
     title: title,
     preserveScrollOnResize: preserveScrollOnResize,
     denseDesktop:
-        defaultTargetPlatform == TargetPlatform.windows &&
-        !AppLayout.isTelevision(context),
+        dense ||
+        (defaultTargetPlatform == TargetPlatform.windows &&
+            !AppLayout.isTelevision(context)),
   );
 }

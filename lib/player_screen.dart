@@ -1697,7 +1697,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     attempt = PlaybackAttempt(
       deadline:
           detail.drama.source == SourceSite.hongguo.id && !widget.localOnly
-          ? previousDeadline ?? DateTime.now().add(const Duration(seconds: 45))
+          ? previousDeadline ?? DateTime.now().add(const Duration(seconds: 75))
           : null,
       onTimeout: () => _failAttempt(attempt, PlaybackAttempt.timeoutFailure),
     );
@@ -1877,6 +1877,14 @@ class _PlayerScreenState extends State<PlayerScreen>
                 quality: _requestedQuality,
                 localOnly: widget.localOnly,
                 online: _forceOnline,
+                onRetry: (round) {
+                  if (mounted && !_closed && ticket == _generation) {
+                    setState(() => _loadingMessage = '片源暂未响应，正在重试（$round/3）');
+                    DiaryService.add(
+                      '[Resolve] empty response recovery round=$round',
+                    );
+                  }
+                },
               ),
       );
       if (prepared == null) {

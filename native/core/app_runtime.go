@@ -122,17 +122,19 @@ type nativeInput struct {
 }
 
 type nativeCatalogResult struct {
-	Items       []nativeDrama `json:"items"`
-	HasMore     bool          `json:"hasMore"`
-	Page        int           `json:"page"`
-	Warning     string        `json:"warning,omitempty"`
-	LocalSearch bool          `json:"localSearch"`
-	Fresh       bool          `json:"fresh"`
-	hongguo     *hongguoCatalogState
-	saveError   error
+	warningCause error
+	Items        []nativeDrama `json:"items"`
+	HasMore      bool          `json:"hasMore"`
+	Page         int           `json:"page"`
+	Warning      string        `json:"warning,omitempty"`
+	LocalSearch  bool          `json:"localSearch"`
+	Fresh        bool          `json:"fresh"`
+	hongguo      *hongguoCatalogState
+	saveError    error
 }
 
 type nativePlan struct {
+	danmakuSeries   string
 	MediaType       string            `json:"mediaType,omitempty"`
 	StartupReady    bool              `json:"startupReady,omitempty"`
 	PreloadComplete bool              `json:"preloadComplete,omitempty"`
@@ -311,6 +313,9 @@ func NativeRequest(raw string) (result string) {
 	envelope := map[string]any{"ok": err == nil}
 	if err != nil {
 		envelope["error"] = publicError(err).Error()
+		if errors.Is(err, errHongguoEmptyResponse) {
+			envelope["code"] = "hongguo_empty_response"
+		}
 		if errors.Is(err, errNativeLocalFile) {
 			envelope["code"] = "local_media"
 		}
@@ -663,7 +668,11 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 		}
 		if len(items) == 0 && err != nil && ctx.Err() == nil && (category == "" || category == "short_play") {
 			var totalPages int
+			appErr := err
 			items, totalPages, err = d.fetchHongguoCategoryPage(ctx, "real-drama?page="+strconv.Itoa(page), "真人剧")
+			if err != nil {
+				err = errors.Join(appErr, err)
+			}
 			result.HasMore = page < totalPages
 		}
 	case sourceHuangdou:
@@ -715,6 +724,7 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 	}
 	if err != nil {
 		result.Warning = publicError(err).Error()
+		result.warningCause = err
 	}
 	seen := map[string]bool{}
 	for _, drama := range items {

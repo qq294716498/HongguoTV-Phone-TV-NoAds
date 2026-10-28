@@ -337,7 +337,7 @@ class NativeRepository extends AppRepository {
     required int durationMs,
   }) async {
     _authorize('hongguo');
-    if (plan.local || plan.session.isEmpty || plan.danmakuId.isEmpty) {
+    if (plan.session.isEmpty || plan.danmakuId.isEmpty) {
       throw AppFailure('本集暂不支持弹幕');
     }
     return DanmakuPage.fromJson(

@@ -43,12 +43,19 @@ func TestLiveHongguoPlaybackAndOfflineDownloads(t *testing.T) {
 	if selected := os.Getenv("HG_ACCEPTANCE_VIDEOS"); selected != "" {
 		videos = strings.Split(selected, ",")
 	}
+	series := os.Getenv("HG_ACCEPTANCE_SERIES")
+	if series == "" {
+		series = "7676383631534722073"
+	}
+	if !hongguoNumericID.MatchString(series) {
+		t.Fatal("invalid series ID")
+	}
 	for i, video := range videos {
 		t.Run(video, func(t *testing.T) {
 			if !hongguoNumericID.MatchString(video) {
 				t.Fatal("invalid video ID")
 			}
-			job := nativeDownloadJob{ID: fmt.Sprintf("acceptance-%d", i), Drama: nativeDrama{ID: "hongguo:7676383631534722073", Source: sourceHongguo}, Chapter: Chapter{Source: sourceHongguo, VideoURL: "hongguo-cenc://" + video}, Index: i + 1, Quality: 1080}
+			job := nativeDownloadJob{ID: fmt.Sprintf("acceptance-%d", i), Drama: nativeDrama{ID: "hongguo:" + series, Source: sourceHongguo}, Chapter: Chapter{Source: sourceHongguo, VideoURL: "hongguo-cenc://" + video}, Index: i + 1, Quality: 1080}
 			media, err := engine.downloads.resolveDownloadMedia(ctx, job)
 			if err != nil {
 				t.Fatal(err)

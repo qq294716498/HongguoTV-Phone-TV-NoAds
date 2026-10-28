@@ -106,6 +106,17 @@ func (engine *nativeEngine) nativeOpenPlayback(ctx context.Context, choice nativ
 			plan.Key = ""
 		}
 	}
+	return engine.nativeRememberPlayback(ctx, plan, choice)
+}
+
+func (engine *nativeEngine) nativeRememberPlayback(ctx context.Context, plan nativePlan, choice nativePlaybackChoice) (nativePlan, error) {
+	if plan.Session == "" {
+		tokenBytes := make([]byte, 24)
+		if _, err := rand.Read(tokenBytes); err != nil {
+			return nativePlan{}, errors.New("无法初始化播放会话")
+		}
+		plan.Session = hex.EncodeToString(tokenBytes)
+	}
 	choice.created = time.Now()
 	engine.mu.Lock()
 	if engine.playbacks == nil {
@@ -166,12 +177,20 @@ func (engine *nativeEngine) nativeReleasePlayback(session string) {
 }
 
 func (engine *nativeEngine) nativeLocalPlayerPlan(ctx context.Context, plan nativePlan) (nativePlan, error) {
-	if runtime.GOOS != "android" || !plan.Local || plan.Key == "" {
+	if !plan.Local || plan.URL == "" {
 		return plan, nil
 	}
-	key, err := hex.DecodeString(plan.Key)
-	if err != nil || len(key) != 16 {
-		return nativePlan{}, errors.New("本地媒体密钥无效")
+	choice := nativePlaybackChoice{local: true, danmakuSeries: plan.danmakuSeries, danmakuVideo: plan.DanmakuID, qualities: plan.Qualities, media: []providerMedia{{URL: plan.URL, Quality: plan.Quality}}}
+	if runtime.GOOS == "android" && plan.Key != "" {
+		key, err := hex.DecodeString(plan.Key)
+		if err != nil || len(key) != 16 {
+			return nativePlan{}, errors.New("本地媒体密钥无效")
+		}
+		choice.media[0].CENCKey = key
+		return engine.nativeOpenPlayback(ctx, choice)
 	}
-	return engine.nativeOpenPlayback(ctx, nativePlaybackChoice{local: true, qualities: plan.Qualities, media: []providerMedia{{URL: plan.URL, CENCKey: key, Quality: plan.Quality}}})
+	if plan.DanmakuID != "" && plan.danmakuSeries != "" {
+		return engine.nativeRememberPlayback(ctx, plan, choice)
+	}
+	return plan, ctx.Err()
 }

@@ -88,7 +88,7 @@ void main() {
     await tester.pumpAndSettle();
     final card = find.byKey(const ValueKey('hongguo-signature-status'));
     expect(card, findsOneWidget);
-    expect(find.text('PureSign · 统一设备已注册'), findsOneWidget);
+    expect(find.text('红果签名 · 统一设备已注册'), findsOneWidget);
     await tester.tap(card);
     await tester.pumpAndSettle();
     expect(

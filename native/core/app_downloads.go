@@ -564,7 +564,9 @@ func (manager *nativeDownloads) localPlan(drama string, index int) (nativePlan, 
 		_ = manager.saveLocked()
 		return nativePlan{}, true, errNativeLocalFile
 	}
+	series, video, _ := hongguoPlaybackIDs(Task{DramaID: record.Drama.ID, Chapter: record.Chapter, Index: record.Index})
 	return nativePlan{URL: path, Key: record.Key, Local: true, Quality: record.ActualQuality,
+		danmakuSeries: series, DanmakuID: video,
 		Qualities: []int{}, Headers: map[string]string{}, RouteCount: 1}, true, nil
 }
 

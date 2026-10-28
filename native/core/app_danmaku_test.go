@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -290,5 +292,45 @@ func TestNativeDanmakuCancellationDoesNotCancelPlayback(t *testing.T) {
 	}
 	if playback.Err() != nil || len(engine.playbacks) != 1 {
 		t.Fatal("danmaku cancellation changed playback")
+	}
+}
+
+func TestDownloadedPlayerKeepsFileAndBindsOriginalDanmaku(t *testing.T) {
+	var calls atomic.Int32
+	engine := sourceFixtureEngine(t, func(r *http.Request) (*http.Response, error) {
+		calls.Add(1)
+		if r.URL.Path != "/novel/commentapi/comment/list/"+danmakuTestVideo+"/v1/" {
+			t.Fatalf("local video triggered non-danmaku request: %s", r.URL.Path)
+		}
+		return rankingHTTPResponse(r, 200, danmakuTestJSON(30000, danmakuTestRow(danmakuTestVideo, "downloaded", "合成离线视频弹幕", 0))), nil
+	})
+	manager := engine.downloads
+	job := nativeDownloadJob{ID: nativeDownloadID("hongguo:"+danmakuTestSeries, 1), Drama: nativeDrama{ID: "hongguo:" + danmakuTestSeries, Source: sourceHongguo}, Index: 1, State: "completed", Chapter: Chapter{Source: sourceHongguo, VideoURL: "hongguo-cenc://" + danmakuTestVideo}}
+	directory := manager.jobDirectory(job)
+	if err := os.MkdirAll(directory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(directory, "media.mp4")
+	if err := os.WriteFile(path, []byte("synthetic local video"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	manager.mu.Lock()
+	manager.jobs[job.ID] = &nativeDownloadRecord{nativeDownloadJob: job, File: "media.mp4"}
+	manager.mu.Unlock()
+	raw, found, err := manager.localPlan(job.Drama.ID, 1)
+	if err != nil || !found || raw.DanmakuID != danmakuTestVideo {
+		t.Fatalf("download lost original identity: %+v %v", raw, err)
+	}
+	plan, err := engine.nativeLocalPlayerPlan(context.Background(), raw)
+	if err != nil || plan.Session == "" || plan.URL != path || !plan.Local || calls.Load() != 0 {
+		t.Fatalf("local startup depends on network or lost identity: %+v %v", plan, err)
+	}
+	page, err := engine.nativeDanmaku(context.Background(), nativeInput{PlaybackSession: plan.Session, DurationMS: 60000})
+	if err != nil || len(page.Items) != 1 || calls.Load() != 1 {
+		t.Fatalf("local danmaku failed: %+v %v", page, err)
+	}
+	engine.nativeReleasePlayback(plan.Session)
+	if _, err := engine.nativeDanmaku(context.Background(), nativeInput{PlaybackSession: plan.Session, DurationMS: 60000}); err == nil {
+		t.Fatal("released local session still accepts danmaku")
 	}
 }

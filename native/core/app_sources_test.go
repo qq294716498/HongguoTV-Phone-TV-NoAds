@@ -264,7 +264,11 @@ func TestSourceBackoffUsesRelativeTimeAndRetainsTypedError(t *testing.T) {
 func TestHongguoSourceHealthUsesSignedSearchBeforePlayback(t *testing.T) {
 	var searches atomic.Int32
 	engine := catalogFixtureEngine(t, func(request *http.Request) (*http.Response, error) {
-		for _, header := range []string{"X-Gorgon", "X-Khronos", "X-Ladon", "X-Argus", "X-Helios", "X-Medusa"} {
+		headers := []string{"X-Gorgon", "X-Khronos", "X-Ladon", "X-Argus"}
+		if request.URL.Path == hongguoSearchAppPath {
+			headers = append(headers, "X-Helios", "X-Medusa")
+		}
+		for _, header := range headers {
 			if request.Header.Get(header) == "" {
 				t.Errorf("missing signature %s on %s", header, request.URL.Path)
 			}
@@ -284,5 +288,49 @@ func TestHongguoSourceHealthUsesSignedSearchBeforePlayback(t *testing.T) {
 	health := engine.sourceStatus(sourceHongguo).Health
 	if err == nil || searches.Load() != 2 || health == nil || len(health.Steps) != 2 || health.Steps[1].Name != "App 签名搜索" || health.Steps[1].State != "failed" {
 		t.Fatalf("signed search failure was not isolated: %v %+v", err, health)
+	}
+}
+
+func TestHongguoHealthRetriesOnlyRecoverableEmptyResponses(t *testing.T) {
+	calls := 0
+	message, err := retryHongguoHealthStep(context.Background(), func(round int) {
+		if round != 2 {
+			t.Fatalf("unexpected round: %d", round)
+		}
+	}, func(context.Context) (string, error) {
+		calls++
+		if calls == 1 {
+			return "", errHongguoEmptyResponse
+		}
+		return "recovered", nil
+	})
+	if err != nil || message != "recovered" || calls != 2 {
+		t.Fatalf("health did not recover: %s %v %d", message, err, calls)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	calls = 0
+	_, err = retryHongguoHealthStep(ctx, func(int) { cancel() }, func(context.Context) (string, error) { calls++; return "", errHongguoEmptyResponse })
+	if !errors.Is(err, context.Canceled) || calls != 1 {
+		t.Fatalf("canceled health retried: %d %v", calls, err)
+	}
+	calls = 0
+	_, err = retryHongguoHealthStep(context.Background(), func(int) { t.Fatal("restriction retried") }, func(context.Context) (string, error) { calls++; return "", &requestBackoff{status: 429} })
+	if err == nil || calls != 1 {
+		t.Fatal("restriction not preserved")
+	}
+}
+
+func TestHongguoHealthCatalogOnlySamplesOnePagePerGenre(t *testing.T) {
+	var calls atomic.Int32
+	engine := catalogFixtureEngine(t, func(r *http.Request) (*http.Response, error) {
+		calls.Add(1)
+		return nativeHongguoResponse(r, 18, true, "health", "12345"), nil
+	})
+	engine.downloader.cfg.MaxPagesPerSort = 50
+	ctx := context.WithValue(context.Background(), libraryHealthKey{}, true)
+	items, err := engine.downloader.fetchHongguoAppCatalog(ctx)
+	if err != nil || len(items) == 0 || calls.Load() != 3 {
+		t.Fatalf("health scanned full catalog: calls=%d items=%d err=%v", calls.Load(), len(items), err)
 	}
 }
