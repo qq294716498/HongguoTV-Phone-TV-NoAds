@@ -12,11 +12,11 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[1]
 output = root / 'dist/windows'
 repository = 'qq294716498/HongguoTV-Phone-TV-NoAds'
-release_branch = 'release/windows-android-0.1.32-57'
-approved_source = 'c45a95f0d009df76e9688b2a454f44c70e226a2d'
-previous_windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48', 'windows-v0.1.24-49', 'windows-v0.1.25-50', 'windows-v0.1.29-54', 'windows-v0.1.30-55', 'windows-v0.1.31-56')
-previous_android_tag = 'app-v0.1.31-56'
-previous_android_commit = '6ddb3c6def86cbef0e8b4bb76b96b5e4ffb7c98e'
+release_branch = 'release/windows-android-0.1.34-59'
+approved_source = 'd8178b996953eb000381e1e42ef4c93610dc96cf'
+previous_windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48', 'windows-v0.1.24-49', 'windows-v0.1.25-50', 'windows-v0.1.29-54', 'windows-v0.1.30-55', 'windows-v0.1.31-56', 'windows-v0.1.32-57')
+previous_android_tag = 'app-v0.1.32-57'
+previous_android_commit = 'c91e9e073cb14d27180ef1120c7185bd31b31e12'
 pending_publication_note = '公开发布核验进行中：尚未完成 Windows 公网 ZIP 下载、升级通道及 Android Latest 隔离检查。'
 verified_publication_note = '公开发布核验已完成：Windows 公网 ZIP 下载与 SHA-256、正式升级通道和 API 限流回退检查通过；Android Latest 隔离及旧版本资产保持检查通过。'
 release_only_paths = frozenset({
@@ -48,7 +48,7 @@ def github(*arguments):
 
 def finalize_release_notes(tag):
     published = json.loads(github('api', f'repos/{repository}/releases/tags/{tag}'))
-    if tag != 'windows-v0.1.32-57' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
+    if tag != 'windows-v0.1.34-59' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
         raise ValueError('Only the current verified Windows stable release notes may be finalized')
     body = published['body']
     if body.count(pending_publication_note) != 1:
@@ -176,8 +176,8 @@ def main():
     version, build = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(encoding='utf-8'), re.MULTILINE).group(1).split('+')
     if not re.fullmatch(r'\d+\.\d+\.\d+', version):
         raise ValueError('Only Windows stable releases are allowed')
-    if version != '0.1.32' or build != '57':
-        raise ValueError('This workflow only publishes Windows 0.1.32+57')
+    if version != '0.1.34' or build != '59':
+        raise ValueError('This workflow only publishes Windows 0.1.34+59')
     tag = f'windows-v{version}-{build}'
     package = output / f'HongguoTV-{version}-windows-x64.zip'
     if sys.argv[1] == 'stage':
@@ -237,7 +237,7 @@ def main():
         write_json('Android-isolation.json', {'before': android, 'androidParserUnchanged': True,
                                               'parserSha256': hashlib.sha256(old.encode()).hexdigest()})
         subprocess.run([sys.executable, 'scripts/finish_task.py', '--message',
-                        '完成 Windows 0.1.32 x64 旧跨季记录兼容、追剧灰屏和手机三列榜单的新构建、完整包、托盘、迷你窗及更新事务验证'], check=True)
+                        '完成 Windows 0.1.34 x64 长剧名续季搜索、弹幕提速和电视动画稳定性的新构建、完整包、托盘、迷你窗及更新事务验证'], check=True)
         subprocess.run([sys.executable, 'scripts/sync_source.py', '--check'], check=True)
         source = max(root.parent.glob('真果·鉴-*.zip'), key=lambda file: file.stat().st_mtime_ns)
         source_package = output / f'HongguoTV-{version}-source.zip'
@@ -261,8 +261,8 @@ def main():
                           'public-release-to-running-previous-client replacement', 'consumer Windows 10/11 GPU/CPU compatibility',
                           'audio device output']})
         readme = (root / 'README.md').read_text(encoding='utf-8')
-        notes = readme.split('## Windows 正式版：', 1)[1].split('\n## ', 1)[0]
-        notes += f'\n构建及静态回归、Windows 完整包与合成媒体启动验证已通过。Windows 10 / 11 x64 版本仍未签名；目标剧云端取流、解码与完整下载离线解码已通过；实体 Windows 长时间连播、用户旧版原地替换和消费级 GPU / 音频设备仍未实测。\n\n源码提交：https://github.com/{repository}/commit/{commit}\n\nCI：{ci}\n\n校验：SHA256SUMS.txt。\n\n{pending_publication_note}\n'
+        notes = readme.split('## 0.1.34+59', 1)[1].split('\n## ', 1)[0].replace('（验证中，尚未发布）', '（构建与自动化验证通过）')
+        notes += f'\n构建及静态回归、Windows 完整包与合成媒体启动验证已通过。Windows 10 / 11 x64 版本仍未签名；本次真实续季元数据搜索与应用入口回归通过；实体 Windows 长时间连播、用户旧版原地替换和消费级 GPU / 音频设备仍未实测。\n\n源码提交：https://github.com/{repository}/commit/{commit}\n\nCI：{ci}\n\n校验：SHA256SUMS.txt。\n\n{pending_publication_note}\n'
         notes_file = Path(os.environ['RUNNER_TEMP']) / 'windows-release-notes.md'
         notes_file.write_text(notes, encoding='utf-8')
         assets = [package, source_package] + [output / name for name in
