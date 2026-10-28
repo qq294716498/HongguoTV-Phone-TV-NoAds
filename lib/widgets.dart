@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'core_bridge.dart';
+import 'diary_service.dart';
 import 'app_layout.dart';
 import 'models.dart';
 import 'remote_widgets.dart';
@@ -14,11 +15,20 @@ Future<void> saveUserChange(
 ) async {
   try {
     await action();
-  } catch (_) {
+  } catch (error, stack) {
+    DiaryService.add(
+      '[Save] ${error.runtimeType}: $error\n${stack.toString().split('\n').take(6).join('\n')}',
+    );
     if (context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('未能保存，请检查存储空间和权限后重试。')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('操作未完成，原记录已保留。请查看日记中的具体原因。'),
+          action: SnackBarAction(
+            label: '查看日记',
+            onPressed: () => DiaryService.showDiaryDialog(context),
+          ),
+        ),
+      );
     }
   }
 }

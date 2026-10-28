@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
 import 'local_store.dart';
+import 'core_bridge.dart';
+import 'series_browser_screen.dart';
+import 'player_screen.dart';
 import 'models.dart';
 import 'widgets.dart';
 
@@ -8,6 +11,7 @@ Future<void> showDramaActions(
   BuildContext context, {
   required Drama drama,
   required LocalStore store,
+  required AppRepository repository,
   VoidCallback? onContinue,
   VoidCallback? onDownload,
   VoidCallback? onSelect,
@@ -18,6 +22,8 @@ Future<void> showDramaActions(
   final choices = <(String, String, IconData)>[
     if (onContinue != null && store.seriesWatch(drama) != null)
       ('continue', '继续观看', Icons.play_arrow_rounded),
+    if (drama.source == SourceSite.hongguo.id)
+      ('seasons', '搜索其他季', Icons.video_library_outlined),
     ('favorite', following == null ? '加入追剧' : '取消追剧', Icons.bookmark_outline),
     if (onDownload != null && store.canDownload)
       ('download', '下载选集', Icons.download_outlined),
@@ -54,6 +60,34 @@ Future<void> showDramaActions(
   switch (choice) {
     case 'continue':
       onContinue?.call();
+    case 'seasons':
+      final selection = await Navigator.of(context)
+          .push<SeriesEpisodeSelection>(
+            MaterialPageRoute(
+              builder: (_) => SeriesBrowserScreen(
+                anchor: drama,
+                repository: repository,
+                store: store,
+              ),
+            ),
+          );
+      if (selection == null ||
+          !context.mounted ||
+          epoch != store.profileEpoch ||
+          store.locked ||
+          !store.allowsSource(selection.detail.drama.source))
+        return;
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => PlayerScreen(
+            detail: selection.detail,
+            initialIndex: selection.index,
+            initialPosition: selection.position,
+            repository: repository,
+            store: store,
+          ),
+        ),
+      );
     case 'favorite':
       await saveUserChange(context, () => store.toggleSeriesFavorite(drama));
     case 'download':

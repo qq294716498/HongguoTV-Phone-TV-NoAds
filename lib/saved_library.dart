@@ -6,6 +6,7 @@ import 'app_layout.dart';
 import 'catalog_sort.dart';
 import 'core_bridge.dart';
 import 'drama_actions.dart';
+import 'diary_service.dart';
 import 'follow_updates.dart';
 import 'hongguo_series.dart';
 import 'local_store.dart';
@@ -48,7 +49,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
     super.initState();
     _updates = FollowUpdates(widget.repository, widget.store);
     _updatesEpoch = widget.store.profileEpoch;
-    if (!widget.history) unawaited(_updates.refresh());
+    if (!widget.history) unawaited(_refreshUpdates());
   }
 
   @override
@@ -68,7 +69,29 @@ class _SavedLibraryState extends State<SavedLibrary> {
         (reset ||
             oldWidget.history ||
             oldWidget.refreshToken != widget.refreshToken)) {
-      unawaited(_updates.refresh());
+      unawaited(_refreshUpdates());
+    }
+  }
+
+  String? _lastReadError;
+
+  void _recordFailure(Object error, StackTrace stack) {
+    final message = '${error.runtimeType}: $error';
+    if (_lastReadError == message) return;
+    _lastReadError = message;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted)
+        DiaryService.add(
+          '[Follow] $message\n${stack.toString().split('\n').take(6).join('\n')}',
+        );
+    });
+  }
+
+  Future<void> _refreshUpdates({bool force = false}) async {
+    try {
+      await _updates.refresh(force: force);
+    } catch (error, stack) {
+      if (mounted) _recordFailure(error, stack);
     }
   }
 
@@ -113,6 +136,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
   }
 
   void _actions(Drama drama) {
+    _updates.cancel();
     final target = widget.history
         ? drama
         : widget.store.seriesWatch(drama)?.drama ?? drama;
@@ -121,6 +145,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
         context,
         drama: target,
         store: widget.store,
+        repository: widget.repository,
         history: widget.history,
         onContinue: () => _open(target, resume: true),
         onDownload: widget.onDownload == null
@@ -167,211 +192,228 @@ class _SavedLibraryState extends State<SavedLibrary> {
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: widget.store,
     builder: (context, _) {
-      final history = widget.history
-          ? widget.store.history
-          : const <WatchEntry>[];
-      final all = widget.history
-          ? history.map((entry) => entry.drama).toList()
-          : widget.store.trackedSeries;
-      final items = all.where((drama) {
-        final target = widget.history
-            ? drama
-            : widget.store.seriesWatch(drama)?.drama ?? drama;
-        if (!matchesDramaQuery(drama, _search.text) &&
-            !matchesDramaQuery(target, _search.text)) {
-          return false;
-        }
-        return true;
-      }).toList();
-      final itemIds = widget.history
-          ? items.map((drama) => drama.id).toSet()
-          : const <String>{};
-      final resume = widget.history
-          ? history
-                .where(
-                  (entry) =>
-                      itemIds.contains(entry.drama.id) &&
-                      (!entry.finished ||
-                          entry.drama.episodes <= 0 ||
-                          entry.episode < entry.drama.episodes),
-                )
-                .firstOrNull
-          : items
-                .map(widget.store.seriesWatch)
-                .whereType<WatchEntry>()
-                .where(
-                  (entry) =>
-                      !entry.finished ||
-                      entry.drama.episodes <= 0 ||
-                      entry.episode < entry.drama.episodes,
-                )
-                .firstOrNull;
-      final header = [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 12, 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '${widget.history ? '最近观看' : '我的追剧'} · ${all.length}',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-              ),
-              if (widget.history && all.isNotEmpty)
-                IconButton(
-                  tooltip: '清空观看记录',
-                  onPressed: _clearHistory,
-                  icon: const Icon(Icons.delete_outline_rounded),
-                ),
-            ],
+      try {
+        return _buildLibrary(context);
+      } catch (error, stack) {
+        _recordFailure(error, stack);
+        return StatusPanel(
+          title: '追剧资料暂时无法读取',
+          message: '原记录已保留，请查看日记中的具体原因。',
+          onRetry: () => setState(() {
+            _lastReadError = null;
+          }),
+          secondaryAction: TextButton(
+            onPressed: () => DiaryService.showDiaryDialog(context),
+            child: const Text('查看日记'),
           ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-          child: TelevisionSearchField(
-            key: ValueKey(
-              widget.history ? 'history-search' : 'favorites-search',
-            ),
-            controller: _search,
-            onChanged: (_) => setState(() {}),
-            textInputAction: TextInputAction.search,
-            decoration: InputDecoration(
-              hintText: widget.history ? '搜索观看记录' : '搜索追剧',
-              prefixIcon: const Icon(Icons.search_rounded),
-              suffixIcon: _search.text.isEmpty
-                  ? null
-                  : IconButton(
-                      tooltip: '清空搜索',
-                      onPressed: () => setState(_search.clear),
-                      icon: const Icon(Icons.close_rounded),
-                    ),
-            ),
-          ),
-        ),
-        if (!widget.history && all.isNotEmpty)
-          ListenableBuilder(
-            listenable: _updates,
-            builder: (context, _) => Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      _updates.checking
-                          ? '正在检查下季 · ${_updates.checked}/${_updates.total}'
-                          : _updates.failed > 0
-                          ? '部分追剧暂未完成检查，可重试'
-                          : '进入追剧时检查下季，点卡片继续最近观看',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ),
-                  IconButton(
-                    key: const ValueKey('follow-check-updates'),
-                    tooltip: '检查下季',
-                    onPressed: _updates.checking
-                        ? null
-                        : () => _updates.refresh(force: true),
-                    icon: const Icon(Icons.refresh_rounded),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        if (resume != null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-            child: Card(
-              margin: EdgeInsets.zero,
-              child: ListTile(
-                key: const ValueKey('continue-watching'),
-                leading: const Icon(Icons.play_circle_outline),
-                title: Text(
-                  '继续观看 · ${resume.drama.title}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                subtitle: Text(
-                  '第 ${resume.episode} 集 · ${formatPosition(resume.position)}',
-                ),
-                onTap: () => _open(resume.drama, resume: true),
-              ),
-            ),
-          ),
-      ];
-      final empty = StatusPanel(
-        title: all.isEmpty
-            ? widget.history
-                  ? '还没有观看记录'
-                  : '还没有追剧'
-            : '没有匹配的记录',
-        message: all.isEmpty ? '去发现页，挑一部喜欢的短剧。' : '可以更换搜索词或筛选条件。',
-        icon: widget.history
-            ? Icons.history_rounded
-            : Icons.bookmark_border_rounded,
-      );
-      return LayoutBuilder(
-        builder: (context, constraints) {
-          if (AppLayout.isTelevision(context)) {
-            final columns = ((constraints.maxWidth - 36) / 150).floor().clamp(
-              1,
-              8,
-            );
-            final tileWidth =
-                (constraints.maxWidth - 36 - (columns - 1) * 14) / columns;
-            return Column(
-              children: [
-                ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxHeight: constraints.maxHeight * .5,
-                  ),
-                  child: SingleChildScrollView(child: Column(children: header)),
-                ),
-                Expanded(
-                  child: items.isEmpty
-                      ? empty
-                      : RemoteGrid(
-                          key: ValueKey(
-                            'saved-tv-${widget.history}-${_search.text}',
-                          ),
-                          itemKeys: items.map((item) => item.id).toList(),
-                          columns: columns,
-                          itemExtent:
-                              DramaTile.extentFor(context, tileWidth - 14) + 14,
-                          itemBuilder: (_, index, node, onFocus) => _tile(
-                            items[index],
-                            focusNode: node,
-                            onFocus: onFocus,
-                          ),
-                        ),
-                ),
-              ],
-            );
-          }
-          final padding = constraints.maxWidth < 600 ? 16.0 : 24.0;
-          return CustomScrollView(
-            key: PageStorageKey('saved-${widget.history}-${_search.text}'),
-            slivers: [
-              SliverToBoxAdapter(child: Column(children: header)),
-              if (items.isEmpty)
-                SliverFillRemaining(hasScrollBody: false, child: empty)
-              else
-                SliverPadding(
-                  padding: EdgeInsets.fromLTRB(padding, 0, padding, 20),
-                  sliver: SliverGrid(
-                    gridDelegate: dramaGridDelegate(
-                      context,
-                      constraints.maxWidth - 2 * padding,
-                    ),
-                    delegate: SliverChildBuilderDelegate(
-                      (_, index) => _tile(items[index]),
-                      childCount: items.length,
-                    ),
-                  ),
-                ),
-            ],
-          );
-        },
-      );
+        );
+      }
     },
   );
+
+  Widget _buildLibrary(BuildContext context) {
+    final history = widget.history
+        ? widget.store.history
+        : const <WatchEntry>[];
+    final all = widget.history
+        ? history.map((entry) => entry.drama).toList()
+        : widget.store.trackedSeries;
+    final items = all.where((drama) {
+      final target = widget.history
+          ? drama
+          : widget.store.seriesWatch(drama)?.drama ?? drama;
+      if (!matchesDramaQuery(drama, _search.text) &&
+          !matchesDramaQuery(target, _search.text)) {
+        return false;
+      }
+      return true;
+    }).toList();
+    final itemIds = widget.history
+        ? items.map((drama) => drama.id).toSet()
+        : const <String>{};
+    final resume = widget.history
+        ? history
+              .where(
+                (entry) =>
+                    itemIds.contains(entry.drama.id) &&
+                    (!entry.finished ||
+                        entry.drama.episodes <= 0 ||
+                        entry.episode < entry.drama.episodes),
+              )
+              .firstOrNull
+        : items
+              .map(widget.store.seriesWatch)
+              .whereType<WatchEntry>()
+              .where(
+                (entry) =>
+                    !entry.finished ||
+                    entry.drama.episodes <= 0 ||
+                    entry.episode < entry.drama.episodes,
+              )
+              .firstOrNull;
+    final header = [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 12, 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                '${widget.history ? '最近观看' : '我的追剧'} · ${all.length}',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+            ),
+            if (widget.history && all.isNotEmpty)
+              IconButton(
+                tooltip: '清空观看记录',
+                onPressed: _clearHistory,
+                icon: const Icon(Icons.delete_outline_rounded),
+              ),
+          ],
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+        child: TelevisionSearchField(
+          key: ValueKey(widget.history ? 'history-search' : 'favorites-search'),
+          controller: _search,
+          onChanged: (_) => setState(() {}),
+          textInputAction: TextInputAction.search,
+          decoration: InputDecoration(
+            hintText: widget.history ? '搜索观看记录' : '搜索追剧',
+            prefixIcon: const Icon(Icons.search_rounded),
+            suffixIcon: _search.text.isEmpty
+                ? null
+                : IconButton(
+                    tooltip: '清空搜索',
+                    onPressed: () => setState(_search.clear),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+          ),
+        ),
+      ),
+      if (!widget.history && all.isNotEmpty)
+        ListenableBuilder(
+          listenable: _updates,
+          builder: (context, _) => Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _updates.checking
+                        ? '正在检查下季 · ${_updates.checked}/${_updates.total}'
+                        : _updates.failed > 0
+                        ? '部分追剧暂未完成检查，可重试'
+                        : '进入追剧时检查下季，点卡片继续最近观看',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+                IconButton(
+                  key: const ValueKey('follow-check-updates'),
+                  tooltip: '检查下季',
+                  onPressed: _updates.checking
+                      ? null
+                      : () => _refreshUpdates(force: true),
+                  icon: const Icon(Icons.refresh_rounded),
+                ),
+              ],
+            ),
+          ),
+        ),
+      if (resume != null)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: Card(
+            margin: EdgeInsets.zero,
+            child: ListTile(
+              key: const ValueKey('continue-watching'),
+              leading: const Icon(Icons.play_circle_outline),
+              title: Text(
+                '继续观看 · ${resume.drama.title}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              subtitle: Text(
+                '第 ${resume.episode} 集 · ${formatPosition(resume.position)}',
+              ),
+              onTap: () => _open(resume.drama, resume: true),
+            ),
+          ),
+        ),
+    ];
+    final empty = StatusPanel(
+      title: all.isEmpty
+          ? widget.history
+                ? '还没有观看记录'
+                : '还没有追剧'
+          : '没有匹配的记录',
+      message: all.isEmpty ? '去发现页，挑一部喜欢的短剧。' : '可以更换搜索词或筛选条件。',
+      icon: widget.history
+          ? Icons.history_rounded
+          : Icons.bookmark_border_rounded,
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (AppLayout.isTelevision(context)) {
+          final columns = ((constraints.maxWidth - 36) / 150).floor().clamp(
+            1,
+            8,
+          );
+          final tileWidth =
+              (constraints.maxWidth - 36 - (columns - 1) * 14) / columns;
+          return Column(
+            children: [
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: constraints.maxHeight * .5,
+                ),
+                child: SingleChildScrollView(child: Column(children: header)),
+              ),
+              Expanded(
+                child: items.isEmpty
+                    ? empty
+                    : RemoteGrid(
+                        key: ValueKey(
+                          'saved-tv-${widget.history}-${_search.text}',
+                        ),
+                        itemKeys: items.map((item) => item.id).toList(),
+                        columns: columns,
+                        itemExtent:
+                            DramaTile.extentFor(context, tileWidth - 14) + 14,
+                        itemBuilder: (_, index, node, onFocus) => _tile(
+                          items[index],
+                          focusNode: node,
+                          onFocus: onFocus,
+                        ),
+                      ),
+              ),
+            ],
+          );
+        }
+        final padding = constraints.maxWidth < 600 ? 16.0 : 24.0;
+        return CustomScrollView(
+          key: PageStorageKey('saved-${widget.history}-${_search.text}'),
+          slivers: [
+            SliverToBoxAdapter(child: Column(children: header)),
+            if (items.isEmpty)
+              SliverFillRemaining(hasScrollBody: false, child: empty)
+            else
+              SliverPadding(
+                padding: EdgeInsets.fromLTRB(padding, 0, padding, 20),
+                sliver: SliverGrid(
+                  gridDelegate: dramaGridDelegate(
+                    context,
+                    constraints.maxWidth - 2 * padding,
+                  ),
+                  delegate: SliverChildBuilderDelegate(
+                    (_, index) => _tile(items[index]),
+                    childCount: items.length,
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
 }

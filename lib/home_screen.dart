@@ -835,6 +835,7 @@ class _HomeScreenState extends State<HomeScreen> {
     context,
     drama: drama,
     store: widget.store,
+    repository: widget.repository,
     onContinue: () => _openDrama(drama, resume: true),
     onDownload: widget.repository.supportsDownloads && widget.store.canDownload
         ? () => _openDrama(drama, download: true)

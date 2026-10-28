@@ -6,6 +6,7 @@ import 'catalog_filters.dart';
 import 'core_bridge.dart';
 import 'detail_screen.dart';
 import 'local_store.dart';
+import 'drama_actions.dart';
 import 'models.dart';
 import 'ranking_models.dart';
 import 'widgets.dart';
@@ -35,7 +36,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
   RankingBoard? _board;
   List<RankingItem> _items = [];
   bool _loading = true;
-  late bool _grid = widget.embedded;
+  bool _grid = true;
   bool _more = false;
   bool _hasMore = false;
   bool _failedMore = false;
@@ -444,6 +445,15 @@ class _RankingsScreenState extends State<RankingsScreen> {
                                     ),
                                     drama: item.drama,
                                     repository: widget.repository,
+                                    actions: DramaActionButton(
+                                      drama: item.drama,
+                                      onPressed: () => showDramaActions(
+                                        context,
+                                        drama: item.drama,
+                                        repository: widget.repository,
+                                        store: widget.store,
+                                      ),
+                                    ),
                                     rank: item.rank,
                                     subtitle: item.metric.isEmpty
                                         ? item.drama.category

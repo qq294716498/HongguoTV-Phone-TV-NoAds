@@ -11,12 +11,24 @@ import 'models.dart';
 const lanSyncSchema = 2;
 const lanSyncUpgradeMessage = '跨季续播同步需要两端升级到新版，原记录未修改';
 
-bool lanSameSeries(Drama anchor, Drama target) =>
-    anchor.source == target.source &&
-    (anchor.id == target.id ||
-        hongguoSeriesEntries(anchor, [
-          target,
-        ]).any((entry) => entry.drama.id == target.id));
+bool lanSameSeries(Drama anchor, Drama target) {
+  if (anchor.source != target.source) return false;
+  if (anchor.id == target.id) return true;
+  if (anchor.source != SourceSite.hongguo.id) return false;
+  final left = hongguoSeriesInfo(anchor);
+  final right = hongguoSeriesInfo(target);
+  if (left != null || right != null) {
+    final unit = left?.unit ?? right!.unit;
+    final a = left ?? hongguoSeriesInfo(anchor, unit: unit);
+    final b = right ?? hongguoSeriesInfo(target, unit: unit);
+    if (a != null && b != null && a.key == b.key && a.unit == b.unit) {
+      return true;
+    }
+  }
+  return hongguoSeriesEntries(anchor, [
+    target,
+  ]).any((entry) => entry.drama.id == target.id);
+}
 
 String _lanSeriesKey(Drama drama) => drama.source == SourceSite.hongguo.id
     ? '${drama.source}\u0000${hongguoSeriesInfo(drama)?.key ?? normalizedSearchText(drama.title)}'

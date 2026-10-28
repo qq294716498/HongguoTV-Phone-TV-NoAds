@@ -75,6 +75,64 @@ class EpisodeRangeBar extends StatelessWidget {
     final current = episodes.indexWhere(
       (episode) => episode.number == currentNumber,
     );
+    if (compact) {
+      return SizedBox(
+        height: 32,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: count > 1
+                    ? DropdownButtonHideUnderline(
+                        child: DropdownButton<int>(
+                          key: const ValueKey('episode-range'),
+                          isDense: true,
+                          isExpanded: true,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(context).colorScheme.onSurface,
+                          ),
+                          value: page.clamp(0, count - 1),
+                          items: [
+                            for (var i = 0; i < count; i++)
+                              DropdownMenuItem(
+                                value: i,
+                                child: Text(
+                                  '${episodes[i * episodePageSize].number}–${episodes[min((i + 1) * episodePageSize, episodes.length) - 1].number} 集',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                          ],
+                          onChanged: (value) {
+                            if (value != null)
+                              onLocate(value * episodePageSize);
+                          },
+                        ),
+                      )
+                    : Text(
+                        '${episodes.length} 集',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+              ),
+              if (current >= 0)
+                IconButton(
+                  tooltip: '定位当前',
+                  onPressed: () => onLocate(current),
+                  constraints: const BoxConstraints.tightFor(
+                    width: 32,
+                    height: 32,
+                  ),
+                  padding: EdgeInsets.zero,
+                  iconSize: 16,
+                  icon: const Icon(Icons.my_location_rounded),
+                ),
+            ],
+          ),
+        ),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       child: Column(
@@ -218,6 +276,37 @@ class _EpisodeBrowserState extends State<EpisodeBrowser> {
       _pageSize;
   int? _located;
 
+  double _edgeDrag = 0;
+
+  bool _pageOnEdge(ScrollNotification notification) {
+    if (notification.depth != 0 || !widget.compactHeader) return false;
+    if (notification is ScrollStartNotification) _edgeDrag = 0;
+    if (notification is OverscrollNotification &&
+        notification.dragDetails != null) {
+      if (_edgeDrag.sign != notification.overscroll.sign) _edgeDrag = 0;
+      _edgeDrag += notification.overscroll;
+    }
+    if (notification is ScrollEndNotification && _edgeDrag.abs() >= 40) {
+      final forward = _edgeDrag > 0;
+      final next = _page + (forward ? 1 : -1);
+      _edgeDrag = 0;
+      if (next < 0 || next * episodePageSize >= widget.episodes.length)
+        return false;
+      final previous = _page;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _page != previous) return;
+        setState(() {
+          _page = next;
+          final index = forward
+              ? next * episodePageSize
+              : min((next + 1) * episodePageSize, widget.episodes.length) - 1;
+          _located = widget.episodes[index].number;
+        });
+      });
+    }
+    return false;
+  }
+
   @override
   void didUpdateWidget(EpisodeBrowser oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -274,7 +363,9 @@ class _EpisodeBrowserState extends State<EpisodeBrowser> {
               final scale = MediaQuery.textScalerOf(context);
               final spacing = widget.denseDesktop ? 4.0 : 8.0;
               final horizontal = widget.denseDesktop ? 8.0 : 18.0;
-              final columns = widget.denseDesktop
+              final columns = widget.compactHeader
+                  ? 6
+                  : widget.denseDesktop
                   ? ((constraints.maxWidth - horizontal * 2 + spacing) /
                             (max(
                                   56.0,
@@ -301,7 +392,9 @@ class _EpisodeBrowserState extends State<EpisodeBrowser> {
                             ))
                         .floor()
                         .clamp(widget.compact ? 4 : 1, 12);
-              final extent = widget.denseDesktop
+              final extent = widget.compactHeader
+                  ? 44.0
+                  : widget.denseDesktop
                   ? max(44.0, scale.scale(14) + 20)
                   : max(
                       widget.compact ? 46.0 : 56.0,
@@ -335,6 +428,43 @@ class _EpisodeBrowserState extends State<EpisodeBrowser> {
                     );
                   });
                 }
+              }
+              if (widget.compactHeader) {
+                return NotificationListener<ScrollNotification>(
+                  onNotification: _pageOnEdge,
+                  child: GridView.builder(
+                    key: const ValueKey('compact-episode-scroll'),
+                    controller: _scroll,
+                    physics: const ClampingScrollPhysics(
+                      parent: AlwaysScrollableScrollPhysics(),
+                    ),
+                    padding: const EdgeInsets.fromLTRB(8, 2, 8, 8),
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 6,
+                      mainAxisExtent: 44,
+                      crossAxisSpacing: 4,
+                      mainAxisSpacing: 4,
+                    ),
+                    itemCount: visible.length,
+                    itemBuilder: (context, index) {
+                      final episode = visible[index];
+                      return MediaQuery.withClampedTextScaling(
+                        maxScaleFactor: 1.2,
+                        child: RemoteEpisodeButton(
+                          key: ValueKey(
+                            '${widget.keyPrefix}-${episode.number}',
+                          ),
+                          number: episode.number,
+                          vip: episode.vip,
+                          compact: true,
+                          fontSize: 12,
+                          current: episode.number == widget.currentNumber,
+                          onPressed: () => widget.onSelected(start + index),
+                        ),
+                      );
+                    },
+                  ),
+                );
               }
               return RemoteGrid(
                 key: ValueKey('episode-page-$_page-$_located'),

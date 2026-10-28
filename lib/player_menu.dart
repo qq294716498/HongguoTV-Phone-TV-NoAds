@@ -125,24 +125,71 @@ class _PlayerMenuState extends State<PlayerMenu> {
         height: landscape ? size.height : size.height * .72,
         child: Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(18, 8, 4, 4),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: Theme.of(context).textTheme.titleMedium,
+            if (compactEpisodes)
+              SizedBox(
+                height: 32,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 10),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      if (widget.onAllSeasons != null)
+                        IconButton(
+                          key: const ValueKey('menu-all-seasons'),
+                          tooltip: '查看全季',
+                          constraints: const BoxConstraints.tightFor(
+                            width: 32,
+                            height: 32,
+                          ),
+                          padding: EdgeInsets.zero,
+                          iconSize: 17,
+                          onPressed: widget.onAllSeasons,
+                          icon: const Icon(Icons.video_library_outlined),
+                        ),
+                      IconButton(
+                        tooltip: '关闭菜单',
+                        constraints: const BoxConstraints.tightFor(
+                          width: 32,
+                          height: 32,
+                        ),
+                        padding: EdgeInsets.zero,
+                        iconSize: 18,
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 8, 4, 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
                     ),
-                  ),
-                  IconButton(
-                    tooltip: '关闭菜单',
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close_rounded),
-                  ),
-                ],
+                    IconButton(
+                      tooltip: '关闭菜单',
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ],
+                ),
               ),
-            ),
             if (_busy) const LinearProgressIndicator(minHeight: 2),
             if (_error != null)
               Padding(
@@ -155,7 +202,8 @@ class _PlayerMenuState extends State<PlayerMenu> {
                   style: const TextStyle(color: Color(0xFFFFB4A8)),
                 ),
               ),
-            if (widget.section == PlayerMenuSection.episodes &&
+            if (!compactEpisodes &&
+                widget.section == PlayerMenuSection.episodes &&
                 widget.onAllSeasons != null)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 18),
