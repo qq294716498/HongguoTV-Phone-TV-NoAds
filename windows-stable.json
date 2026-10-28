@@ -1,17 +1,17 @@
 {
   "schema": 1,
   "release": {
-    "tag_name": "windows-v0.1.30-55",
+    "tag_name": "windows-v0.1.31-56",
     "draft": false,
     "prerelease": false,
-    "body": "0.1.30+55\n\n- 红果空响应在当前播放页进行最多三轮自动恢复，显示重试进度，统一取址时限并支持取消。\n- 数字季数、近似剧名及简介同人物匹配统一用于追剧和自动续播；修复追剧持久化索引与搜索失败恢复。\n- 下载视频可加载原集弹幕，弹幕失败不影响本地播放；手机横屏选集面板收窄，站源检测增加有界自动重试。\n- Windows x64 完整 ZIP 仍未签名。\n\n自动化和两端包校验结果见 Release 附件；用户设备间歇性空响应与长时间播放仍未实测，不承诺消除上游空响应。\n\n构建及静态回归、Windows 完整包与合成媒体启动验证已通过。Windows 10 / 11 x64 版本仍未签名；目标剧云端取流、解码与完整下载离线解码已通过；实体 Windows 长时间连播、用户旧版原地替换和消费级 GPU / 音频设备仍未实测。\n\n源码提交：https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/commit/259190d77185051386bf8edc2c32f6f270260e9b\n\nCI：https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/40614984633\n\n校验：SHA256SUMS.txt。",
+    "body": "0.1.31+56\n\n- 首页大剧库的追剧匹配与 JSON 处理移出界面线程，修复加载期间长时间不响应。\n- 优化续季匹配，保留伪神数字季数、简介同人物与下载弹幕功能。\n- 两端构建、签名及下载校验结果见发布附件；用户手机卡死修复尚未实机验收。\n\n构建及静态回归、Windows 完整包与合成媒体启动验证已通过。Windows 10 / 11 x64 版本仍未签名；目标剧云端取流、解码与完整下载离线解码已通过；实体 Windows 长时间连播、用户旧版原地替换和消费级 GPU / 音频设备仍未实测。\n\n源码提交：https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/commit/6ddb3c6def86cbef0e8b4bb76b96b5e4ffb7c98e\n\nCI：https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/40619707719\n\n校验：SHA256SUMS.txt。",
     "assets": [
       {
-        "name": "HongguoTV-0.1.30-windows-x64.zip",
-        "size": 101094225,
-        "digest": "sha256:dd8efc3385aa4dabc95104496e0c53242042de0da71115b71d8b9ef66a74bb28",
+        "name": "HongguoTV-0.1.31-windows-x64.zip",
+        "size": 101098576,
+        "digest": "sha256:6aa11a8128d67d73b6369c2c0f80cdb19da33f100038f1b2a8d720b5644cd9fc",
         "state": "uploaded",
-        "browser_download_url": "https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.30-55/HongguoTV-0.1.30-windows-x64.zip"
+        "browser_download_url": "https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.31-56/HongguoTV-0.1.31-windows-x64.zip"
       }
     ]
   }
