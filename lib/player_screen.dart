@@ -193,6 +193,8 @@ class _PlayerScreenState extends State<PlayerScreen>
       !_television &&
       (defaultTargetPlatform == TargetPlatform.windows ||
           defaultTargetPlatform == TargetPlatform.macOS);
+  bool get _nativeMacWindow =>
+      Platform.isMacOS && defaultTargetPlatform == TargetPlatform.macOS;
   bool get _windowsMini =>
       _desktopPlayer && (WindowsDesktop.current?.mini ?? false);
   bool get _windowsSidebarAvailable =>
@@ -253,7 +255,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     final layout = context.getInheritedWidgetOfExactType<AppLayout>();
     _televisionDevice = layout?.deviceTelevision ?? _television;
     WidgetsBinding.instance.addObserver(this);
-    if (Platform.isMacOS) windowManager.addListener(this);
+    if (_nativeMacWindow) windowManager.addListener(this);
     _detail = widget.detail;
     _index = widget.initialIndex;
     if (_desktopPlayer) {
@@ -2177,7 +2179,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     try {
       if (_desktopPlayer && WindowsDesktop.current != null) {
         await WindowsDesktop.current!.setFullscreen(fullscreen);
-      } else if (Platform.isWindows || Platform.isMacOS) {
+      } else if (Platform.isWindows || _nativeMacWindow) {
         await windowManager.setFullScreen(fullscreen);
       } else if (_mobile) {
         await (_orientationController?.setPlayback(
@@ -2232,14 +2234,14 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   @override
   void onWindowEnterFullScreen() {
-    if (Platform.isMacOS && mounted && !_closed) {
+    if (_nativeMacWindow && mounted && !_closed) {
       setState(() => _fullscreen = true);
     }
   }
 
   @override
   void onWindowLeaveFullScreen() {
-    if (Platform.isMacOS && mounted && !_closed) {
+    if (_nativeMacWindow && mounted && !_closed) {
       setState(() => _fullscreen = false);
     }
   }
@@ -2736,7 +2738,7 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   @override
   void dispose() {
-    if (Platform.isMacOS) windowManager.removeListener(this);
+    if (_nativeMacWindow) windowManager.removeListener(this);
     if (_desktopPlayer) {
       WindowsDesktop.current?.removeListener(_desktopChanged);
       unawaited(WindowsDesktop.current?.detachPlayback(this));
@@ -2804,7 +2806,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     }();
     if (_desktopPlayer) WindowsDesktop.current?.playbackDisposal = disposal;
     unawaited(disposal);
-    if (Platform.isWindows || Platform.isMacOS) {
+    if (Platform.isWindows || _nativeMacWindow) {
       unawaited(windowManager.setFullScreen(false));
     } else if (_mobile || _television && Platform.isAndroid) {
       unawaited(
