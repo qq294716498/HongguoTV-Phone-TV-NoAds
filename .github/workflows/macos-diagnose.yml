@@ -10,7 +10,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [macos-15, macos-15-intel]
+        runner: [macos-15-intel]
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 10
     steps:
@@ -18,14 +18,14 @@ jobs:
         with:
           name: macos-universal
           path: package
-          run-id: 40628594634
+          run-id: 40631365690
           github-token: ${{ github.token }}
       - name: Collect native stack
         run: |
           cd package
           ditto -x -k HongguoTV-*-macos-universal.zip extracted
           cat macOS-validation.json
-          lldb --batch -o 'run' -o 'thread backtrace all' -- extracted/HongguoTV.app/Contents/MacOS/HongguoTV --package-smoke "$PWD/macOS-smoke.json" "$PWD/synthetic.mp4" > stack.txt 2>&1 || true
+          lldb --batch -o 'run' -k 'thread backtrace all' -- extracted/HongguoTV.app/Contents/MacOS/HongguoTV --package-smoke "$PWD/macOS-smoke.json" "$PWD/synthetic.mp4" > stack.txt 2>&1 || true
           cat stack.txt
           if [ -f macOS-smoke.json ]; then cat macOS-smoke.json; fi
       - uses: actions/upload-artifact@v4
