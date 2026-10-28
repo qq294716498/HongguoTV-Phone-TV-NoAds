@@ -20,6 +20,7 @@ with (app / 'Contents/Info.plist').open('rb') as stream:
 if info['CFBundleShortVersionString'] != version or info['CFBundleVersion'] != build:
     raise SystemExit('macOS version mismatch')
 architectures = {}
+minimum_versions = {}
 for binary in sorted(app.rglob('*')):
     if not binary.is_file() or binary.is_symlink():
         continue
@@ -31,6 +32,20 @@ for binary in sorted(app.rglob('*')):
     if set(archs) != {'arm64', 'x86_64'}:
         raise SystemExit('Universal binary missing architecture: ' + str(binary))
     architectures[str(binary.relative_to(app))] = archs
+    current_command = ''
+    minimums = []
+    for line in subprocess.check_output(['otool', '-l', str(binary)], text=True).splitlines():
+        fields = line.split()
+        if len(fields) == 2 and fields[0] == 'cmd':
+            current_command = fields[1]
+        if len(fields) == 2 and ((current_command == 'LC_BUILD_VERSION' and fields[0] == 'minos') or
+                                 (current_command == 'LC_VERSION_MIN_MACOSX' and fields[0] == 'version')):
+            components = tuple(map(int, fields[1].split('.')))
+            if components + (0,) * (3 - len(components)) > (13, 0, 0):
+                raise SystemExit('Bundled library requires newer macOS: ' + str(binary))
+            minimums.append(fields[1])
+    minimum_versions[str(binary.relative_to(app))] = minimums
+
 output = root / 'dist/macos'
 output.mkdir(parents=True, exist_ok=True)
 package = output / f'HongguoTV-{version}-macos-universal.zip'
@@ -39,6 +54,7 @@ digest = hashlib.sha256(package.read_bytes()).hexdigest()
 (output / 'SHA256SUMS.txt').write_text(digest + '  ' + package.name + '\n')
 (output / 'macOS-validation.json').write_text(json.dumps({
     'ok': True, 'version': version, 'build': int(build), 'architectures': architectures,
-    'signature': 'ad-hoc', 'notarized': False, 'minimumMacOS': '12.0',
+    'signature': 'ad-hoc', 'notarized': False, 'minimumMacOS': '13.0',
+    'nativeMinimumVersions': minimum_versions,
     'package': package.name, 'sha256': digest, 'bytes': package.stat().st_size,
 }, indent=2) + '\n')

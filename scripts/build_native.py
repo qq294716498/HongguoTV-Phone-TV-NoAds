@@ -77,7 +77,7 @@ else:
     for architecture, clang_arch in [('arm64', 'arm64'), ('amd64', 'x86_64')]:
         output = root / 'native' / 'build' / 'darwin' / architecture / 'libduanju_core.dylib'
         build('darwin', architecture, compiler + ' -arch ' + clang_arch, output,
-              {'MACOSX_DEPLOYMENT_TARGET': '12.0'})
+              {'MACOSX_DEPLOYMENT_TARGET': '13.0'})
         outputs.append(str(output))
     subprocess.run(['lipo', '-create', *outputs, '-output',
                     str(root / 'native' / 'build' / 'darwin' / 'libduanju_core.dylib')], check=True)
