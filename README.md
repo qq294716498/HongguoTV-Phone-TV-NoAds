@@ -2,11 +2,13 @@
 
 基于 [guoapp](https://github.com/zhoufuweigg/guoapp) 的非官方独立客户端。手机与 Android TV 共用 Android 应用，另提供 Windows x64 与 macOS 通用客户端；支持浏览、搜索、播放、弹幕、追剧和下载。
 
-## macOS 适配：0.1.33+58（构建与双架构验证通过）
+## macOS 正式版：0.1.33+58（已发布）
 
 新增 macOS 13 及以上通用应用工程，原生核心同时编译 Apple 芯片 arm64 和 Intel x86_64。播放器使用 media_kit，补齐全屏、桌面控制条、播放防休眠和本地核心加载；下载、合并使用共用核心及 FFmpegKit。Mac 设备互联归类为电脑；暂不提供 Windows 专用托盘、迷你窗及自动安装更新。 新增原生图形能力预检，具备条件时使用硬件输出，否则使用兼容输出并尝试 VideoToolbox copy 解码，避免缺少 OpenGL 图形格式时直接崩溃。界面使用 Skia Metal，规避 Intel 验证环境中 Impeller 的 GPU 挂起；全屏请求按顺序执行并等待系统完成事件，避免进入动画尚未结束就切换退出。打包时逐项校验原生库的双架构及最低系统版本。
 
 构建：macOS 上安装 Flutter 3.47.4、Go 1.24.1 或更新、Xcode 与 CocoaPods，执行 `flutter pub get --enforce-lockfile` 和 `python3 scripts/build_macos.py`。产物是 `dist/macos/HongguoTV-0.1.33-macos-universal.zip`，解压后将应用移入 Applications。当前仅本地 ad-hoc 签名，未做 Apple Developer ID 签名和公证；不能视为已完成 Gatekeeper 信任验证。[macOS CI](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/40633050384) 已通过：739 项 Flutter 回归通过、5 项跳过，Go race 与静态检查通过；Apple 芯片和 Intel 分别连续三次通过原生核心、合成普通及加密视频播放、跳转、倍速、音量、全屏进出、FFprobe 和合并检查。41 个原生二进制均含 arm64 / x86_64，原生库最低系统要求不高于 macOS 13。云端使用兼容视频输出，真实 Mac 硬件输出、上游内容播放和长时间流畅度仍待实机验收。
+
+Mac 通用 ZIP 已发布：[下载 0.1.33](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/macos-v0.1.33-58/HongguoTV-0.1.33-macos-universal.zip) · [发布页与验证报告](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/macos-v0.1.33-58)。构建提交 `e87c6d6d6773edd01c2d843a232438e4098c78ef`，发布源码 `127ee8915bc512c5406e8e2461d06faaedf22862` 仅增加 README 验证说明。[发布 CI](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/40634937163) 已核对公开下载 SHA-256，并确认 Android Latest 与 Windows 更新发布保持不变。
 
 ## 本次修复：0.1.32+57（已正式发布）
 
@@ -203,11 +205,12 @@ Windows 10/11 x64 完整 ZIP 仍未签名。构建、完整包校验、合成媒
 
 请选择与平台和架构匹配的安装包；可用版本、校验清单和源码以对应 Release 的实际附件为准。
 
-[Android 最新正式版](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/latest) · [Windows 正式版](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/windows-v0.1.32-57)
+[Android 最新正式版](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/latest) · [Windows 正式版](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/windows-v0.1.32-57) · [macOS 正式版](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/macos-v0.1.33-58)
 
 | 设备架构 | 下载 |
 | --- | --- |
 | Windows 10/11 x64 · 完整 ZIP、未签名 | [HongguoTV 0.1.32 Windows x64](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.32-57/HongguoTV-0.1.32-windows-x64.zip) |
+| macOS 13 及以上 · Apple 芯片 / Intel 通用，未公证 | [HongguoTV 0.1.33 macOS 通用 ZIP](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/macos-v0.1.33-58/HongguoTV-0.1.33-macos-universal.zip) |
 | Android arm64-v8a · 大多数手机及较新的电视 / 盒子 | [HongguoTV 0.1.32 ARM64](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.32-57/HongguoTV-0.1.32-arm64-v8a.apk) |
 | Android armeabi-v7a · 32 位手机 / 电视 / 盒子 | [HongguoTV 0.1.32 32 位](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.32-57/HongguoTV-0.1.32-armeabi-v7a.apk) |
 | Android x86_64 · 对应架构模拟器 | [HongguoTV 0.1.32 x86_64](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.32-57/HongguoTV-0.1.32-x86_64.apk) |
@@ -269,6 +272,7 @@ Windows 请完整解压到可写目录，勿只复制 EXE 或混放旧 DLL。**�
 | --- | --- |
 | Android 手机 / Android TV | 0.1.32+57 三 ABI、既有正式证书、最低 Android 8.0；包名、版本、架构、证书、CRC / 对齐、资源、SHA-256 与公网更新下载结果见发布附件 |
 | Windows | 0.1.32+57 x64 未签名完整 ZIP；构建、版本 / DLL / 运行库、资源、SHA-256、合成媒体原生启动、托盘 / 迷你窗、17 项更新事务、16 项单实例回归和公网下载 / 静态清单回退结果见发布附件 |
+| macOS | 0.1.33+58 通用 ZIP，最低 macOS 13；41 个原生二进制双架构及最低系统版本、ad-hoc 签名完整性、两种架构各三次合成播放 / 加密解码 / 全屏 / 合并和公网 SHA-256 检查通过；未做 Apple 公证，真实硬件输出及上游播放仍待实机验收 |
 | iOS | 保留工程与构建支持，本次无已签名安装包 |
 
 静态检查、默认 / 全站源自动化、Python 门禁、两种 Go race 配置及平台构建的结果，见 [Android 发布附件](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/app-v0.1.32-57) 与 [Windows 发布附件](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/windows-v0.1.32-57)。请以本次 CI 和随包报告为准，不把源码、构建记录或签名检查等同完整实机验收。
