@@ -1,0 +1,46 @@
+name: Publish validated macOS package
+on:
+  push:
+    branches: [release/macos-0.1.33-58]
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: macos-stable-publish
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-universal
+          path: artifacts/package
+          run-id: 40633050384
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-smoke-macos-15
+          path: artifacts/arm64
+          run-id: 40633050384
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-smoke-macos-15-intel
+          path: artifacts/x86_64
+          run-id: 40633050384
+          github-token: ${{ github.token }}
+      - name: Publish and verify public download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/publish_macos.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-public-verification
+          path: dist/macOS-public-download.json
+          if-no-files-found: error
