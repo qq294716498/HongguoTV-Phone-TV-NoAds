@@ -252,37 +252,37 @@ List<String> hongguoNextSeasonQueries(Drama anchor) {
   ];
 }
 
+final _seriesTitleKeys = Expando<String>();
+
+String _seriesTitleKey(Drama drama) => _seriesTitleKeys[drama] ??=
+    normalizedSearchText(hongguoSeriesInfo(drama)?.baseTitle ?? drama.title);
+
 bool hongguoSameSeries(Drama anchor, Drama candidate) {
   if (anchor.source != candidate.source ||
       anchor.source != SourceSite.hongguo.id) {
     return false;
   }
-  final left = normalizedSearchText(
-    hongguoSeriesInfo(anchor)?.baseTitle ?? anchor.title,
-  );
-  final right = normalizedSearchText(
-    hongguoSeriesInfo(candidate)?.baseTitle ?? candidate.title,
-  );
+  final left = _seriesTitleKey(anchor);
+  final right = _seriesTitleKey(candidate);
+  if (left.isEmpty || right.isEmpty) return false;
+  if (left != right && !hongguoSimilarSeriesTitles(anchor, candidate)) {
+    return false;
+  }
   final leftNames = hongguoSeriesCharacters(anchor.description);
   final rightNames = hongguoSeriesCharacters(candidate.description);
   final sharedNames = leftNames.intersection(rightNames);
   if (left == right && left.isNotEmpty) {
     return leftNames.isEmpty || rightNames.isEmpty || sharedNames.isNotEmpty;
   }
-  return hongguoSimilarSeriesTitles(anchor, candidate) &&
-      sharedNames.isNotEmpty;
+  return sharedNames.isNotEmpty;
 }
 
 bool hongguoSimilarSeriesTitles(Drama anchor, Drama candidate) {
   if (anchor.source != candidate.source ||
       anchor.source != SourceSite.hongguo.id)
     return false;
-  final left = normalizedSearchText(
-    hongguoSeriesInfo(anchor)?.baseTitle ?? anchor.title,
-  );
-  final right = normalizedSearchText(
-    hongguoSeriesInfo(candidate)?.baseTitle ?? candidate.title,
-  );
+  final left = _seriesTitleKey(anchor);
+  final right = _seriesTitleKey(candidate);
   if (left == right && left.isNotEmpty) return true;
   Set<String> pairs(String text) => {
     for (var i = 0; i + 1 < text.length; i++) text.substring(i, i + 2),
@@ -296,10 +296,10 @@ bool hongguoSimilarSeriesTitles(Drama anchor, Drama candidate) {
   return true;
 }
 
+final _seriesCharacterPattern = RegExp(
+  r'(?:主角|男主角?|女主角?|主人公|少年|少女|青年|[。！？；，]|^)[：:、\s]*([\u4e00-\u9fff]{2,3}?)(?=在|是|被|因|为|与|和|从|本|意外|重生|穿越|觉醒|获得|发现|遭|踏|带|凭|，|。|、|\s|$)',
+);
 Set<String> hongguoSeriesCharacters(String text) {
-  final pattern = RegExp(
-    r'(?:主角|男主角?|女主角?|主人公|少年|少女|青年|[。！？；，]|^)[：:、\s]*([\u4e00-\u9fff]{2,3}?)(?=在|是|被|因|为|与|和|从|本|意外|重生|穿越|觉醒|获得|发现|遭|踏|带|凭|，|。|、|\s|$)',
-  );
   const generic = {
     '一个',
     '一位',
@@ -315,7 +315,7 @@ Set<String> hongguoSeriesCharacters(String text) {
     '少女',
     '青年',
   };
-  return pattern
+  return _seriesCharacterPattern
       .allMatches(text)
       .map((m) => m[1]!)
       .where(

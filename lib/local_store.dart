@@ -968,107 +968,28 @@ class LocalStore extends ChangeNotifier {
     final updates = dramas.toList();
     return _queue(() async {
       if (locked || epoch != _epoch) return;
-      final changes = <String, Object>{};
-      final favorites = Map.of(_favorites);
-      final history = Map.of(_history);
-      final states = Map.of(_followStates);
-      final seriesCandidates = Map.of(_seriesCandidates);
-      for (final drama in updates) {
-        if (!allowsSource(drama.source)) continue;
-        if (cacheSeriesCandidates && drama.source == SourceSite.hongguo.id) {
-          seriesCandidates[drama.id] = (seriesCandidates[drama.id] ?? drama)
-              .merge(drama);
-        }
-        final favorite = favorites[drama.id];
-        if (favorite != null) {
-          favorites[drama.id] = favorite.merge(drama);
-          states[drama.id] = states[drama.id]!.observe(favorites[drama.id]!);
-        }
-        final watched = history[drama.id];
-        if (watched != null) {
-          history[drama.id] = WatchEntry(
-            drama: watched.drama.merge(drama),
-            episode: watched.episode,
-            position: watched.position,
-            duration: watched.duration,
-            updatedAt: watched.updatedAt,
-          );
-        }
-      }
-      final candidates = <String, Drama>{
-        for (final entry in history.values) entry.drama.id: entry.drama,
-        ...favorites,
-        for (final drama in updates)
-          if (allowsSource(drama.source)) drama.id: drama,
-      };
-      for (final state in states.values) {
-        for (final notice in state.seriesSeasons.values) {
-          candidates.putIfAbsent(
-            notice.id,
-            () => Drama(
-              id: notice.id,
-              source: SourceSite.hongguo.id,
-              sourceId: notice.id.substring(SourceSite.hongguo.id.length + 1),
-              title: notice.title,
-            ),
-          );
-        }
-      }
-      final favoriteIds = favorites.keys.toSet();
-      for (final favorite in favorites.values) {
-        if (favorite.source != SourceSite.hongguo.id ||
-            states[favorite.id] == null) {
-          continue;
-        }
-        states[favorite.id] = observeHongguoSeriesSeasons(
-          anchor: favorite,
-          state: states[favorite.id]!,
-          candidates: candidates.values,
-          favoriteIds: favoriteIds,
-        );
-      }
-      final favoriteJson = jsonEncode(
-        favorites.values.map((entry) => entry.toJson()).toList(),
+      final input = (
+        updates,
+        Map.of(_favorites),
+        Map.of(_history),
+        Map.of(_followStates),
+        Map.of(_seriesCandidates),
+        sources.map((source) => source.id).toSet(),
+        cacheSeriesCandidates,
       );
-      final historyJson = jsonEncode(
-        history.values.map((entry) => entry.toJson()).toList(),
-      );
-      final statesJson = _encodeFollowStates(states);
-      final seriesCandidateJson = cacheSeriesCandidates
-          ? jsonEncode(
-              (seriesCandidates.values.toList()
-                    ..sort((a, b) => a.id.compareTo(b.id)))
-                  .take(2000)
-                  .map((entry) => entry.toJson())
-                  .toList(),
-            )
-          : null;
-      if (favoriteJson !=
-          jsonEncode(
-            _favorites.values.map((entry) => entry.toJson()).toList(),
-          )) {
-        changes[_key('favorites')] = favoriteJson;
-      }
-      if (historyJson !=
-          jsonEncode(_history.values.map((entry) => entry.toJson()).toList())) {
-        changes[_key('history')] = historyJson;
-      }
-      if (statesJson != _encodeFollowStates(_followStates)) {
-        changes[_key('followStates')] = statesJson;
-      }
-      if (seriesCandidateJson != null &&
-          seriesCandidateJson !=
-              jsonEncode(
-                (_seriesCandidates.values.toList()
-                      ..sort((a, b) => a.id.compareTo(b.id)))
-                    .take(2000)
-                    .map((entry) => entry.toJson())
-                    .toList(),
-              )) {
-        changes[_key('seriesCandidates')] = seriesCandidateJson;
-      }
+      final largeMerge =
+          updates.length > 128 ||
+          _favorites.length + _history.length + _seriesCandidates.length >
+              256 ||
+          updates.length * _favorites.length > 256;
+      final changes = largeMerge
+          ? await compute(_mergeLibraryDramas, input)
+          : _mergeLibraryDramas(input);
+      if (_disposed || locked || epoch != _epoch) return;
       if (changes.isEmpty) return;
-      await _commit(changes);
+      await _commit({
+        for (final entry in changes.entries) _key(entry.key): entry.value,
+      });
       _loadLibrary();
       _notify();
     });
@@ -1473,3 +1394,131 @@ class LocalStore extends ChangeNotifier {
     super.dispose();
   }
 }
+
+Map<String, Object> _mergeLibraryDramas(_LibraryMergeInput input) {
+  final (
+    updates,
+    originalFavorites,
+    originalHistory,
+    originalStates,
+    originalCandidates,
+    allowedSources,
+    cacheSeriesCandidates,
+  ) = input;
+  String encodeStates(Map<String, FollowState> states) => jsonEncode({
+    for (final entry in states.entries) entry.key: entry.value.toJson(),
+  });
+  final changes = <String, Object>{};
+  final favorites = Map.of(originalFavorites);
+  final history = Map.of(originalHistory);
+  final states = Map.of(originalStates);
+  final seriesCandidates = Map.of(originalCandidates);
+  for (final drama in updates) {
+    if (!allowedSources.contains(drama.source)) continue;
+    if (cacheSeriesCandidates && drama.source == SourceSite.hongguo.id) {
+      seriesCandidates[drama.id] = (seriesCandidates[drama.id] ?? drama).merge(
+        drama,
+      );
+    }
+    final favorite = favorites[drama.id];
+    if (favorite != null) {
+      favorites[drama.id] = favorite.merge(drama);
+      states[drama.id] = states[drama.id]!.observe(favorites[drama.id]!);
+    }
+    final watched = history[drama.id];
+    if (watched != null) {
+      history[drama.id] = WatchEntry(
+        drama: watched.drama.merge(drama),
+        episode: watched.episode,
+        position: watched.position,
+        duration: watched.duration,
+        updatedAt: watched.updatedAt,
+      );
+    }
+  }
+  final candidates = <String, Drama>{
+    for (final entry in history.values) entry.drama.id: entry.drama,
+    ...favorites,
+    for (final drama in updates)
+      if (allowedSources.contains(drama.source)) drama.id: drama,
+  };
+  for (final state in states.values) {
+    for (final notice in state.seriesSeasons.values) {
+      candidates.putIfAbsent(
+        notice.id,
+        () => Drama(
+          id: notice.id,
+          source: SourceSite.hongguo.id,
+          sourceId: notice.id.substring(SourceSite.hongguo.id.length + 1),
+          title: notice.title,
+        ),
+      );
+    }
+  }
+  final favoriteIds = favorites.keys.toSet();
+  for (final favorite in favorites.values) {
+    if (favorite.source != SourceSite.hongguo.id ||
+        states[favorite.id] == null) {
+      continue;
+    }
+    states[favorite.id] = observeHongguoSeriesSeasons(
+      anchor: favorite,
+      state: states[favorite.id]!,
+      candidates: candidates.values,
+      favoriteIds: favoriteIds,
+    );
+  }
+  final favoriteJson = jsonEncode(
+    favorites.values.map((entry) => entry.toJson()).toList(),
+  );
+  final historyJson = jsonEncode(
+    history.values.map((entry) => entry.toJson()).toList(),
+  );
+  final statesJson = encodeStates(states);
+  final seriesCandidateJson = cacheSeriesCandidates
+      ? jsonEncode(
+          (seriesCandidates.values.toList()
+                ..sort((a, b) => a.id.compareTo(b.id)))
+              .take(2000)
+              .map((entry) => entry.toJson())
+              .toList(),
+        )
+      : null;
+  if (favoriteJson !=
+      jsonEncode(
+        originalFavorites.values.map((entry) => entry.toJson()).toList(),
+      )) {
+    changes['favorites'] = favoriteJson;
+  }
+  if (historyJson !=
+      jsonEncode(
+        originalHistory.values.map((entry) => entry.toJson()).toList(),
+      )) {
+    changes['history'] = historyJson;
+  }
+  if (statesJson != encodeStates(originalStates)) {
+    changes['followStates'] = statesJson;
+  }
+  if (seriesCandidateJson != null &&
+      seriesCandidateJson !=
+          jsonEncode(
+            (originalCandidates.values.toList()
+                  ..sort((a, b) => a.id.compareTo(b.id)))
+                .take(2000)
+                .map((entry) => entry.toJson())
+                .toList(),
+          )) {
+    changes['seriesCandidates'] = seriesCandidateJson;
+  }
+  return changes;
+}
+
+typedef _LibraryMergeInput = (
+  List<Drama>,
+  Map<String, Drama>,
+  Map<String, WatchEntry>,
+  Map<String, FollowState>,
+  Map<String, Drama>,
+  Set<String>,
+  bool,
+);

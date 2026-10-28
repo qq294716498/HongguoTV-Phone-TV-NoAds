@@ -6,8 +6,8 @@ import 'package:flutter/services.dart';
 
 export 'app_build.dart';
 
-const appVersion = '0.1.30';
-const windowsBuildNumber = 55;
+const appVersion = '0.1.31';
+const windowsBuildNumber = 56;
 
 ThemeData televisionTheme(ThemeData theme) {
   final colors = theme.colorScheme;

@@ -58,6 +58,9 @@ String _nativeRequest(String body) {
   }
 }
 
+Map<String, dynamic> _decodedNativeRequest(String body) =>
+    jsonDecode(_nativeRequest(body)) as Map<String, dynamic>;
+
 class AppFailure implements Exception {
   AppFailure(this.message, {this.code = '', this.retryAt});
 
@@ -597,18 +600,18 @@ class NativeRepository extends AppRepository {
         input['force'] = true;
       }
       final body = jsonEncode(input);
-      final encoded = await Isolate.run(() => _nativeRequest(body)).timeout(
-        Duration(
-          seconds: action == 'moveDownloads'
-              ? 620
-              : action == 'danmaku'
-              ? 15
-              : action == 'preload'
-              ? 20
-              : 70,
-        ),
-      );
-      final response = jsonDecode(encoded) as Map<String, dynamic>;
+      final response = await Isolate.run(() => _decodedNativeRequest(body))
+          .timeout(
+            Duration(
+              seconds: action == 'moveDownloads'
+                  ? 620
+                  : action == 'danmaku'
+                  ? 15
+                  : action == 'preload'
+                  ? 20
+                  : 70,
+            ),
+          );
       if (response['ok'] != true) {
         throw AppFailure.fromResponse(response);
       }

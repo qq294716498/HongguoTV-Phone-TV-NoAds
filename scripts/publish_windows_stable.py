@@ -12,11 +12,11 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[1]
 output = root / 'dist/windows'
 repository = 'qq294716498/HongguoTV-Phone-TV-NoAds'
-release_branch = 'release/windows-android-0.1.30-55'
+release_branch = 'release/windows-android-0.1.31-56'
 approved_source = 'b369d9376723fd5549b72cb459486d92a3aef250'
-previous_windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48', 'windows-v0.1.24-49', 'windows-v0.1.25-50', 'windows-v0.1.29-54')
-previous_android_tag = 'app-v0.1.29-54'
-previous_android_commit = 'fc0b54ce049c78dadb5eca4937b7b23cec02e762'
+previous_windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48', 'windows-v0.1.24-49', 'windows-v0.1.25-50', 'windows-v0.1.29-54', 'windows-v0.1.30-55')
+previous_android_tag = 'app-v0.1.30-55'
+previous_android_commit = '259190d77185051386bf8edc2c32f6f270260e9b'
 pending_publication_note = '公开发布核验进行中：尚未完成 Windows 公网 ZIP 下载、升级通道及 Android Latest 隔离检查。'
 verified_publication_note = '公开发布核验已完成：Windows 公网 ZIP 下载与 SHA-256、正式升级通道和 API 限流回退检查通过；Android Latest 隔离及旧版本资产保持检查通过。'
 release_only_paths = frozenset({
@@ -48,7 +48,7 @@ def github(*arguments):
 
 def finalize_release_notes(tag):
     published = json.loads(github('api', f'repos/{repository}/releases/tags/{tag}'))
-    if tag != 'windows-v0.1.30-55' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
+    if tag != 'windows-v0.1.31-56' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
         raise ValueError('Only the current verified Windows stable release notes may be finalized')
     body = published['body']
     if body.count(pending_publication_note) != 1:
@@ -176,8 +176,8 @@ def main():
     version, build = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(encoding='utf-8'), re.MULTILINE).group(1).split('+')
     if not re.fullmatch(r'\d+\.\d+\.\d+', version):
         raise ValueError('Only Windows stable releases are allowed')
-    if version != '0.1.30' or build != '55':
-        raise ValueError('This workflow only publishes Windows 0.1.30+55')
+    if version != '0.1.31' or build != '56':
+        raise ValueError('This workflow only publishes Windows 0.1.31+56')
     tag = f'windows-v{version}-{build}'
     package = output / f'HongguoTV-{version}-windows-x64.zip'
     if sys.argv[1] == 'stage':
@@ -237,7 +237,7 @@ def main():
         write_json('Android-isolation.json', {'before': android, 'androidParserUnchanged': True,
                                               'parserSha256': hashlib.sha256(old.encode()).hexdigest()})
         subprocess.run([sys.executable, 'scripts/finish_task.py', '--message',
-                        '完成 Windows 0.1.30 x64 空响应恢复、下一季匹配、下载弹幕及手机横屏选集的新构建、完整包、托盘、迷你窗及更新事务验证'], check=True)
+                        '完成 Windows 0.1.31 x64 首页大剧库卡顿与后台匹配的新构建、完整包、托盘、迷你窗及更新事务验证'], check=True)
         subprocess.run([sys.executable, 'scripts/sync_source.py', '--check'], check=True)
         source = max(root.parent.glob('真果·鉴-*.zip'), key=lambda file: file.stat().st_mtime_ns)
         source_package = output / f'HongguoTV-{version}-source.zip'

@@ -12,15 +12,15 @@ root = Path(__file__).resolve().parents[1]
 output = root / 'dist/android'
 repository = 'qq294716498/HongguoTV-Phone-TV-NoAds'
 certificate = '55c3c3395a00e56e99b8bfd580b14c99618da74db19692a2e42606eb05c47ba9'
-windows_tag = 'windows-v0.1.30-55'
-windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48', 'windows-v0.1.24-49', 'windows-v0.1.25-50', 'windows-v0.1.29-54', windows_tag)
-previous_android_tag = 'app-v0.1.29-54'
-previous_android_commit = 'fc0b54ce049c78dadb5eca4937b7b23cec02e762'
+windows_tag = 'windows-v0.1.31-56'
+windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48', 'windows-v0.1.24-49', 'windows-v0.1.25-50', 'windows-v0.1.29-54', 'windows-v0.1.30-55', windows_tag)
+previous_android_tag = 'app-v0.1.30-55'
+previous_android_commit = '259190d77185051386bf8edc2c32f6f270260e9b'
 pending_publication_note = '公开发布核验进行中：尚未完成三 ABI 公网下载、签名复核及 Android / Windows 升级通道隔离检查。'
 verified_publication_note = '公开发布核验已完成：三 ABI 公网下载、SHA-256、正式证书与版本复核通过；Android Latest 和 Windows 升级通道隔离、旧版本资产保持检查通过。'
 windows_verified_publication_note = '公开发布核验已完成：Windows 公网 ZIP 下载与 SHA-256、正式升级通道和 API 限流回退检查通过；Android Latest 隔离及旧版本资产保持检查通过。'
 offsets = {'arm64-v8a': 2000, 'armeabi-v7a': 1000, 'x86_64': 4000}
-release_branch = 'release/windows-android-0.1.30-55'
+release_branch = 'release/windows-android-0.1.31-56'
 approved_source = 'b369d9376723fd5549b72cb459486d92a3aef250'
 release_only_paths = frozenset({
     'README.md', '.github/workflows/android-stable.yml',
@@ -55,7 +55,7 @@ def release(tag):
 
 def finalize_release_notes(tag):
     published = release(tag)
-    if tag != 'app-v0.1.30-55' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
+    if tag != 'app-v0.1.31-56' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
         raise ValueError('Only the current verified Android stable release notes may be finalized')
     body = published['body']
     if body.count(pending_publication_note) != 1:
@@ -133,8 +133,8 @@ def main():
     os.chdir(root)
     version, raw_build = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(), re.M).group(1).split('+')
     build = int(raw_build)
-    if version != '0.1.30' or build != 55:
-        raise ValueError('This workflow only publishes Android 0.1.30+55')
+    if version != '0.1.31' or build != 56:
+        raise ValueError('This workflow only publishes Android 0.1.31+56')
     validate_release_source(os.environ['GITHUB_SHA'])
     tag = f'app-v{version}-{build}'
     phase = sys.argv[1]
@@ -159,7 +159,7 @@ def main():
             if match and int(match[1]) >= build:
                 raise ValueError('A newer or reserved Android build already exists')
         write('Release-before.json', {'android': snapshot(latest), 'windows': validated_windows_snapshots(os.environ['GITHUB_SHA'])})
-        subprocess.run([sys.executable, 'scripts/finish_task.py', '--message', 'Android 0.1.30 手机与TV空响应恢复、下一季匹配、下载弹幕及手机横屏选集修复；三ABI既有正式签名新构建及集中回归通过，未实测实体手机或TV'], check=True)
+        subprocess.run([sys.executable, 'scripts/finish_task.py', '--message', 'Android 0.1.31 手机与TV首页大剧库卡顿与后台匹配修复；三ABI既有正式签名新构建及集中回归通过，未实测实体手机或TV'], check=True)
         subprocess.run([sys.executable, 'scripts/sync_source.py', '--check'], check=True)
         source = max(root.parent.glob('真果·鉴-*.zip'), key=lambda p: p.stat().st_mtime_ns)
         source_package = output / f'HongguoTV-{version}-source.zip'
