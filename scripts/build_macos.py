@@ -20,7 +20,13 @@ with (app / 'Contents/Info.plist').open('rb') as stream:
 if info['CFBundleShortVersionString'] != version or info['CFBundleVersion'] != build:
     raise SystemExit('macOS version mismatch')
 architectures = {}
-for binary in [app / 'Contents/MacOS/HongguoTV', core]:
+for binary in sorted(app.rglob('*')):
+    if not binary.is_file() or binary.is_symlink():
+        continue
+    with binary.open('rb') as stream:
+        magic = stream.read(4)
+    if magic not in (b'\xcf\xfa\xed\xfe', b'\xfe\xed\xfa\xcf', b'\xca\xfe\xba\xbe', b'\xbe\xba\xfe\xca'):
+        continue
     archs = subprocess.check_output(['lipo', '-archs', str(binary)], text=True).split()
     if set(archs) != {'arm64', 'x86_64'}:
         raise SystemExit('Universal binary missing architecture: ' + str(binary))

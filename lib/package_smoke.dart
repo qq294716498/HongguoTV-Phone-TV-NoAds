@@ -116,6 +116,37 @@ Future<void> runPackageSmoke(List<String> arguments) async {
     );
     await afterSeek.timeout(const Duration(seconds: 20));
     evidence['seekRateVolume'] = true;
+    if (Platform.isMacOS) {
+      const key = '00112233445566778899aabbccddeeff';
+      final encrypted = '${report.parent.path}/encrypted.mp4';
+      await executor.run([
+        '-y',
+        '-i',
+        input,
+        '-c',
+        'copy',
+        '-encryption_scheme',
+        'cenc-aes-ctr',
+        '-encryption_key',
+        key,
+        '-encryption_kid',
+        '0123456789abcdef0123456789abcdef',
+        encrypted,
+      ]);
+      await player.stop();
+      final native = player.platform as NativePlayer;
+      await native.setProperty('demuxer-lavf-o', 'decryption_key=$key');
+      final decoded = player.stream.position.firstWhere(
+        (time) => time.inMilliseconds > 400,
+      );
+      await player.open(Media(encrypted));
+      await decoded.timeout(const Duration(seconds: 20));
+      final encryptedFrame = await player.screenshot(format: 'image/png');
+      if (encryptedFrame == null || encryptedFrame.length < 100) {
+        throw StateError('Encrypted media decode failed');
+      }
+      evidence['encryptedPlayback'] = true;
+    }
     await AppDevice.channel.invokeMethod<void>('setPlaybackScreenOn', {
       'enabled': true,
     });
@@ -124,9 +155,29 @@ Future<void> runPackageSmoke(List<String> arguments) async {
     });
     evidence['playbackPower'] = true;
     await windowManager.setFullScreen(true);
+    if (Platform.isMacOS) {
+      for (
+        var attempt = 0;
+        attempt < 50 && !await windowManager.isFullScreen();
+        attempt++
+      ) {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+    }
     if (!await windowManager.isFullScreen())
       throw StateError('Fullscreen failed');
     await windowManager.setFullScreen(false);
+    if (Platform.isMacOS) {
+      for (
+        var attempt = 0;
+        attempt < 50 && await windowManager.isFullScreen();
+        attempt++
+      ) {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+      if (await windowManager.isFullScreen())
+        throw StateError('Fullscreen exit failed');
+    }
     evidence['fullscreen'] = true;
     if (errors.isNotEmpty) throw StateError(errors.join('\n'));
     evidence['mediaKitPlayback'] = true;
