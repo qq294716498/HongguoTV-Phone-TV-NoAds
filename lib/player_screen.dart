@@ -1,3 +1,4 @@
+import 'desktop_fullscreen.dart';
 import 'tv_decoder_settings.dart';
 
 import 'dart:async';
@@ -2184,7 +2185,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     try {
       if (_desktopPlayer && WindowsDesktop.current != null) {
         await WindowsDesktop.current!.setFullscreen(fullscreen);
-      } else if (Platform.isWindows || _nativeMacWindow) {
+      } else if (_nativeMacWindow) {
+        await DesktopFullscreen.instance.set(fullscreen);
+      } else if (Platform.isWindows) {
         await windowManager.setFullScreen(fullscreen);
       } else if (_mobile) {
         await (_orientationController?.setPlayback(
@@ -2811,7 +2814,13 @@ class _PlayerScreenState extends State<PlayerScreen>
     }();
     if (_desktopPlayer) WindowsDesktop.current?.playbackDisposal = disposal;
     unawaited(disposal);
-    if (Platform.isWindows || _nativeMacWindow) {
+    if (_nativeMacWindow) {
+      unawaited(
+        DesktopFullscreen.instance.set(false).catchError((Object error) {
+          DiaryService.add('[Player] fullscreen cleanup failed: $error');
+        }),
+      );
+    } else if (Platform.isWindows) {
       unawaited(windowManager.setFullScreen(false));
     } else if (_mobile || _television && Platform.isAndroid) {
       unawaited(

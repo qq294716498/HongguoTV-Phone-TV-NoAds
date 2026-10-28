@@ -1,3 +1,4 @@
+import 'desktop_fullscreen.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -165,29 +166,19 @@ Future<void> runPackageSmoke(List<String> arguments) async {
       'enabled': false,
     });
     evidence['playbackPower'] = true;
-    await windowManager.setFullScreen(true);
     if (Platform.isMacOS) {
-      for (
-        var attempt = 0;
-        attempt < 50 && !await windowManager.isFullScreen();
-        attempt++
-      ) {
-        await Future<void>.delayed(const Duration(milliseconds: 100));
-      }
+      await DesktopFullscreen.instance.set(true);
+    } else {
+      await windowManager.setFullScreen(true);
     }
     if (!await windowManager.isFullScreen())
       throw StateError('Fullscreen failed');
-    await windowManager.setFullScreen(false);
     if (Platform.isMacOS) {
-      for (
-        var attempt = 0;
-        attempt < 50 && await windowManager.isFullScreen();
-        attempt++
-      ) {
-        await Future<void>.delayed(const Duration(milliseconds: 100));
-      }
+      await DesktopFullscreen.instance.set(false);
       if (await windowManager.isFullScreen())
         throw StateError('Fullscreen exit failed');
+    } else {
+      await windowManager.setFullScreen(false);
     }
     evidence['fullscreen'] = true;
     if (errors.isNotEmpty) throw StateError(errors.join('\n'));
