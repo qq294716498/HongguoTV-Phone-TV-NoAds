@@ -13,7 +13,10 @@ import 'player_fixtures.dart' show mockPlayerDevice;
 
 void main() {
   setUp(mockPlayerDevice);
-  final windows = TargetPlatformVariant.only(TargetPlatform.windows);
+  final windows = TargetPlatformVariant({
+    TargetPlatform.windows,
+    TargetPlatform.macOS,
+  });
   final chrome = find.byKey(const ValueKey('player-chrome'));
   final volume = find.byKey(const ValueKey('windows-volume'));
   final popup = find.byKey(const ValueKey('windows-volume-popup'));

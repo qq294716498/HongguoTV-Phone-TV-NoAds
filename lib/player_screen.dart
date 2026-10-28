@@ -85,7 +85,7 @@ class PlayerScreen extends StatefulWidget {
 }
 
 class _PlayerScreenState extends State<PlayerScreen>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, WindowListener {
   late DramaDetail _detail;
   DramaDetail? _openedDetail;
   int _seasonSequence = 0;
@@ -189,12 +189,14 @@ class _PlayerScreenState extends State<PlayerScreen>
       !_television &&
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS);
-  bool get _windowsDesktop =>
-      !_television && defaultTargetPlatform == TargetPlatform.windows;
+  bool get _desktopPlayer =>
+      !_television &&
+      (defaultTargetPlatform == TargetPlatform.windows ||
+          defaultTargetPlatform == TargetPlatform.macOS);
   bool get _windowsMini =>
-      _windowsDesktop && (WindowsDesktop.current?.mini ?? false);
+      _desktopPlayer && (WindowsDesktop.current?.mini ?? false);
   bool get _windowsSidebarAvailable =>
-      _windowsDesktop &&
+      _desktopPlayer &&
       !_windowsMini &&
       !_showFullscreen &&
       MediaQuery.sizeOf(context).width >= 760;
@@ -251,9 +253,10 @@ class _PlayerScreenState extends State<PlayerScreen>
     final layout = context.getInheritedWidgetOfExactType<AppLayout>();
     _televisionDevice = layout?.deviceTelevision ?? _television;
     WidgetsBinding.instance.addObserver(this);
+    if (Platform.isMacOS) windowManager.addListener(this);
     _detail = widget.detail;
     _index = widget.initialIndex;
-    if (_windowsDesktop) {
+    if (_desktopPlayer) {
       WindowsDesktop.current?.addListener(_desktopChanged);
       _windowsEpisodesExpanded =
           widget.store.preferences.getBool(
@@ -406,7 +409,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         if (completed &&
             !_loading &&
             !_closed &&
-            (!_windowsDesktop || _playIntent) &&
+            (!_desktopPlayer || _playIntent) &&
             _acceptErrors &&
             _error == null) {
           final duration = _player.state.duration;
@@ -521,7 +524,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         );
       }
     });
-    if (_windowsDesktop) {
+    if (_desktopPlayer) {
       final desktop = WindowsDesktop.current;
       desktop?.playbackOwner = this;
       desktop?.togglePlayback = () {
@@ -671,8 +674,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     final enabled =
         !_closed &&
         (_lifecycleState == AppLifecycleState.resumed ||
-            _windowsDesktop &&
-                (WindowsDesktop.current?.keepPlayback ?? false) ||
+            _desktopPlayer && (WindowsDesktop.current?.keepPlayback ?? false) ||
             (defaultTargetPlatform == TargetPlatform.windows ||
                     defaultTargetPlatform == TargetPlatform.macOS) &&
                 _lifecycleState == AppLifecycleState.inactive) &&
@@ -775,7 +777,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   void _applyLifecycleVisibility({bool pauseWhenHidden = true}) {
     final visible =
         _lifecycleState == AppLifecycleState.resumed ||
-        _windowsDesktop && (WindowsDesktop.current?.keepPlayback ?? false) ||
+        _desktopPlayer && (WindowsDesktop.current?.keepPlayback ?? false) ||
         _pictureInPictureVisible ||
         (defaultTargetPlatform == TargetPlatform.windows ||
                 defaultTargetPlatform == TargetPlatform.macOS) &&
@@ -887,7 +889,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   void _recordWindowsVideoGeometry() {
-    if (!_windowsDesktop || !mounted || _closed) return;
+    if (!_desktopPlayer || !mounted || _closed) return;
     final context = _videoPaneKey.currentContext;
     final pane = context?.findRenderObject();
     if (context == null ||
@@ -2151,7 +2153,7 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   bool get _showFullscreen =>
       _television ||
-      (_windowsDesktop && WindowsDesktop.current != null
+      (_desktopPlayer && WindowsDesktop.current != null
           ? WindowsDesktop.current!.fullscreen
           : _fullscreen) ||
       (_mobile &&
@@ -2173,7 +2175,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       _automaticFullscreenSuppressed = !fullscreen;
     });
     try {
-      if (_windowsDesktop && WindowsDesktop.current != null) {
+      if (_desktopPlayer && WindowsDesktop.current != null) {
         await WindowsDesktop.current!.setFullscreen(fullscreen);
       } else if (Platform.isWindows || Platform.isMacOS) {
         await windowManager.setFullScreen(fullscreen);
@@ -2206,7 +2208,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   Future<void> _setWindowsEpisodes(bool expanded) async {
-    if (!_windowsDesktop || _closed || !mounted) return;
+    if (!_desktopPlayer || _closed || !mounted) return;
     _interactions.cancel();
     setState(() {
       _windowsEpisodesExpanded = expanded;
@@ -2228,6 +2230,20 @@ class _PlayerScreenState extends State<PlayerScreen>
       ? _setWindowsEpisodes(!_windowsEpisodesExpanded)
       : _openPanel(PlayerMenuSection.episodes);
 
+  @override
+  void onWindowEnterFullScreen() {
+    if (Platform.isMacOS && mounted && !_closed) {
+      setState(() => _fullscreen = true);
+    }
+  }
+
+  @override
+  void onWindowLeaveFullScreen() {
+    if (Platform.isMacOS && mounted && !_closed) {
+      setState(() => _fullscreen = false);
+    }
+  }
+
   void _desktopChanged() {
     if (!mounted || _closed) return;
     _applyLifecycleVisibility(pauseWhenHidden: false);
@@ -2235,7 +2251,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   void _syncDesktopPlayback() {
-    if (!_windowsDesktop || _closed) return;
+    if (!_desktopPlayer || _closed) return;
     final attached =
         widget.store.profileEpoch == _profileEpoch &&
         !widget.store.locked &&
@@ -2720,7 +2736,8 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   @override
   void dispose() {
-    if (_windowsDesktop) {
+    if (Platform.isMacOS) windowManager.removeListener(this);
+    if (_desktopPlayer) {
       WindowsDesktop.current?.removeListener(_desktopChanged);
       unawaited(WindowsDesktop.current?.detachPlayback(this));
     }
@@ -2785,7 +2802,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         DiaryService.add('[Player] cleanup incomplete: $error');
       }
     }();
-    if (_windowsDesktop) WindowsDesktop.current?.playbackDisposal = disposal;
+    if (_desktopPlayer) WindowsDesktop.current?.playbackDisposal = disposal;
     unawaited(disposal);
     if (Platform.isWindows || Platform.isMacOS) {
       unawaited(windowManager.setFullScreen(false));
@@ -2832,7 +2849,7 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Widget _buildPlayer(BuildContext context) {
     final theme = Theme.of(context);
-    final title = _windowsDesktop
+    final title = _desktopPlayer
         ? '${_detail.drama.title} · ${episodeProgressLabel(_detail, _index)}'
         : _detail.drama.title;
     final fullscreen = _showFullscreen;
@@ -2898,7 +2915,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             appBar: pictureInPicture || fullscreen || _windowsMini || _mobile
                 ? null
                 : AppBar(
-                    title: _windowsDesktop
+                    title: _desktopPlayer
                         ? Semantics(
                             label: title,
                             child: Row(
@@ -2928,14 +2945,14 @@ class _PlayerScreenState extends State<PlayerScreen>
                           )
                         : Text(
                             title,
-                            key: _windowsDesktop
+                            key: _desktopPlayer
                                 ? const ValueKey('windows-player-title')
                                 : null,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                     actions: [
-                      if (_windowsDesktop && WindowsDesktop.current != null)
+                      if (_desktopPlayer && WindowsDesktop.current != null)
                         IconButton(
                           key: const ValueKey('windows-mini'),
                           tooltip: '迷你窗（置顶）',
@@ -2959,7 +2976,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                     child: LayoutBuilder(
                       builder: (context, constraints) {
                         final desktop = constraints.maxWidth >= 840;
-                        if (_windowsDesktop) {
+                        if (_desktopPlayer) {
                           final visible =
                               _windowsEpisodesExpanded &&
                               !fullscreen &&
@@ -3116,16 +3133,16 @@ class _PlayerScreenState extends State<PlayerScreen>
             onEpisodes: () => _portraitWatching
                 ? _openMobileDetails(0)
                 : _openPanel(PlayerMenuSection.episodes),
-            onSidebar: _windowsDesktop ? _windowsEpisodes : null,
-            onMini: _windowsDesktop && WindowsDesktop.current != null
+            onSidebar: _desktopPlayer ? _windowsEpisodes : null,
+            onMini: _desktopPlayer && WindowsDesktop.current != null
                 ? _toggleMini
                 : null,
             desktopMini: _windowsMini,
-            desktopEpisodesExpanded: _windowsDesktop
+            desktopEpisodesExpanded: _desktopPlayer
                 ? _windowsSidebarAvailable && _windowsEpisodesExpanded
                 : null,
             desktopActivityRevision: _windowsActivityRevision,
-            episodesTooltip: !_windowsDesktop || !_windowsSidebarAvailable
+            episodesTooltip: !_desktopPlayer || !_windowsSidebarAvailable
                 ? null
                 : _windowsEpisodesExpanded
                 ? '收起选集栏'
@@ -3200,7 +3217,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             animationBehavior: AppLayout.isTelevisionDevice(context)
                 ? AnimationBehavior.preserve
                 : AnimationBehavior.normal,
-            desktop: _windowsDesktop,
+            desktop: _desktopPlayer,
             speed: _preferences.effectiveDanmakuSpeed(mobile: _mobile),
             opacity: _preferences.effectiveDanmakuOpacity(
               mobile: _mobile,
@@ -3274,7 +3291,7 @@ class _PlayerScreenState extends State<PlayerScreen>
               else
                 Video(
                   controller: _video!,
-                  pauseUponEnteringBackgroundMode: !_windowsDesktop,
+                  pauseUponEnteringBackgroundMode: !_desktopPlayer,
                   fit: BoxFit.contain,
                   controls: (_) => layeredControls,
                 ),
