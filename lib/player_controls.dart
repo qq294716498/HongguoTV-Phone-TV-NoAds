@@ -256,7 +256,9 @@ class _PlayerControlsState extends State<PlayerControls> {
 
   void _scheduleHide() {
     _hideTimer?.cancel();
-    if (defaultTargetPlatform == TargetPlatform.windows && !widget.swipeEnabled)
+    if ((defaultTargetPlatform == TargetPlatform.windows ||
+            defaultTargetPlatform == TargetPlatform.macOS) &&
+        !widget.swipeEnabled)
       return;
     if (!widget.enabled ||
         widget.panelOpen ||
@@ -337,7 +339,8 @@ class _PlayerControlsState extends State<PlayerControls> {
 
   @override
   Widget build(BuildContext context) {
-    if (defaultTargetPlatform == TargetPlatform.windows &&
+    if ((defaultTargetPlatform == TargetPlatform.windows ||
+            defaultTargetPlatform == TargetPlatform.macOS) &&
         !widget.swipeEnabled) {
       return WindowsPlayerControls(controls: widget);
     }

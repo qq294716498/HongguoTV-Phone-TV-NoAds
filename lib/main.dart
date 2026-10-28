@@ -66,10 +66,15 @@ Future<void> main(List<String> arguments) async {
       exit(0);
     }
   }
+  if (Platform.isMacOS) {
+    await windowManager.ensureInitialized();
+    await windowManager.setMinimumSize(const Size(800, 600));
+  }
   MediaKit.ensureInitialized();
   VideoEnhancementAssets.registerLicenses();
   DanmakuEmojiAssets.registerLicenses();
-  if (Platform.isWindows && arguments.firstOrNull == '--package-smoke') {
+  if ((Platform.isWindows || Platform.isMacOS) &&
+      arguments.firstOrNull == '--package-smoke') {
     await runPackageSmoke(arguments);
     return;
   }
@@ -271,7 +276,7 @@ class _AppBootstrapState extends State<AppBootstrap>
             store!,
             kind: device.television
                 ? 'tv'
-                : Platform.isWindows
+                : (Platform.isWindows || Platform.isMacOS)
                 ? 'computer'
                 : 'phone',
           );

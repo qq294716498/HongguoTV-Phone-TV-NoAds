@@ -664,7 +664,8 @@ class _PlayerScreenState extends State<PlayerScreen>
   void _syncScreenOn() {
     if (_closed) _screenOnDeadline?.cancel();
     if (defaultTargetPlatform != TargetPlatform.android &&
-        defaultTargetPlatform != TargetPlatform.windows) {
+        defaultTargetPlatform != TargetPlatform.windows &&
+        defaultTargetPlatform != TargetPlatform.macOS) {
       return;
     }
     final enabled =
@@ -672,7 +673,8 @@ class _PlayerScreenState extends State<PlayerScreen>
         (_lifecycleState == AppLifecycleState.resumed ||
             _windowsDesktop &&
                 (WindowsDesktop.current?.keepPlayback ?? false) ||
-            defaultTargetPlatform == TargetPlatform.windows &&
+            (defaultTargetPlatform == TargetPlatform.windows ||
+                    defaultTargetPlatform == TargetPlatform.macOS) &&
                 _lifecycleState == AppLifecycleState.inactive) &&
         !_pictureInPictureVisible &&
         _error == null &&
@@ -775,7 +777,8 @@ class _PlayerScreenState extends State<PlayerScreen>
         _lifecycleState == AppLifecycleState.resumed ||
         _windowsDesktop && (WindowsDesktop.current?.keepPlayback ?? false) ||
         _pictureInPictureVisible ||
-        defaultTargetPlatform == TargetPlatform.windows &&
+        (defaultTargetPlatform == TargetPlatform.windows ||
+                defaultTargetPlatform == TargetPlatform.macOS) &&
             _lifecycleState == AppLifecycleState.inactive;
     if (_foreground != visible) _health.reset();
     _foreground = visible;
@@ -2172,7 +2175,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     try {
       if (_windowsDesktop && WindowsDesktop.current != null) {
         await WindowsDesktop.current!.setFullscreen(fullscreen);
-      } else if (Platform.isWindows) {
+      } else if (Platform.isWindows || Platform.isMacOS) {
         await windowManager.setFullScreen(fullscreen);
       } else if (_mobile) {
         await (_orientationController?.setPlayback(
@@ -2784,7 +2787,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     }();
     if (_windowsDesktop) WindowsDesktop.current?.playbackDisposal = disposal;
     unawaited(disposal);
-    if (Platform.isWindows) {
+    if (Platform.isWindows || Platform.isMacOS) {
       unawaited(windowManager.setFullScreen(false));
     } else if (_mobile || _television && Platform.isAndroid) {
       unawaited(

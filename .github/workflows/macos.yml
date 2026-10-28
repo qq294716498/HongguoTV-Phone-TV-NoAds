@@ -1,0 +1,79 @@
+name: macOS universal
+on:
+  push:
+    branches: ['feature/macos-*']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: macos-${{ github.ref }}
+  cancel-in-progress: false
+env:
+  GOPROXY: https://proxy.golang.org,direct
+  GOSUMDB: sum.golang.org
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: native/go.mod
+          cache-dependency-path: native/go.sum
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - run: flutter analyze --no-pub --no-fatal-infos lib test integration_test test_driver
+      - run: flutter test --no-pub --dart-define=DISABLE_REMOTE_IMAGES=true --concurrency=2
+      - run: go test -race ./...
+        working-directory: native
+      - name: Prepare FFmpeg macOS frameworks
+        run: |
+          plugin=$(python3 -c "import json,urllib.parse; print(urllib.parse.urlparse(next(p['rootUri'] for p in json.load(open('.dart_tool/package_config.json'))['packages'] if p['name']=='ffmpeg_kit_flutter_new_min_gpl')).path)")
+          cd "$plugin/macos"
+          bash ../scripts/setup_macos.sh
+      - run: python3 scripts/build_macos.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-universal
+          path: dist/macos/*
+          if-no-files-found: error
+  smoke:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-universal
+          path: package
+      - name: Verify and launch bundled native playback
+        run: |
+          cd package
+          shasum -a 256 -c SHA256SUMS.txt
+          ditto -x -k HongguoTV-*-macos-universal.zip extracted
+          codesign --verify --deep --strict extracted/HongguoTV.app
+          python3 - <<'PY'
+          import json, pathlib, platform, subprocess
+          root = pathlib.Path.cwd()
+          report = root / 'macOS-smoke.json'
+          subprocess.run([str(root / 'extracted/HongguoTV.app/Contents/MacOS/HongguoTV'), '--package-smoke', str(report), str(root / 'synthetic.mp4')], check=True, timeout=120)
+          data = json.loads(report.read_text())
+          assert data['ok'] and data['nativeCore'] and data['mediaKitPlayback'] and data['remux']
+          data['hostArchitecture'] = platform.machine()
+          report.write_text(json.dumps(data, indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-smoke-${{ matrix.runner }}
+          path: package/macOS-smoke.json
+          if-no-files-found: warn

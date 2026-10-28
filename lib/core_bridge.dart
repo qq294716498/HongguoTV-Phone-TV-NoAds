@@ -33,6 +33,15 @@ String _nativeRequest(String body) {
     library = DynamicLibrary.open(
       path.join(path.dirname(Platform.resolvedExecutable), 'duanju_core.dll'),
     );
+  } else if (Platform.isMacOS) {
+    library = DynamicLibrary.open(
+      path.join(
+        path.dirname(Platform.resolvedExecutable),
+        '..',
+        'Frameworks',
+        'libduanju_core.dylib',
+      ),
+    );
   } else if (Platform.isIOS) {
     library = DynamicLibrary.process();
   } else {

@@ -2,6 +2,12 @@
 
 基于 [guoapp](https://github.com/zhoufuweigg/guoapp) 的非官方独立客户端。手机与 Android TV 共用 Android 应用，另提供 Windows x64 客户端；支持浏览、搜索、播放、弹幕、追剧和下载。
 
+## macOS 适配：0.1.33+58（验证中）
+
+新增 macOS 12 及以上通用应用工程，原生核心同时编译 Apple 芯片 arm64 和 Intel x86_64。播放器使用 media_kit，补齐全屏、桌面控制条、播放防休眠和本地核心加载；下载、合并使用共用核心及 FFmpegKit。Mac 设备互联归类为电脑；暂不提供 Windows 专用托盘、迷你窗及自动安装更新。
+
+构建：macOS 上安装 Flutter 3.47.4、Go 1.24.1 或更新、Xcode 与 CocoaPods，执行 `flutter pub get --enforce-lockfile` 和 `python3 scripts/build_macos.py`。产物是 `dist/macos/HongguoTV-0.1.33-macos-universal.zip`，解压后将应用移入 Applications。当前仅本地 ad-hoc 签名，未做 Apple Developer ID 签名和公证；不能视为已完成 Gatekeeper 信任验证。两种架构将在独立 macOS runner 上验证原生核心、合成视频播放 / 跳转 / 倍速 / 音量、全屏及合并，构建与实机验证完成前不宣称可用。
+
 ## 本次修复：0.1.32+57（已正式发布）
 
 - 修复旧跨季续播记录在新版匹配规则下被拒绝：已保存的同源、同基础剧名、同季数单位记录继续兼容，不因两季简介识别出不同人物而拒绝读取。新剧发现仍使用原有的剧名相似度与人物证据规则。

@@ -130,6 +130,12 @@ Future<void> runPackageSmoke(List<String> arguments) async {
     evidence['fullscreen'] = true;
     if (errors.isNotEmpty) throw StateError(errors.join('\n'));
     evidence['mediaKitPlayback'] = true;
+    if (Platform.isMacOS) {
+      evidence['ok'] = true;
+      await player.dispose();
+      await report.writeAsString(jsonEncode(evidence), flush: true);
+      exit(0);
+    }
     final desktop = WindowsDesktop(preferences, exitProcess: exit);
     await desktop.initialize();
     if (!desktop.available)

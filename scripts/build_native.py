@@ -73,5 +73,11 @@ else:
     compiler = shutil.which('clang')
     if not compiler:
         raise SystemExit('需要安装 Xcode Command Line Tools。')
-    build('darwin', 'arm64' if platform.machine() == 'arm64' else 'amd64', compiler,
-          root / 'native' / 'build' / 'darwin' / 'libduanju_core.dylib')
+    outputs = []
+    for architecture, clang_arch in [('arm64', 'arm64'), ('amd64', 'x86_64')]:
+        output = root / 'native' / 'build' / 'darwin' / architecture / 'libduanju_core.dylib'
+        build('darwin', architecture, compiler + ' -arch ' + clang_arch, output,
+              {'MACOSX_DEPLOYMENT_TARGET': '12.0'})
+        outputs.append(str(output))
+    subprocess.run(['lipo', '-create', *outputs, '-output',
+                    str(root / 'native' / 'build' / 'darwin' / 'libduanju_core.dylib')], check=True)
