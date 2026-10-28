@@ -49,6 +49,20 @@ class AppDevice {
   final bool television;
   final String version;
   static const channel = MethodChannel('duanju/device');
+  static bool macHardwareVideoOutput = false;
+
+  static Future<void> prepareMacVideoOutput() async {
+    if (defaultTargetPlatform != TargetPlatform.macOS) return;
+    try {
+      macHardwareVideoOutput =
+          await channel
+              .invokeMethod<bool>('supportsHardwareVideoOutput')
+              .timeout(const Duration(seconds: 3)) ==
+          true;
+    } catch (_) {
+      macHardwareVideoOutput = false;
+    }
+  }
 
   static Future<AppDevice> detect({
     AppDevice fallback = const AppDevice(),

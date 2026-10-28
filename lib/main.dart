@@ -67,6 +67,7 @@ Future<void> main(List<String> arguments) async {
     }
   }
   if (Platform.isMacOS) {
+    await AppDevice.prepareMacVideoOutput();
     await windowManager.ensureInitialized();
     await windowManager.setMinimumSize(const Size(800, 600));
   }

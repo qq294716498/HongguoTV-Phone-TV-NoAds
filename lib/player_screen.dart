@@ -324,7 +324,12 @@ class _PlayerScreenState extends State<PlayerScreen>
         ? VideoController(
             _player,
             configuration: VideoControllerConfiguration(
-              enableHardwareAcceleration: !Platform.isIOS,
+              enableHardwareAcceleration:
+                  !Platform.isIOS &&
+                  (!Platform.isMacOS || AppDevice.macHardwareVideoOutput),
+              hwdec: Platform.isMacOS && !AppDevice.macHardwareVideoOutput
+                  ? 'videotoolbox-copy'
+                  : null,
             ),
           )
         : null;

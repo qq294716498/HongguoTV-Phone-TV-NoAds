@@ -75,7 +75,18 @@ Future<void> runPackageSmoke(List<String> arguments) async {
     verifyMediaDuration(await executor.probe(remuxed.path), 3);
     evidence['remux'] = true;
     player = Player(configuration: const PlayerConfiguration(muted: true));
-    final video = VideoController(player);
+    final video = VideoController(
+      player,
+      configuration: VideoControllerConfiguration(
+        enableHardwareAcceleration:
+            !Platform.isMacOS || AppDevice.macHardwareVideoOutput,
+        hwdec: Platform.isMacOS && !AppDevice.macHardwareVideoOutput
+            ? 'videotoolbox-copy'
+            : null,
+      ),
+    );
+    if (Platform.isMacOS)
+      evidence['hardwareVideoOutput'] = AppDevice.macHardwareVideoOutput;
     runApp(
       MaterialApp(
         home: Scaffold(
