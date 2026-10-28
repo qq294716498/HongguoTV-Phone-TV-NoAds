@@ -1,12 +1,12 @@
-# 红果TV · 手机 / Android TV / Windows
+# 红果TV · 手机 / Android TV / Windows / macOS
 
-基于 [guoapp](https://github.com/zhoufuweigg/guoapp) 的非官方独立客户端。手机与 Android TV 共用 Android 应用，另提供 Windows x64 客户端；支持浏览、搜索、播放、弹幕、追剧和下载。
+基于 [guoapp](https://github.com/zhoufuweigg/guoapp) 的非官方独立客户端。手机与 Android TV 共用 Android 应用，另提供 Windows x64 与 macOS 通用客户端；支持浏览、搜索、播放、弹幕、追剧和下载。
 
-## macOS 适配：0.1.33+58（验证中）
+## macOS 适配：0.1.33+58（构建与双架构验证通过）
 
-新增 macOS 12 及以上通用应用工程，原生核心同时编译 Apple 芯片 arm64 和 Intel x86_64。播放器使用 media_kit，补齐全屏、桌面控制条、播放防休眠和本地核心加载；下载、合并使用共用核心及 FFmpegKit。Mac 设备互联归类为电脑；暂不提供 Windows 专用托盘、迷你窗及自动安装更新。
+新增 macOS 13 及以上通用应用工程，原生核心同时编译 Apple 芯片 arm64 和 Intel x86_64。播放器使用 media_kit，补齐全屏、桌面控制条、播放防休眠和本地核心加载；下载、合并使用共用核心及 FFmpegKit。Mac 设备互联归类为电脑；暂不提供 Windows 专用托盘、迷你窗及自动安装更新。 新增原生图形能力预检，具备条件时使用硬件输出，否则使用兼容输出并尝试 VideoToolbox copy 解码，避免缺少 OpenGL 图形格式时直接崩溃。界面使用 Skia Metal，规避 Intel 验证环境中 Impeller 的 GPU 挂起；全屏请求按顺序执行并等待系统完成事件，避免进入动画尚未结束就切换退出。打包时逐项校验原生库的双架构及最低系统版本。
 
-构建：macOS 上安装 Flutter 3.47.4、Go 1.24.1 或更新、Xcode 与 CocoaPods，执行 `flutter pub get --enforce-lockfile` 和 `python3 scripts/build_macos.py`。产物是 `dist/macos/HongguoTV-0.1.33-macos-universal.zip`，解压后将应用移入 Applications。当前仅本地 ad-hoc 签名，未做 Apple Developer ID 签名和公证；不能视为已完成 Gatekeeper 信任验证。两种架构将在独立 macOS runner 上验证原生核心、合成视频播放 / 跳转 / 倍速 / 音量、全屏及合并，构建与实机验证完成前不宣称可用。
+构建：macOS 上安装 Flutter 3.47.4、Go 1.24.1 或更新、Xcode 与 CocoaPods，执行 `flutter pub get --enforce-lockfile` 和 `python3 scripts/build_macos.py`。产物是 `dist/macos/HongguoTV-0.1.33-macos-universal.zip`，解压后将应用移入 Applications。当前仅本地 ad-hoc 签名，未做 Apple Developer ID 签名和公证；不能视为已完成 Gatekeeper 信任验证。[macOS CI](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/40633050384) 已通过：739 项 Flutter 回归通过、5 项跳过，Go race 与静态检查通过；Apple 芯片和 Intel 分别连续三次通过原生核心、合成普通及加密视频播放、跳转、倍速、音量、全屏进出、FFprobe 和合并检查。41 个原生二进制均含 arm64 / x86_64，原生库最低系统要求不高于 macOS 13。云端使用兼容视频输出，真实 Mac 硬件输出、上游内容播放和长时间流畅度仍待实机验收。
 
 ## 本次修复：0.1.32+57（已正式发布）
 
