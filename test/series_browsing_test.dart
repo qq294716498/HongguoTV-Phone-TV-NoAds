@@ -218,10 +218,10 @@ void main() {
       );
       addTearDown(catalog.dispose);
       await catalog.load();
-      expect(repository.catalogCalls, hasLength(7));
+      expect(repository.catalogCalls, hasLength(11));
       expect(catalog.hasMore, isTrue);
       await catalog.load();
-      expect(repository.catalogCalls, hasLength(9));
+      expect(repository.catalogCalls, hasLength(13));
       expect(catalog.hasMore, isFalse);
       expect(catalog.entries, hasLength(2));
     },

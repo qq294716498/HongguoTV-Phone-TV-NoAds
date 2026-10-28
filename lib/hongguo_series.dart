@@ -244,12 +244,22 @@ List<String> hongguoNextSeasonQueries(Drama anchor) {
     return '${digits[value ~/ 100]}百${rest == 0 ? '' : '${rest < 10 ? '零' : ''}${chinese(rest)}'}';
   }
 
-  return [
+  final segments = base.split(RegExp(r'[？?！!：:·]|之'));
+  final shortTitles = segments
+      .map((part) => part.trim())
+      .where((part) => normalizedSearchText(part).length >= 4)
+      .where((part) => part != base);
+  return <String>{
+    if (shortTitles.isNotEmpty) '${shortTitles.last} 第$next$unit',
     '$base 第${chinese(next)}$unit',
     RegExp(r'[0-9]$').hasMatch(anchor.title.trim())
         ? '$base$next'
         : '$base 第$next$unit',
-  ];
+    for (final short in shortTitles.toList().reversed) ...[
+      '$short 第$next$unit',
+      '$short 第${chinese(next)}$unit',
+    ],
+  }.toList();
 }
 
 final _seriesTitleKeys = Expando<String>();

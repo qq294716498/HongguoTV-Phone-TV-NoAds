@@ -92,6 +92,7 @@ void main() {
               width /
               32 *
               speed *
+              1.15 *
               frame.inMicroseconds *
               configuration.fps /
               1000000;

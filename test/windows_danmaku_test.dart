@@ -76,7 +76,7 @@ void main() {
       final start = x();
       await tester.pump(const Duration(milliseconds: 500));
       final normalTravel = start - x();
-      expect(normalTravel, closeTo(48, .1));
+      expect(normalTravel, closeTo(48 * 1.15, .1));
       final position = x();
       for (final size in [
         const Size(480, 270),

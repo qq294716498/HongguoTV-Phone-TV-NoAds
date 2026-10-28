@@ -63,7 +63,8 @@ class _WindowsDanmakuOverlayState extends State<WindowsDanmakuOverlay>
       if (!widget.controller.moving) return;
       final speed = widget.speed.isFinite ? widget.speed.clamp(.5, 2) : 1;
       for (final flight in _flights) {
-        flight.x -= delta / 1000000 * _width / 10 * speed;
+        flight.x -=
+            delta / 1000000 * _width / 10 * speed * danmakuBaselineSpeed;
       }
       final expired = _flights.any((flight) => flight.x + flight.width < 0);
       if (expired)

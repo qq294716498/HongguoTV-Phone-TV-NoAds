@@ -92,13 +92,19 @@ class NextSeasonResolver {
     }
     if (matches.isEmpty) {
       for (final targeted in hongguoNextSeasonQueries(anchor)) {
-        final result = await search(targeted, 1);
-        if (result == null) continue;
-        for (final drama in result.items) {
-          candidates[drama.id] = drama;
+        for (var page = 1; page <= 3; page++) {
+          final result = await search(targeted, page);
+          if (result == null) break;
+          for (final drama in result.items) {
+            candidates[drama.id] = drama;
+          }
+          await hydrate();
+          matches = _matches(anchor, candidates.values);
+          if (matches.isNotEmpty ||
+              !result.hasMore ||
+              result.warning.isNotEmpty)
+            break;
         }
-        await hydrate();
-        matches = _matches(anchor, candidates.values);
         if (matches.isNotEmpty) break;
       }
     }

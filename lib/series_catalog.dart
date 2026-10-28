@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import 'core_bridge.dart';
@@ -59,6 +61,20 @@ class SeriesCatalog extends ChangeNotifier {
       hasMore = true;
     }
     final generation = ++_generation;
+    final deadline = DateTime.now().add(const Duration(seconds: 60));
+    Duration remaining() {
+      final duration = deadline.difference(DateTime.now());
+      if (duration <= Duration.zero) throw TimeoutException('续季查询超时');
+      return duration < const Duration(seconds: 20)
+          ? duration
+          : const Duration(seconds: 20);
+    }
+
+    Future<T> bounded<T>(Future<T> Function() request) {
+      final timeout = remaining();
+      return request().timeout(timeout);
+    }
+
     loading = true;
     error = '';
     notifyListeners();
@@ -66,14 +82,14 @@ class SeriesCatalog extends ChangeNotifier {
       try {
         for (var count = 0; count < 5 && hasMore; count++) {
           final page = _page + 1;
-          final result = await repository
-              .catalog(
-                anchor.source,
-                query: title.trim(),
-                page: page,
-                force: page == 1,
-              )
-              .timeout(const Duration(seconds: 20));
+          final result = await bounded(
+            () => repository.catalog(
+              anchor.source,
+              query: title.trim(),
+              page: page,
+              force: page == 1,
+            ),
+          );
           if (!_current(generation)) return;
           for (final drama in result.items) {
             _candidates[drama.id] = drama;
@@ -98,7 +114,7 @@ class SeriesCatalog extends ChangeNotifier {
         (drama) async {
           if (!_current(generation))
             throw AppFailure('查询已取消', code: 'next_season_cancelled');
-          return repository.detail(drama).timeout(const Duration(seconds: 20));
+          return bounded(() => repository.detail(drama));
         },
       );
       if (!_current(generation)) return;
@@ -106,38 +122,51 @@ class SeriesCatalog extends ChangeNotifier {
       if (!_targeted && !entries.any((entry) => entry.season == next)) {
         _targeted = true;
         for (final query in hongguoNextSeasonQueries(anchor)) {
-          if (!_current(generation)) return;
-          CatalogPage result;
-          try {
-            result = await repository
-                .catalog(anchor.source, query: query, force: true)
-                .timeout(const Duration(seconds: 20));
-          } catch (failure) {
+          for (var page = 1; page <= 3; page++) {
             if (!_current(generation)) return;
-            if (failure is AppFailure && failure.code == 'source_blocked') {
-              rethrow;
+            CatalogPage result;
+            try {
+              result = await bounded(
+                () => repository.catalog(
+                  anchor.source,
+                  query: query,
+                  page: page,
+                  force: page == 1,
+                ),
+              );
+            } catch (failure) {
+              if (!_current(generation)) return;
+              if (failure is AppFailure && failure.code == 'source_blocked') {
+                rethrow;
+              }
+              _targeted = false;
+              error = '部分季暂时未能加载，请重试';
+              break;
             }
-            _targeted = false;
-            error = '部分季暂时未能加载，请重试';
-            continue;
+            if (!_current(generation)) return;
+            for (final drama in result.items) {
+              _candidates[drama.id] = drama;
+            }
+            _matchingAnchor = await hydrateHongguoNextSeason(
+              _matchingAnchor ?? anchor,
+              _candidates,
+              _hydrated,
+              (drama) async {
+                if (!_current(generation))
+                  throw AppFailure('查询已取消', code: 'next_season_cancelled');
+                return bounded(() => repository.detail(drama));
+              },
+            );
+            if (!_current(generation)) return;
+            if (result.warning.isNotEmpty) {
+              _targeted = false;
+              error = result.warning;
+            }
+            if (entries.any((entry) => entry.season == next) ||
+                !result.hasMore ||
+                result.warning.isNotEmpty)
+              break;
           }
-          if (!_current(generation)) return;
-          for (final drama in result.items) {
-            _candidates[drama.id] = drama;
-          }
-          _matchingAnchor = await hydrateHongguoNextSeason(
-            _matchingAnchor ?? anchor,
-            _candidates,
-            _hydrated,
-            (drama) async {
-              if (!_current(generation))
-                throw AppFailure('查询已取消', code: 'next_season_cancelled');
-              return repository
-                  .detail(drama)
-                  .timeout(const Duration(seconds: 20));
-            },
-          );
-          if (!_current(generation)) return;
           if (entries.any((entry) => entry.season == next)) break;
         }
       }

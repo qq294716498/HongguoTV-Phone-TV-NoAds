@@ -131,12 +131,15 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
   Object? _emojiWarmRevision;
   int _realtimeEmojiRevision = 0;
   int? _mobileTimelineRevision;
+  Object? _realtimeItemsRevision;
+  Map<String, DanmakuItem> _realtimeItems = {};
 
   bool get _mobile => widget.mobile && !widget.television;
   bool get _realtime => widget.television || _mobile;
   double get _realtimeSpeed {
     final speed = widget.speed ?? (_mobile ? 1.15 : 1.0);
-    return speed.isFinite ? speed.clamp(.5, 2.0) : (_mobile ? 1.15 : 1.0);
+    return (speed.isFinite ? speed.clamp(.5, 2.0) : (_mobile ? 1.15 : 1.0)) *
+        danmakuBaselineSpeed;
   }
 
   @override
@@ -183,7 +186,12 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
     _realtimeFlights.removeWhere(
       (flight) => now - flight.item.timeMs >= flight.lifetimeMs,
     );
-    final currentItems = {for (final item in controller.items) item.id: item};
+    final revision = (controller, controller.dataRevision);
+    if (_realtimeItemsRevision != revision) {
+      _realtimeItemsRevision = revision;
+      _realtimeItems = {for (final item in controller.items) item.id: item};
+    }
+    final currentItems = _realtimeItems;
     final emojiChanged = _realtimeEmojiRevision != _emojiCache.imageCount;
     _realtimeEmojiRevision = _emojiCache.imageCount;
     for (var index = 0; index < _realtimeFlights.length; index++) {
@@ -310,7 +318,9 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
                 : width < 600
                 ? 12.0
                 : 14.0;
-            final lifetimeMs = widget.television ? 32000 : danmakuLifetimeMs;
+            final lifetimeMs = widget.television
+                ? 32000
+                : (danmakuLifetimeMs / danmakuBaselineSpeed).round();
             final topInset = _mobile
                 ? 64.0
                 : widget.television
@@ -457,6 +467,8 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
                                           controller.motionRevision,
                                           _realtimeLayout,
                                         )
+                                      : widget.television
+                                      ? _realtimeLayout!
                                       : controller.motionRevision,
                                   style: style,
                                   scaler: scaler,

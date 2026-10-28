@@ -130,7 +130,7 @@ void main() {
       now = now.add(const Duration(seconds: 2));
       await tester.pump(const Duration(seconds: 2));
       final tvTravel = start - x();
-      expect(tvTravel, closeTo(60, .1));
+      expect(tvTravel, closeTo(60 * 1.15, .1));
       final longX = tester
           .widget<Transform>(find.byKey(const ValueKey('danmaku-motion-top-1')))
           .transform
@@ -143,7 +143,7 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
       updateDanmaku(controller, position: 4000, speed: 2);
       await tester.pump();
-      expect(beforeDoubleSpeed - x(), closeTo(30, .1));
+      expect(beforeDoubleSpeed - x(), closeTo(30 * 1.15, .1));
       updateDanmaku(controller, position: 4000, playing: false);
       await tester.pump();
       final paused = x();

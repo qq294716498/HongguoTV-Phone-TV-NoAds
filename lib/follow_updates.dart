@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import 'core_bridge.dart';
 import 'local_store.dart';
+import 'hongguo_series.dart';
 import 'models.dart';
 import 'series_catalog.dart';
 
@@ -72,7 +73,12 @@ class FollowUpdates extends ChangeNotifier {
             for (final entry in catalog.entries) {
               pending[entry.drama.id] = entry.drama;
             }
-            if (catalog.error.isNotEmpty || catalog.hasMore) failed++;
+            final next = (hongguoSeriesInfo(anchor)?.season ?? 1) + 1;
+            final foundNext = catalog.entries.any(
+              (entry) => entry.season == next,
+            );
+            if (!foundNext && (catalog.error.isNotEmpty || catalog.hasMore))
+              failed++;
           }
         } catch (_) {
           if (current()) failed++;
