@@ -64,12 +64,17 @@ jobs:
           python3 - <<'PY'
           import json, pathlib, platform, subprocess
           root = pathlib.Path.cwd()
-          report = root / 'macOS-smoke.json'
-          subprocess.run([str(root / 'extracted/HongguoTV.app/Contents/MacOS/HongguoTV'), '--package-smoke', str(report), str(root / 'synthetic.mp4')], check=True, timeout=120)
-          data = json.loads(report.read_text())
-          assert data['ok'] and data['nativeCore'] and data['mediaKitPlayback'] and data['remux'] and data['encryptedPlayback']
-          data['hostArchitecture'] = platform.machine()
-          report.write_text(json.dumps(data, indent=2))
+          runs = []
+          for attempt in range(3):
+              report = root / f'macOS-smoke-{attempt}.json'
+              result = subprocess.run([str(root / 'extracted/HongguoTV.app/Contents/MacOS/HongguoTV'), '--package-smoke', str(report), str(root / 'synthetic.mp4')], timeout=120)
+              if report.exists(): print(report.read_text(), flush=True)
+              result.check_returncode()
+              data = json.loads(report.read_text())
+              assert data['ok'] and data['nativeCore'] and data['mediaKitPlayback'] and data['remux'] and data['encryptedPlayback'] and data['fullscreen']
+              runs.append(data)
+          summary = dict(runs[-1], hostArchitecture=platform.machine(), repeatedLaunches=len(runs), runs=runs)
+          (root / 'macOS-smoke.json').write_text(json.dumps(summary, indent=2))
           PY
       - uses: actions/upload-artifact@v4
         if: always()

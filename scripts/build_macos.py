@@ -19,6 +19,8 @@ with (app / 'Contents/Info.plist').open('rb') as stream:
     info = plistlib.load(stream)
 if info['CFBundleShortVersionString'] != version or info['CFBundleVersion'] != build:
     raise SystemExit('macOS version mismatch')
+if info.get('FLTEnableImpeller') is not False:
+    raise SystemExit('macOS must use the validated Skia Metal renderer')
 architectures = {}
 minimum_versions = {}
 for binary in sorted(app.rglob('*')):
@@ -54,7 +56,7 @@ digest = hashlib.sha256(package.read_bytes()).hexdigest()
 (output / 'SHA256SUMS.txt').write_text(digest + '  ' + package.name + '\n')
 (output / 'macOS-validation.json').write_text(json.dumps({
     'ok': True, 'version': version, 'build': int(build), 'architectures': architectures,
-    'signature': 'ad-hoc', 'notarized': False, 'minimumMacOS': '13.0',
+    'renderer': 'Skia Metal', 'signature': 'ad-hoc', 'notarized': False, 'minimumMacOS': '13.0',
     'nativeMinimumVersions': minimum_versions,
     'package': package.name, 'sha256': digest, 'bytes': package.stat().st_size,
 }, indent=2) + '\n')
