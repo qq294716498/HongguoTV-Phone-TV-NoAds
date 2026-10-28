@@ -2,7 +2,7 @@
 
 基于 [guoapp](https://github.com/zhoufuweigg/guoapp) 的非官方独立客户端。手机与 Android TV 共用 Android 应用，另提供 Windows x64 客户端；支持浏览、搜索、播放、弹幕、追剧和下载。
 
-## 本次修复：0.1.30+55（验证与构建中）
+## 本次修复：0.1.30+55（已正式发布）
 
 - 红果取流返回 HTTP 200 空正文时，播放器保持加载并显示第几轮重试，最多三轮、取址总计不超过 65 秒；整次播放准备最长 75 秒。修复原先前端 20 秒超时早于核心 30 秒预算的问题。切集、返回和关闭停止旧请求；限流、权限和本地文件错误不自动重试。
 - 空响应通过结构化错误码传递给两端；设备重新注册后的重发同样执行退避，避免首轮轮换时连续立即请求。正常请求仍复用已注册身份；仅已存在的空响应恢复流程可能更新身份。
@@ -13,9 +13,11 @@
 - 修正红果目录、推荐和分集接口的签名：对齐参考项目的 Gorgon / Argus / Ladon 配置，不再混用旧 Medusa / Helios 或 Cookie；搜索仍使用已验证的 PureSign。站源检测目录只抽查每分类一页，避免把全库爬取塞进播放检测。
 - 红果站源“检测连接与播放”每个空响应步骤最多三轮恢复，每步最多 65 秒，整体仍受 3 分钟任务时限约束；显示当前重试轮次，停止检测和限流立即生效。成功的搜索分类结果不再因另一分类失败而被丢弃。
 
-验证状态：默认 Go race、全站源 Flutter 完整回归与 Python 发布门禁通过；新增匹配、下载弹幕、横屏选集回归通过，两端构建待执行。真实《觉醒伪神：神明弃我我自为神2》搜索查得第三季（ID `7677963872489196569`、120 集），两季详情主角均为陈昊宇；将真实搜索及分集数据回放到追剧更新、自动续播和重启恢复入口后验证通过。第二季第 1、70、139 集及第三季第 1 集的 1080P 取址、两端流解码、完整下载及离线解码通过。首次搜索分页遇到部分失败；修复保留部分结果后另一次分页联网验证通过，不代表上游不再间歇失败。
+验证状态：默认及全站源 Go race、两种 Flutter 完整回归与 Python 发布门禁通过；新增匹配、下载弹幕、横屏选集回归通过，两端构建和发布校验通过。真实《觉醒伪神：神明弃我我自为神2》搜索查得第三季（ID `7677963872489196569`、120 集），两季详情主角均为陈昊宇；将真实搜索及分集数据回放到追剧更新、自动续播和重启恢复入口后验证通过。第二季第 1、70、139 集及第三季第 1 集的 1080P 取址、两端流解码、完整下载及离线解码通过。首次搜索分页遇到部分失败；修复保留部分结果后另一次分页联网验证通过，不代表上游不再间歇失败。
 
 伪神的真实站源六步检测通过：目录 54 部、签名搜索 19 条、分集 139 集、播放地址、密钥和媒体字节读取均成功。此前用旧目录签名实测返回 200 空正文，修正签名并限制检测页数后复验通过。
+
+Android 三 ABI 与 Windows x64 完整包已从提交 `259190d77185051386bf8edc2c32f6f270260e9b` 正式发布。[Android CI](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/40614984598) 与 [Windows CI](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/40614984633) 均通过；公开下载、SHA-256、APK 原证书及版本 / ABI / 完整性复核、Windows 启动和更新事务、两端升级通道隔离检查通过。Android 已成为 Latest；Windows 完整 ZIP 仍未签名。
 
 HTTP 200 仅表示 HTTP 请求成功，空正文无法证明所有上游拒绝的具体原因；尚未在用户设备复现本次间歇性失败或进行长期流畅度验收。
 
@@ -146,18 +148,18 @@ Windows 10/11 x64 完整 ZIP 仍未签名。构建、完整包校验、合成媒
 
 请选择与平台和架构匹配的安装包；可用版本、校验清单和源码以对应 Release 的实际附件为准。
 
-[Android 最新正式版](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/latest) · [Windows 正式版](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/windows-v0.1.29-54)
+[Android 最新正式版](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/latest) · [Windows 正式版](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/windows-v0.1.30-55)
 
 | 设备架构 | 下载 |
 | --- | --- |
-| Windows 10/11 x64 · 完整 ZIP、未签名 | [HongguoTV 0.1.29 Windows x64](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.29-54/HongguoTV-0.1.29-windows-x64.zip) |
-| Android arm64-v8a · 大多数手机及较新的电视 / 盒子 | [HongguoTV 0.1.29 ARM64](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.29-54/HongguoTV-0.1.29-arm64-v8a.apk) |
-| Android armeabi-v7a · 32 位手机 / 电视 / 盒子 | [HongguoTV 0.1.29 32 位](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.29-54/HongguoTV-0.1.29-armeabi-v7a.apk) |
-| Android x86_64 · 对应架构模拟器 | [HongguoTV 0.1.29 x86_64](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.29-54/HongguoTV-0.1.29-x86_64.apk) |
+| Windows 10/11 x64 · 完整 ZIP、未签名 | [HongguoTV 0.1.30 Windows x64](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.30-55/HongguoTV-0.1.30-windows-x64.zip) |
+| Android arm64-v8a · 大多数手机及较新的电视 / 盒子 | [HongguoTV 0.1.30 ARM64](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.30-55/HongguoTV-0.1.30-arm64-v8a.apk) |
+| Android armeabi-v7a · 32 位手机 / 电视 / 盒子 | [HongguoTV 0.1.30 32 位](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.30-55/HongguoTV-0.1.30-armeabi-v7a.apk) |
+| Android x86_64 · 对应架构模拟器 | [HongguoTV 0.1.30 x86_64](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.30-55/HongguoTV-0.1.30-x86_64.apk) |
 
 支持 Android 8.0 及以上系统。请选择与设备和已安装应用匹配的架构；更新时直接覆盖安装，无需先卸载。
 
-三架构 APK 的 [SHA-256 校验清单](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.29-54/SHA256SUMS.txt) 与源码见 [0.1.29 发布页](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/app-v0.1.29-54)。Windows 的校验清单及源码见上方 Windows 正式版入口。最新版本源码可从对应发布标签查看；其他分支的源码版本以各自的 `pubspec.yaml` 为准。
+三架构 APK 的 [SHA-256 校验清单](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.30-55/SHA256SUMS.txt) 与源码见 [0.1.30 发布页](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/app-v0.1.30-55)。Windows 的校验清单及源码见上方 Windows 正式版入口。最新版本源码可从对应发布标签查看；其他分支的源码版本以各自的 `pubspec.yaml` 为准。
 
 Windows 请完整解压到可写目录，勿只复制 EXE 或混放旧 DLL。**首次从旧版升级，或旧更新器在暂存目录解压 DLL 时报告拒绝访问，请先保存进度并从托盘彻底退出旧程序，再下载完整 ZIP，解压到独立的新目录。**同一 Windows 账户继续使用原应用数据；保留原目录，不卸载或清除数据。手动换用完整包不会修复仍在运行的旧更新器；新版交接保护在运行新版后用于后续更新。
 
@@ -210,11 +212,11 @@ Windows 请完整解压到可写目录，勿只复制 EXE 或混放旧 DLL。**�
 
 | 平台 | 安装包与验证结果 |
 | --- | --- |
-| Android 手机 / Android TV | 0.1.29+54 三 ABI、既有正式证书、最低 Android 8.0；包名、版本、架构、证书、CRC / 对齐、资源、SHA-256 与公网更新下载结果见发布附件 |
-| Windows | 0.1.29+54 x64 未签名完整 ZIP；构建、版本 / DLL / 运行库、资源、SHA-256、合成媒体原生启动、托盘 / 迷你窗、17 项更新事务、16 项单实例回归和公网下载 / 静态清单回退结果见发布附件 |
+| Android 手机 / Android TV | 0.1.30+55 三 ABI、既有正式证书、最低 Android 8.0；包名、版本、架构、证书、CRC / 对齐、资源、SHA-256 与公网更新下载结果见发布附件 |
+| Windows | 0.1.30+55 x64 未签名完整 ZIP；构建、版本 / DLL / 运行库、资源、SHA-256、合成媒体原生启动、托盘 / 迷你窗、17 项更新事务、16 项单实例回归和公网下载 / 静态清单回退结果见发布附件 |
 | iOS | 保留工程与构建支持，本次无已签名安装包 |
 
-静态检查、默认 / 全站源自动化、Python 门禁、两种 Go race 配置及平台构建的结果，见 [Android 发布附件](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/app-v0.1.29-54) 与 [Windows 发布附件](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/windows-v0.1.29-54)。请以本次 CI 和随包报告为准，不把源码、构建记录或签名检查等同完整实机验收。
+静态检查、默认 / 全站源自动化、Python 门禁、两种 Go race 配置及平台构建的结果，见 [Android 发布附件](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/app-v0.1.30-55) 与 [Windows 发布附件](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/windows-v0.1.30-55)。请以本次 CI 和随包报告为准，不把源码、构建记录或签名检查等同完整实机验收。
 
 自动化使用合成数据 / 媒体并禁用站源图片。真实手机 / TV 覆盖安装、索尼 HEVC、遥控器、真实站源长时间连播，以及用户 Windows 旧版原地替换、消费级 GPU / 音频设备和多显示器混合 DPI 尚未实测；正常宽屏留黑和素材自带黑边保留。取源失败还可能受源站与网络影响，不把本次生命周期修复认定为全部现场故障的唯一原因。
 
