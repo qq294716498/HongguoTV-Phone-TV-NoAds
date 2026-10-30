@@ -328,7 +328,9 @@ class _PlayerScreenState extends State<PlayerScreen>
               enableHardwareAcceleration:
                   !Platform.isIOS &&
                   (!Platform.isMacOS || AppDevice.macHardwareVideoOutput),
-              hwdec: Platform.isMacOS && !AppDevice.macHardwareVideoOutput
+              hwdec: Platform.isWindows
+                  ? 'd3d11va-copy'
+                  : Platform.isMacOS && !AppDevice.macHardwareVideoOutput
                   ? 'videotoolbox-copy'
                   : null,
             ),

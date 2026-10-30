@@ -219,6 +219,12 @@ void main() {
           decoder[property] = '<unavailable: $error>';
         }
       }
+      debugPrint(
+        '[WindowsVideoDecoder] $name '
+        'hwdec=${decoder['hwdec']} actual=${decoder['hwdec-current']} '
+        'decoded=${decoder['video-dec-params']} output=${decoder['video-out-params']} '
+        'texture=${video.controller.rect.value}',
+      );
       final sample = <String, Object?>{
         'name': name,
         'source': [source.width, source.height],
@@ -363,12 +369,16 @@ void main() {
           const requestedDecoder = String.fromEnvironment(
             'WINDOWS_VIDEO_HWDEC',
           );
+          await tester
+              .widget<Video>(find.byType(Video))
+              .controller
+              .platform
+              .future;
           final native = player.platform! as NativePlayer;
+          expect(await native.getProperty('hwdec'), 'd3d11va-copy');
           if (requestedDecoder.isNotEmpty) {
             await native.setProperty('hwdec', requestedDecoder);
             expect(await native.getProperty('hwdec'), requestedDecoder);
-          } else {
-            expect(await native.getProperty('hwdec'), 'auto');
           }
           sourceReady.complete();
           await until(

@@ -2,6 +2,14 @@
 
 基于 [guoapp](https://github.com/zhoufuweigg/guoapp) 的非官方独立客户端。手机与 Android TV 共用 Android 应用，另提供 Windows x64 与 macOS 通用客户端；支持浏览、搜索、播放、弹幕、追剧和下载。
 
+## 0.1.37+62（Windows 绿边兼容候选，仅本地，未发布）
+
+[#16 的补充信息](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/issues/16#issuecomment-6517084993)为“Intel 九代核显、默认画质”。同一报告者此前在 [Xanerix/guoapp #2](https://github.com/Xanerix/guoapp/issues/2#issuecomment-6121315789) 报告过绿边，该项目 [6f5f670](https://github.com/Xanerix/guoapp/commit/6f5f67036d55187eeb434b87cbd8099c8c386df7) 与 0.2.72 发布记录采用 `d3d11va-copy`；修复时的 media_kit 版本和 [libmpv／ANGLE 固定归档及 SHA-256](https://github.com/Xanerix/guoapp/blob/6f5f67036d55187eeb434b87cbd8099c8c386df7/packages/media_kit_libs_windows_video/windows/CMakeLists.txt#L67-L81) 均与本项目一致。此关联支持兼容候选，不等同确认当前报告设备的驱动缺陷。
+
+Windows 播放器及合成媒体自检显式使用 `d3d11va-copy`，保留 GPU 输出，解码后回拷帧以绕过直接解码纹理互通。没有裁切视频、调整画面尺寸或更换媒体依赖，Android 手机／Android TV 与 macOS 解码配置保持。该模式仍尝试 D3D11VA 硬件解码，设备不支持时可能回到软件解码；[额外回拷会增加开销](https://github.com/mpv-player/mpv/blob/e76a35ec95/DOCS/man/options.rst#L1399-L1474)，连续播放流畅度仍需设备验证。现有硬件 VSR 后端仅接受直接 `d3d11va`，因此此候选会使该可选后端不再符合资格，其他增强后端仍按既有策略选择；没有移除该功能代码。
+
+Windows 原生诊断保留原几何及像素断言，新增检查默认解码配置确实传入 libmpv，再允许 `WINDOWS_VIDEO_HWDEC=auto` 等对照覆盖，并将实际解码器及解码／输出参数打印到文本日志。本轮 Linux Flutter 默认全量 765 项通过、5 项跳过，全站源 766 项通过、4 项跳过；包含原有像素／几何、Windows UI、TV 长按和手机全季入口回归，223 个 Dart 文件格式通过，静态检查无错误或警告、179 条风格 info。这些检查没有执行 Windows Native 分支；尚未在 Windows 或报告者 Intel 设备运行此候选，也未推送、打包或发布。上一轮 Windows CI 通过属于旧的 `auto` 配置，不能作为本候选的设备验证。保留下方 #18 修复、#16 诊断和“查看全季”文字修改。
+
 ## 0.1.36+61（界面修改候选，未发布）
 
 手机全屏选集菜单的全季入口保留图标，并显示“查看全季”文字；沿用原点击回调，保持标题行高度及选集网格布局。Windows 与 TV 的独立布局保持原样。640×360、667×375、844×390、932×430 和 1.0／1.6 字体、右侧安全区布局通过；Android 全屏页面进入全季并选集返回、原有手机竖屏、Windows 侧栏、TV 菜单及长按定位回归共 71 项通过，修改的 Dart 文件格式和静态检查通过。新增页面测试补齐全屏点击及窄屏滚动后通过，初次失败日志保留。尚未运行真实 Android 设备验证或构建本轮 APK。包含下方 0.1.35 候选的修复与诊断，不改变正式下载。

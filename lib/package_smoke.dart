@@ -81,7 +81,9 @@ Future<void> runPackageSmoke(List<String> arguments) async {
       configuration: VideoControllerConfiguration(
         enableHardwareAcceleration:
             !Platform.isMacOS || AppDevice.macHardwareVideoOutput,
-        hwdec: Platform.isMacOS && !AppDevice.macHardwareVideoOutput
+        hwdec: Platform.isWindows
+            ? 'd3d11va-copy'
+            : Platform.isMacOS && !AppDevice.macHardwareVideoOutput
             ? 'videotoolbox-copy'
             : null,
       ),
