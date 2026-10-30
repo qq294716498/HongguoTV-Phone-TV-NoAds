@@ -12,22 +12,31 @@ from publish_android_stable import certificate, offsets, validate_apks
 
 
 class AndroidStablePublishTests(unittest.TestCase):
-    def test_release_uses_published_032_baseline_and_preserves_all_windows_releases(self):
+    def test_notes_describe_android_changes_without_windows_settings(self):
+        notes = publish.release_description('0.1.38')
+        self.assertIn('遥控长按左右', notes)
+        self.assertIn('查看全季', notes)
+        self.assertNotIn('视频兼容模式', notes)
+        self.assertNotIn('EXE', notes)
+        self.assertNotIn('长剧名续季搜索', notes)
+        self.assertNotIn('弹幕提速', notes)
+
+    def test_release_uses_published_034_baseline_and_preserves_all_windows_releases(self):
         import publish_windows_stable as windows
-        self.assertEqual(publish.previous_android_tag, 'app-v0.1.32-57')
-        self.assertEqual(publish.previous_android_commit, 'c91e9e073cb14d27180ef1120c7185bd31b31e12')
+        self.assertEqual(publish.previous_android_tag, 'app-v0.1.34-59')
+        self.assertEqual(publish.previous_android_commit, '03245b6c814da9201a011ec8ddbc85f5139a1cab')
         self.assertEqual(windows.previous_android_tag, publish.previous_android_tag)
         self.assertEqual(windows.previous_android_commit, publish.previous_android_commit)
-        self.assertEqual(publish.windows_tag, 'windows-v0.1.34-59')
+        self.assertEqual(publish.windows_tag, 'windows-v0.1.38-63')
         self.assertEqual(windows.previous_windows_tags, (
-            'windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48', 'windows-v0.1.24-49', 'windows-v0.1.25-50', 'windows-v0.1.29-54', 'windows-v0.1.30-55', 'windows-v0.1.31-56', 'windows-v0.1.32-57'))
+            'windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48', 'windows-v0.1.24-49', 'windows-v0.1.25-50', 'windows-v0.1.29-54', 'windows-v0.1.30-55', 'windows-v0.1.31-56', 'windows-v0.1.32-57', 'windows-v0.1.34-59'))
         self.assertEqual(publish.windows_tags, (*windows.previous_windows_tags, publish.windows_tag))
         self.assertEqual(windows.release_branch, publish.release_branch)
         self.assertEqual(windows.release_only_paths, publish.release_only_paths)
 
     def test_final_notes_mark_verified_public_downloads_and_preserve_limits(self):
-        tag = 'app-v0.1.34-59'
-        body = '0.1.34+59\n取源恢复与冷却修复。\n既有证书；Android 8.0；真实手机 / TV 仍未实测。\n' + publish.pending_publication_note
+        tag = 'app-v0.1.38-63'
+        body = '0.1.38+63\n取源恢复与冷却修复。\n既有证书；Android 8.0；真实手机 / TV 仍未实测。\n' + publish.pending_publication_note
         final = body.replace(publish.pending_publication_note, publish.verified_publication_note)
         current = dict(tag_name=tag, draft=False, prerelease=False, target_commitish='current', body=body)
         with mock.patch.object(publish, 'release', side_effect=[current, {**current, 'body': final}]) as reads, \
@@ -56,7 +65,7 @@ class AndroidStablePublishTests(unittest.TestCase):
                 edits.assert_not_called()
 
     def test_failed_public_latest_validation_never_marks_notes_complete(self):
-        with mock.patch.object(Path, 'read_text', return_value='version: 0.1.34+59\n'), \
+        with mock.patch.object(Path, 'read_text', return_value='version: 0.1.38+63\n'), \
                 mock.patch.object(publish.os, 'chdir'), mock.patch.object(publish, 'validate_release_source'), \
                 mock.patch.object(publish, 'read', return_value={}), \
                 mock.patch.object(publish, 'github', return_value=json.dumps({'tag_name': 'app-v0.1.22-47'})), \
@@ -72,7 +81,7 @@ class AndroidStablePublishTests(unittest.TestCase):
     def test_only_exact_release_branch_push_or_explicit_dispatch_can_publish(self):
         root = Path(__file__).resolve().parents[1]
         fix = 'fix/hongguo-playback-release-0.1.22-47'
-        release = 'release/windows-android-0.1.34-59'
+        release = 'release/windows-android-0.1.38-63'
         for filename in ['android-stable.yml', 'windows-preview.yml']:
             workflow = (root / '.github/workflows' / filename).read_text()
             branches = re.search(r'(?m)^    branches: (.*)$', workflow).group(1)
@@ -93,6 +102,19 @@ class AndroidStablePublishTests(unittest.TestCase):
         self.assertNotIn('reuse_windows_package.py', windows)
         self.assertIn('WINDOWS_BINARY_COMMIT: ${{ github.sha }}', windows)
         self.assertIn('WINDOWS_BINARY_RUN: ${{ github.run_id }}', windows)
+
+    def test_windows_native_video_and_cleanup_checks_precede_publication(self):
+        root = Path(__file__).resolve().parents[1]
+        workflow = (root / '.github/workflows/windows-preview.yml').read_text()
+        video = 'flutter test -d windows integration_test/windows_video_layout_test.dart --no-pub --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true --reporter=expanded'
+        self.assertIn(video, workflow)
+        self.assertLess(workflow.index('python scripts/smoke_windows.py'), workflow.index(video))
+        self.assertLess(workflow.index(video), workflow.index('python scripts/test_windows_transaction.py'))
+        self.assertIn('test/windows_update_cleanup_test.dart', workflow)
+        self.assertIn('HG_VIDEO_LAYOUT_CAPTURE_DIR: ${{ github.workspace }}\\dist\\windows-video-layout', workflow)
+        self.assertIn('name: hongguotv-windows-video-layout\n          path: dist/windows-video-layout/*', workflow)
+        release = workflow.split('\n  release:\n', 1)[1]
+        self.assertNotIn('dist/windows-video-layout', release)
 
     def test_android_waits_for_final_windows_evidence_without_republishing_it(self):
         names = ['Windows-update-check.json', 'Windows-update-channel.json', 'Windows-update-transaction.json', 'Windows-single-instance-native.json', 'Android-isolation.json', 'SHA256SUMS.txt']
@@ -166,7 +188,7 @@ class AndroidStablePublishTests(unittest.TestCase):
     def test_changed_android_latest_blocks_staging_without_publication(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            (root / 'pubspec.yaml').write_text('version: 0.1.34+59\n')
+            (root / 'pubspec.yaml').write_text('version: 0.1.38+63\n')
             values = [json.dumps({'object': {'sha': 'current'}}),
                       json.dumps({'tag_name': 'app-v0.1.20-45'})]
             with mock.patch.object(publish, 'root', root), mock.patch.object(publish.os, 'chdir'), \
@@ -180,7 +202,7 @@ class AndroidStablePublishTests(unittest.TestCase):
                     publish.main()
                 self.assertEqual(github.call_count, 2)
                 self.assertEqual(commands.call_args_list, [mock.call(
-                    ['gh', 'release', 'view', 'app-v0.1.34-59'],
+                    ['gh', 'release', 'view', 'app-v0.1.38-63'],
                     stdout=publish.subprocess.DEVNULL, stderr=publish.subprocess.DEVNULL)])
 
     def test_signing_preflight_reports_presence_without_secret_values(self):

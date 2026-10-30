@@ -12,16 +12,16 @@ root = Path(__file__).resolve().parents[1]
 output = root / 'dist/android'
 repository = 'qq294716498/HongguoTV-Phone-TV-NoAds'
 certificate = '55c3c3395a00e56e99b8bfd580b14c99618da74db19692a2e42606eb05c47ba9'
-windows_tag = 'windows-v0.1.34-59'
-windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48', 'windows-v0.1.24-49', 'windows-v0.1.25-50', 'windows-v0.1.29-54', 'windows-v0.1.30-55', 'windows-v0.1.31-56', 'windows-v0.1.32-57', windows_tag)
-previous_android_tag = 'app-v0.1.32-57'
-previous_android_commit = 'c91e9e073cb14d27180ef1120c7185bd31b31e12'
+windows_tag = 'windows-v0.1.38-63'
+windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48', 'windows-v0.1.24-49', 'windows-v0.1.25-50', 'windows-v0.1.29-54', 'windows-v0.1.30-55', 'windows-v0.1.31-56', 'windows-v0.1.32-57', 'windows-v0.1.34-59', windows_tag)
+previous_android_tag = 'app-v0.1.34-59'
+previous_android_commit = '03245b6c814da9201a011ec8ddbc85f5139a1cab'
 pending_publication_note = '公开发布核验进行中：尚未完成三 ABI 公网下载、签名复核及 Android / Windows 升级通道隔离检查。'
 verified_publication_note = '公开发布核验已完成：三 ABI 公网下载、SHA-256、正式证书与版本复核通过；Android Latest 和 Windows 升级通道隔离、旧版本资产保持检查通过。'
 windows_verified_publication_note = '公开发布核验已完成：Windows 公网 ZIP 下载与 SHA-256、正式升级通道和 API 限流回退检查通过；Android Latest 隔离及旧版本资产保持检查通过。'
 offsets = {'arm64-v8a': 2000, 'armeabi-v7a': 1000, 'x86_64': 4000}
-release_branch = 'release/windows-android-0.1.34-59'
-approved_source = 'd8178b996953eb000381e1e42ef4c93610dc96cf'
+release_branch = 'release/windows-android-0.1.38-63'
+approved_source = 'f8cf95a9022096ecd1d73505eced4f3bddd6bfe9'
 release_only_paths = frozenset({
     'README.md', '.github/workflows/android-stable.yml',
     '.github/workflows/windows-preview.yml',
@@ -49,13 +49,22 @@ def github(*arguments):
     return subprocess.check_output(['gh', *arguments], cwd=root, text=True)
 
 
+def release_description(version):
+    return (
+        f'红果TV Android {version} · 手机 / Android TV\n\n'
+        '- 修复 TV 遥控长按左右定位提前提交并跳入菜单的问题：按住连续预览，松开提交一次；切集、后台和焦点离开时清理未提交定位，保留原有短按导航。\n'
+        '- 手机全屏选集菜单保留全季图标，并显示“查看全季”文字；保留原点击行为，适配窄屏、安全区和大字体。\n'
+        '\n本次构建、静态检查、默认及全站源回归和三 ABI 安装包校验由发布门禁验证，详细结果见随附报告。\n'
+    )
+
+
 def release(tag):
     return json.loads(github('api', f'repos/{repository}/releases/tags/{tag}'))
 
 
 def finalize_release_notes(tag):
     published = release(tag)
-    if tag != 'app-v0.1.34-59' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
+    if tag != 'app-v0.1.38-63' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
         raise ValueError('Only the current verified Android stable release notes may be finalized')
     body = published['body']
     if body.count(pending_publication_note) != 1:
@@ -133,8 +142,8 @@ def main():
     os.chdir(root)
     version, raw_build = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(), re.M).group(1).split('+')
     build = int(raw_build)
-    if version != '0.1.34' or build != 59:
-        raise ValueError('This workflow only publishes Android 0.1.34+59')
+    if version != '0.1.38' or build != 63:
+        raise ValueError('This workflow only publishes Android 0.1.38+63')
     validate_release_source(os.environ['GITHUB_SHA'])
     tag = f'app-v{version}-{build}'
     phase = sys.argv[1]
@@ -159,7 +168,7 @@ def main():
             if match and int(match[1]) >= build:
                 raise ValueError('A newer or reserved Android build already exists')
         write('Release-before.json', {'android': snapshot(latest), 'windows': validated_windows_snapshots(os.environ['GITHUB_SHA'])})
-        subprocess.run([sys.executable, 'scripts/finish_task.py', '--message', 'Android 0.1.34 手机与TV长剧名续季搜索、弹幕提速和电视动画稳定性修复；三ABI既有正式签名新构建及集中回归通过，未实测实体手机或TV'], check=True)
+        subprocess.run([sys.executable, 'scripts/finish_task.py', '--message', 'Android 0.1.38 遥控长按定位和手机全屏全季文字修复；包含Windows可选兼容模式及更新完成清理；三ABI既有正式签名和自动化回归通过，实体设备仍未验收'], check=True)
         subprocess.run([sys.executable, 'scripts/sync_source.py', '--check'], check=True)
         source = max(root.parent.glob('真果·鉴-*.zip'), key=lambda p: p.stat().st_mtime_ns)
         source_package = output / f'HongguoTV-{version}-source.zip'
@@ -172,8 +181,7 @@ def main():
               'sourceArchiveSha256': digest(source_package), 'expectedCertificate': certificate,
               'formatAnalysisPythonFlutterAndGoRacePassed': True, 'allThreeSignedApksValidated': True,
               'realPhoneOrTvPerformanceMeasured': False, 'realDevicePlaybackVerified': False})
-        readme = (root / 'README.md').read_text()
-        notes = readme.split('## 0.1.34+59', 1)[1].split('\n## ', 1)[0].replace('（验证中，尚未发布）', '（构建与自动化验证通过）')
+        notes = release_description(version)
         notes += f'\n源码：https://github.com/{repository}/commit/{head}\n\nCI：https://github.com/{repository}/actions/runs/{os.environ["GITHUB_RUN_ID"]}\n\n手机 / TV 继续共用 com.hongguo.tv、既有正式证书和 Android 8.0 最低版本。真实手机 / TV 覆盖安装、流畅度、解码和长时间连播仍未实测。\n\n{pending_publication_note}\n'
         notes_file = Path(os.environ['RUNNER_TEMP']) / 'android-release-notes.md'
         notes_file.write_text(notes, encoding='utf-8')
