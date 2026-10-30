@@ -2,13 +2,19 @@
 
 基于 [guoapp](https://github.com/zhoufuweigg/guoapp) 的非官方独立客户端。手机与 Android TV 共用 Android 应用，另提供 Windows x64 与 macOS 通用客户端；支持浏览、搜索、播放、弹幕、追剧和下载。
 
-## 0.1.38+63（发布候选，验证中）
+## 0.1.38+63（Android / Windows 已正式发布）
 
 - Android 手机／TV 保留 #18 遥控长按定位修复与手机全屏“查看全季”图标加文字，原短按导航及选集行为保持。
 - Windows 默认恢复 `auto`。在“设置与备份 → 视频兼容模式”中可选择 `d3d11va-copy`，旧配置默认关闭，选择按用户保存；重新打开播放页后生效，当前播放、进度和控制器保持，切集不临时切换模式。旧菜单回调与并发保存不会覆盖该选择。兼容模式可能增加开销，并使硬件 VSR 后端不再符合资格；增强资格以实际解码器为准，待生效的选择不提前改变当前增强。
 - Windows 升级保持当前 EXE 所在目录。新客户端消费恢复信息并确认启动、更新器交接成功后，在后台只清理该事务清单绑定的下载包、暂存、助手残留及旧版本备份。失败保留回滚；锁定残留按原子事务记录延迟及下次启动续清，不删除后续下载、配置、历史或无归属内容。实际备份名是 `.hongguo-backup-<nonce>`，不会按 `.back` 后缀猜测、删除用户现有目录。
 
-本轮 Linux Flutter 默认全量 799 项通过、8 项跳过，全站源 800 项通过、7 项跳过；包含兼容模式保存／迁移与并发、播放流程、增强资格和清理隔离回归。228 个 Dart 文件格式通过，静态检查无错误或警告、178 条风格 info；Python 90 项运行、19 项按环境跳过。三项 Windows 文件锁测试、真实原生升级续清与签名、公开更新入口仍以本轮 CI 及发布验证报告为准，不能把 Linux 回归当作 Windows 或 Intel 实机验收。尚无报告者 Intel 设备的绿边与长期流畅度验收，不保证兼容模式能解决所有设备问题。下方 0.1.37 的全局 copy 候选从未发布，已由本版默认自动、用户可选的方案替代。
+验证与发布：Flutter 默认全量 799 项通过、8 项跳过，全站源 800 项通过、7 项跳过；包含兼容模式保存／迁移与并发、播放流程、增强资格和清理隔离回归。228 个 Dart 文件格式通过，静态检查无错误或警告、178 条风格 info；CI Python 90 项运行、16 项按环境跳过，两组 Go race 通过。Windows 文件系统专项 18 项全部通过，三项文件锁测试实际执行；正式原生视频门禁覆盖九组样例、默认／兼容／恢复配置及原像素几何断言，18 项更新事务和 16 项原生单实例门禁通过。公开更新事务报告确认本次备份、下载包、事务目录删除、重启续清及配置保留，更新沿同一安装目录完成；这些是隔离夹具验证，尚未实测从公网旧正式版运行进程直接覆盖升级。
+
+三 ABI APK 的公网下载、原证书、版本及 SHA-256 复核通过；Windows 公网 ZIP、正式更新通道和 API 限流回退通过，旧版本资产保持，Android Latest 指向本版。真实手机／TV、报告者 Intel 设备的绿边与长期流畅度仍未验收；本地未取得本轮 Windows 逐组实际解码器明细，不将云端门禁通过视为 Intel 硬解效果验证，不保证兼容模式能解决所有设备问题。下方 0.1.37 的全局 copy 候选从未发布，已由本版默认自动、用户可选的方案替代。
+
+下载：[Android 64 位 APK](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.38-63/HongguoTV-0.1.38-arm64-v8a.apk) · [Android 32 位 APK](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.38-63/HongguoTV-0.1.38-armeabi-v7a.apk) · [Android x86_64 APK](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.38-63/HongguoTV-0.1.38-x86_64.apk) · [Windows x64](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.38-63/HongguoTV-0.1.38-windows-x64.zip)。Windows 仍为未签名版本。
+
+运行源码 `6eb716d0c0c19a8a08fac8b2441b3acf4b673a9c`；发布提交 `3994339b3c57d1e94f2d203defa3c07f23de500e` 固定该源码。[Android CI](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/41030640350)、[Windows CI](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/41030639977) 及两端公开更新核验均通过；[Windows 文件系统专项](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/41030195810) 18 项全部通过。
 
 ## 0.1.37+62（历史本地候选，未发布，已被 0.1.38 替代）
 
