@@ -277,7 +277,9 @@ class WindowsUpdateCleanup {
     await _validateTree(directory, records, allowMissing: true);
     if (!await directory.exists()) return;
     for (final entry in records.entries) {
-      final file = File(p.join(directory.path, entry.key));
+      final file = File(
+        p.joinAll([directory.path, ...p.posix.split(entry.key)]),
+      );
       await _safe(file.path);
       if (await file.exists()) {
         if (await _hash(file) != entry.value) {

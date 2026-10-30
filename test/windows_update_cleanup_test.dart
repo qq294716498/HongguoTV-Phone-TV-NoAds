@@ -54,12 +54,14 @@ class CleanupFixture {
     'HongguoTV.exe': utf8.encode('old application'),
     'HongguoTV-updater.exe': utf8.encode('old updater'),
     'data/app.so': utf8.encode('old snapshot'),
+    'data/子目录/播放.snapshot': utf8.encode('old nested snapshot'),
     'windows-package.json': utf8.encode('old manifest'),
   };
   final newFiles = {
     'HongguoTV.exe': utf8.encode('new application'),
     'HongguoTV-updater.exe': utf8.encode('new updater'),
     'data/app.so': utf8.encode('new snapshot'),
+    'data/子目录/播放.snapshot': utf8.encode('new nested snapshot'),
     'windows-package.json': utf8.encode('new manifest'),
   };
 
