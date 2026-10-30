@@ -1,17 +1,17 @@
 {
   "schema": 1,
   "release": {
-    "tag_name": "windows-v0.1.34-59",
+    "tag_name": "windows-v0.1.38-63",
     "draft": false,
     "prerelease": false,
-    "body": "（构建与自动化验证通过）\n\n- 下一季搜索增加从长剧名提取副标题的定向查询，兼容中文 / 阿拉伯数字及省略“第”的季数；定向搜索最多检查三页，追剧与自动续播共用查询词。查询保留取消与总超时，已发现下一季时不再因其他搜索页未读完而记为检测失败。\n- 实际签名搜索确认《谁说没灵根不能修仙的？之无灵证道第42季》与《谁说没灵根不能修仙的？之无灵证道43季》简介一致。完整长标题搜索会漏掉后续季，副标题“无灵证道 第43季”返回第 43 季。真实文本与分集数据回放到追剧更新、自动续播和重启恢复后通过；未请求站源图片。\n- 各平台弹幕基础移动速度提高 15%，保持用户速度档位和播放倍速独立。电视端的实时弹幕不再因播放进度漂移校正反复重启动画，缓存未变化的弹幕索引，减少重复分配；暂停、跳转和换集仍按状态同步。真实电视流畅度待实机验收。\n\n构建及静态回归、Windows 完整包与合成媒体启动验证已通过。Windows 10 / 11 x64 版本仍未签名；本次真实续季元数据搜索与应用入口回归通过；实体 Windows 长时间连播、用户旧版原地替换和消费级 GPU / 音频设备仍未实测。\n\n源码提交：https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/commit/03245b6c814da9201a011ec8ddbc85f5139a1cab\n\nCI：https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/40646438055\n\n校验：SHA256SUMS.txt。",
+    "body": "红果TV Windows 0.1.38 · x64\n\n- 默认保留自动解码。在“设置与备份 → 视频兼容模式”中可主动开启绿边兼容模式，保存后重新打开播放页生效，不中断当前播放。回拷模式可能增加性能开销，并影响硬件 VSR 增强；报告者 Intel 设备上的绿边效果尚未验收，不保证能够解决。\n- 更新继续沿当前 EXE 所在目录替换；确认新版本启动和安装交接完成后，清理本次更新自有的下载缓存、暂存文件、辅助程序和不再需要的旧版本备份。失败或中断保留安全回滚，文件锁定残留按事务记录重试，不按“.back”等后缀清理个人文件或无归属目录。\n\n本次构建、静态回归、合成媒体启动、更新事务及清理使用隔离夹具验证，详细结果见随附报告。Windows 10 / 11 x64 应用仍未签名；实体 Intel 兼容效果、连续播放性能及消费级 GPU / 音频设备仍需实机验收。\n\n源码提交：https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/commit/3994339b3c57d1e94f2d203defa3c07f23de500e\n\nCI：https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/41030639977\n\n校验：SHA256SUMS.txt。",
     "assets": [
       {
-        "name": "HongguoTV-0.1.34-windows-x64.zip",
-        "size": 101104812,
-        "digest": "sha256:36d6c1861660977d6e9d5e8b3e0013f0a74a958c65838d11909653cfdfc1d585",
+        "name": "HongguoTV-0.1.38-windows-x64.zip",
+        "size": 101136577,
+        "digest": "sha256:ebb4e61e917b4eaaf80e63cbdc93be7191a7cf635058d631a9ea96b08bb8c8d4",
         "state": "uploaded",
-        "browser_download_url": "https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.34-59/HongguoTV-0.1.34-windows-x64.zip"
+        "browser_download_url": "https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.38-63/HongguoTV-0.1.38-windows-x64.zip"
       }
     ]
   }
