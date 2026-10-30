@@ -144,18 +144,21 @@ void main() {
         source: 'hongguo',
         title: '合成系列 第一季',
         episodes: 12,
+        seriesGroupId: '100',
       );
       const seasonTwo = Drama(
         id: 'hongguo:series-two',
         source: 'hongguo',
         title: '合成系列 第二季',
         episodes: 10,
+        seriesGroupId: '100',
       );
       final store = await create();
       await store.toggleFavorite(seasonOne);
       await store.refreshDramas([seasonOne, seasonTwo]);
       expect(store.following(seasonOne.id)!.newSeasons, 1);
       final repository = LibraryFeatureRepository()
+        ..cachedPages['hongguo'] = CatalogPage([seasonOne, seasonTwo])
         ..details[seasonOne.id] = LibraryFeatureRepository.makeDetail(
           seasonOne,
           12,

@@ -82,6 +82,8 @@ func migrateNativeDrama(drama nativeDrama) nativeDrama {
 		drama.VIP = nil
 	}
 	drama.MetadataSchema = 1
+	drama.SeriesGroupID = hongguoRelationID(drama.SeriesGroupID)
+	drama.RelatedAlbumID = hongguoRelationID(drama.RelatedAlbumID)
 	return drama
 }
 
@@ -135,6 +137,12 @@ func mergeNativeDrama(previous, fresh nativeDrama) nativeDrama {
 	}
 	if fresh.SourceID == "" {
 		fresh.SourceID = previous.SourceID
+	}
+	if fresh.SeriesGroupID == "" {
+		fresh.SeriesGroupID = previous.SeriesGroupID
+	}
+	if fresh.RelatedAlbumID == "" {
+		fresh.RelatedAlbumID = previous.RelatedAlbumID
 	}
 	if fresh.Title == "" || fresh.Title == "短剧" {
 		fresh.Title = previous.Title

@@ -90,6 +90,8 @@ class AppFailure implements Exception {
 }
 
 abstract class AppRepository {
+  SeasonLookupSession seasonLookup() => SeasonLookupSession(this);
+
   Future<Map<String, dynamic>> lan(
     String command,
     Map<String, dynamic> payload,
@@ -213,14 +215,176 @@ abstract class AppRepository {
   Future<void> release(String session);
 }
 
+class SeasonLookupSession {
+  SeasonLookupSession(this.repository);
+
+  final AppRepository repository;
+  bool _closed = false;
+  int _generation = 0;
+
+  void _ensureOpen() {
+    if (_closed) {
+      throw AppFailure('下一季查询已取消', code: 'next_season_cancelled');
+    }
+  }
+
+  Future<T> _guard<T>(Future<T> Function() request) async {
+    _ensureOpen();
+    final generation = _generation;
+    final result = await request();
+    _ensureOpen();
+    if (generation != _generation) {
+      throw AppFailure('下一季查询已取消', code: 'next_season_cancelled');
+    }
+    return result;
+  }
+
+  Future<CatalogPage> catalog(
+    String source, {
+    int page = 1,
+    String query = '',
+    bool force = false,
+  }) => _guard(
+    () => repository.catalog(source, page: page, query: query, force: force),
+  );
+
+  Future<Drama?> metadata(Drama drama) =>
+      _guard(() => repository.supplementMetadata(drama));
+
+  Future<DramaDetail> detail(Drama drama) =>
+      _guard(() => repository.detail(drama));
+
+  Future<void> cancelPending() async {
+    if (!_closed) _generation++;
+  }
+
+  Future<void> dispose() async {
+    _closed = true;
+  }
+}
+
+class _NativeSeasonLookupSession extends SeasonLookupSession {
+  _NativeSeasonLookupSession(this.owner, this.slot)
+    : _access = owner.access,
+      _epoch = owner.access?.profileEpoch,
+      super(owner);
+
+  final NativeRepository owner;
+  final int slot;
+  final LocalStore? _access;
+  final int? _epoch;
+  Future<void>? _disposing;
+  String get _scope => 'season-$slot-';
+
+  @override
+  void _ensureOpen() {
+    super._ensureOpen();
+    if (!identical(owner.access, _access) ||
+        owner.access?.profileEpoch != _epoch) {
+      throw AppFailure('下一季查询已取消', code: 'next_season_cancelled');
+    }
+  }
+
+  void _validateDrama(Drama drama) {
+    if (drama.source != 'hongguo' ||
+        !RegExp(r'^hongguo:[0-9]{1,32}$').hasMatch(drama.id)) {
+      throw AppFailure('续季剧集信息无效', code: 'next_season_invalid');
+    }
+  }
+
+  @override
+  Future<CatalogPage> catalog(
+    String source, {
+    int page = 1,
+    String query = '',
+    bool force = false,
+  }) => _guard(() async {
+    if (source != 'hongguo') {
+      throw AppFailure('续季站源无效', code: 'next_season_invalid');
+    }
+    return CatalogPage.fromJson(
+      await owner._read('${_scope}catalog', {
+        'action': 'catalog',
+        'source': source,
+        'page': page,
+        'query': query,
+        'force': force,
+      }),
+    );
+  });
+
+  @override
+  Future<Drama?> metadata(Drama drama) => _guard(() async {
+    _validateDrama(drama);
+    final result = await owner._read('${_scope}metadata', {
+      'action': 'seasonMetadata',
+      'drama': drama.toJson(),
+    });
+    final fresh = Drama.fromJson(
+      Map<String, dynamic>.from(result['drama'] as Map),
+    );
+    if (fresh.id != drama.id || fresh.source != drama.source) {
+      throw AppFailure('续季剧集信息不一致', code: 'next_season_ambiguous');
+    }
+    return fresh;
+  });
+
+  @override
+  Future<DramaDetail> detail(Drama drama) => _guard(() async {
+    _validateDrama(drama);
+    final result = await owner._read('${_scope}detail', {
+      'action': 'detail',
+      'drama': drama.toJson(),
+    });
+    final fresh = DramaDetail.fromJson(result);
+    if (fresh.drama.id != drama.id || fresh.drama.source != drama.source) {
+      throw AppFailure('续季剧集信息不一致', code: 'next_season_ambiguous');
+    }
+    return fresh;
+  });
+
+  @override
+  Future<void> cancelPending() async {
+    if (_closed) return;
+    await super.cancelPending();
+    await owner._cancelReads(_scope);
+  }
+
+  @override
+  Future<void> dispose() {
+    _closed = true;
+    return _disposing ??= owner._cancelReads(_scope).whenComplete(() {
+      owner._seasonLookupSlots.remove(slot);
+    });
+  }
+}
+
 class NativeRepository extends AppRepository {
   static final _coverDecoder = CoverDecoder();
-  NativeRepository({this.background = false});
+  NativeRepository({this.background = false}) : _transport = null;
+  factory NativeRepository.test({
+    required Future<Map<String, dynamic>> Function(Map<String, dynamic>)
+    transport,
+  }) => NativeRepository._test(transport);
+  NativeRepository._test(this._transport) : background = true;
+
   final bool background;
+  final Future<Map<String, dynamic>> Function(Map<String, dynamic>)? _transport;
   LocalStore? access;
   final _readOwner = DateTime.now().microsecondsSinceEpoch.toString();
   int _readSequence = 0;
   final _activeReads = <String, int>{};
+  final _seasonLookupSlots = <int>{};
+
+  @override
+  SeasonLookupSession seasonLookup() {
+    var slot = 0;
+    while (_seasonLookupSlots.contains(slot)) {
+      slot++;
+    }
+    _seasonLookupSlots.add(slot);
+    return _NativeSeasonLookupSession(this, slot);
+  }
 
   @override
   Future<Map<String, dynamic>> lan(
@@ -581,6 +745,7 @@ class NativeRepository extends AppRepository {
         'prepareCover',
         'detail',
         'metadata',
+        'seasonMetadata',
         'resolve',
         'preload',
         'preloadStatus',
@@ -609,18 +774,20 @@ class NativeRepository extends AppRepository {
         input['force'] = true;
       }
       final body = jsonEncode(input);
-      final response = await Isolate.run(() => _decodedNativeRequest(body))
-          .timeout(
-            Duration(
-              seconds: action == 'moveDownloads'
-                  ? 620
-                  : action == 'danmaku'
-                  ? 15
-                  : action == 'preload'
-                  ? 20
-                  : 70,
-            ),
-          );
+      final response =
+          await (_transport?.call(input) ??
+                  Isolate.run(() => _decodedNativeRequest(body)))
+              .timeout(
+                Duration(
+                  seconds: action == 'moveDownloads'
+                      ? 620
+                      : action == 'danmaku'
+                      ? 15
+                      : action == 'preload'
+                      ? 20
+                      : 70,
+                ),
+              );
       if (response['ok'] != true) {
         throw AppFailure.fromResponse(response);
       }
@@ -650,6 +817,8 @@ class NativeRepository extends AppRepository {
             'suggestions',
             'recommendations',
             'metadata',
+            'seasonMetadata',
+            'detail',
             'danmaku',
             'preload',
             'prepareHandoff',

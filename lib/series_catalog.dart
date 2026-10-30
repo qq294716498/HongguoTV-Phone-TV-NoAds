@@ -87,7 +87,7 @@ class SeriesCatalog extends ChangeNotifier {
               anchor.source,
               query: title.trim(),
               page: page,
-              force: page == 1,
+              force: refresh && page == 1,
             ),
           );
           if (!_current(generation)) return;
@@ -131,7 +131,7 @@ class SeriesCatalog extends ChangeNotifier {
                   anchor.source,
                   query: query,
                   page: page,
-                  force: page == 1,
+                  force: refresh && page == 1,
                 ),
               );
             } catch (failure) {
@@ -210,8 +210,10 @@ Future<Drama> hydrateHongguoNextSeason(
         return info != null &&
             info.season == next &&
             (current == null || current.unit == info.unit) &&
-            hongguoSimilarSeriesTitles(anchor, candidate) &&
-            !hongguoSameSeries(anchor, candidate);
+            (hongguoSimilarSeriesTitles(anchor, candidate) ||
+                anchor.seriesGroupId.isNotEmpty &&
+                    anchor.seriesGroupId == candidate.seriesGroupId) &&
+            !hongguoVerifiedSameSeries(anchor, candidate);
       })
       .take(4)
       .toList();

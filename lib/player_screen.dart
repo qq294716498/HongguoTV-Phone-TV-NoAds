@@ -1453,11 +1453,15 @@ class _PlayerScreenState extends State<PlayerScreen>
       if (_closed || generation != _generation) return;
       await _saveProgress(flush: true);
       if (!canContinue || !current()) return;
+      if (widget.store.hasFreshNoNextSeason(detail.drama)) {
+        _notice('本季已播完，暂未找到下一季');
+        return;
+      }
       _interactions.hint('本季已播完，正在查找下一季', persistent: true);
       DiaryService.add('[Season] 查找下一季: ${detail.drama.title}');
       final next = await NextSeasonResolver(widget.repository).resolve(
         detail.drama,
-        knownDramas: widget.store.seriesDramasFor(detail.drama),
+        knownDramas: widget.store.nextSeasonDramasFor(detail.drama),
         isCurrent: current,
       );
       if (!current()) return;

@@ -27,24 +27,28 @@ const firstSeason = Drama(
   id: 'hongguo:series-first',
   source: 'hongguo',
   title: '合成故事 第一季',
+  seriesGroupId: '100',
   episodes: 2,
 );
 const secondSeason = Drama(
   id: 'hongguo:series-second',
   source: 'hongguo',
   title: '合成故事 第二季',
+  seriesGroupId: '100',
   episodes: 100,
 );
 const thirdSeason = Drama(
   id: 'hongguo:series-third',
   source: 'hongguo',
   title: '合成故事 第三季',
+  seriesGroupId: '100',
   episodes: 3,
 );
 const unrelatedSeason = Drama(
   id: 'hongguo:another',
   source: 'hongguo',
   title: '另一个故事 第二季',
+  seriesGroupId: '200',
   episodes: 2,
 );
 
@@ -164,7 +168,7 @@ void main() {
       );
       addTearDown(catalog.dispose);
       await catalog.load();
-      expect(repository.catalogCalls, [('合成故事', 1, true), ('合成故事', 2, false)]);
+      expect(repository.catalogCalls, [('合成故事', 1, false), ('合成故事', 2, false)]);
       expect(catalog.entries.map((entry) => entry.drama.id), [
         firstSeason.id,
         secondSeason.id,
@@ -294,7 +298,7 @@ void main() {
   });
 
   test(
-    'marked follows skip remote reads while unmarked follows remain fresh',
+    'verified positives and complete negatives both skip fresh remote checks',
     () async {
       final store = await createStore();
       await store.toggleSeriesFavorite(firstSeason);
@@ -304,35 +308,45 @@ void main() {
       addTearDown(updates.dispose);
       await updates.refresh();
       expect(repository.catalogCalls, hasLength(4));
-      expect(repository.catalogCalls.every((call) => call.$3), isTrue);
-      expect(repository.maximumCatalogs, 1);
+      expect(repository.catalogCalls.every((call) => !call.$3), isTrue);
+      expect(repository.maximumCatalogs, lessThanOrEqualTo(2));
       expect(store.hasNextSeason(firstSeason), isTrue);
       await updates.refresh();
-      expect(repository.catalogCalls, hasLength(7));
-      expect(repository.catalogCalls.last.$1, '另一个故事 第3季');
+      expect(repository.catalogCalls, hasLength(4));
+      expect(updates.total, 0);
       expect(updates.failed, 0);
     },
   );
 
-  test('persisted next-season labels skip fresh controller queries', () async {
-    final store = await createStore();
-    await store.toggleSeriesFavorite(firstSeason);
-    await store.refreshDramas([firstSeason, secondSeason]);
-    final restarted = LocalStore(store.preferences);
-    addTearDown(restarted.dispose);
-    final repository = SeasonRepository();
-    final updates = FollowUpdates(repository, restarted);
-    addTearDown(updates.dispose);
-    await updates.refresh();
-    expect(repository.catalogCalls, isEmpty);
-    expect(updates.total, 0);
-    expect(restarted.hasNextSeason(firstSeason), true);
-    await updates.refresh(force: true);
-    expect(repository.catalogCalls, hasLength(1));
-  });
+  test(
+    'legacy labels are rechecked and verified checks survive restart',
+    () async {
+      final store = await createStore();
+      await store.toggleSeriesFavorite(firstSeason);
+      await store.refreshDramas([firstSeason, secondSeason]);
+      final restarted = LocalStore(store.preferences);
+      addTearDown(restarted.dispose);
+      final repository = SeasonRepository();
+      final updates = FollowUpdates(repository, restarted);
+      addTearDown(updates.dispose);
+      await updates.refresh();
+      expect(repository.catalogCalls, hasLength(1));
+      expect(updates.total, 1);
+      expect(restarted.hasNextSeason(firstSeason), true);
+      final verified = LocalStore(store.preferences);
+      addTearDown(verified.dispose);
+      final fresh = FollowUpdates(repository, verified);
+      addTearDown(fresh.dispose);
+      await fresh.refresh();
+      expect(repository.catalogCalls, hasLength(1));
+      expect(fresh.total, 0);
+      await updates.refresh(force: true);
+      expect(repository.catalogCalls, hasLength(2));
+    },
+  );
 
   test(
-    'an unmarked series is queried again after no result or failure',
+    'fresh negative skips automatic checks and manual force can retry failures',
     () async {
       final store = await createStore();
       await store.toggleSeriesFavorite(firstSeason);
@@ -344,9 +358,12 @@ void main() {
       expect(store.hasNextSeason(firstSeason), false);
       repository.failingPage = 1;
       await updates.refresh();
+      expect(repository.catalogCalls, hasLength(3));
+      expect(updates.failed, 0);
+      await updates.refresh(force: true);
       expect(updates.failed, 1);
       repository.failingPage = null;
-      await updates.refresh();
+      await updates.refresh(force: true);
       expect(repository.catalogCalls, hasLength(9));
     },
   );
@@ -359,17 +376,17 @@ void main() {
     final updates = FollowUpdates(repository, store);
     addTearDown(updates.dispose);
     await updates.refresh();
-    expect(repository.catalogCalls, isEmpty);
+    expect(repository.catalogCalls, hasLength(1));
     await store.saveWatch(watch(secondSeason, 3, 2));
     expect(store.hasNextSeason(firstSeason), false);
     await updates.refresh();
-    expect(repository.catalogCalls, hasLength(1));
+    expect(repository.catalogCalls, hasLength(2));
     expect(store.hasNextSeason(firstSeason), true);
     await updates.refresh();
-    expect(repository.catalogCalls, hasLength(1));
+    expect(repository.catalogCalls, hasLength(2));
     await store.saveWatch(watch(thirdSeason, 2, 3));
     await updates.refresh();
-    expect(repository.catalogCalls, hasLength(4));
+    expect(repository.catalogCalls, hasLength(5));
     expect(store.hasNextSeason(firstSeason), false);
   });
 
@@ -383,7 +400,7 @@ void main() {
       final updates = FollowUpdates(repository, store);
       addTearDown(updates.dispose);
       await updates.refresh();
-      expect(repository.catalogCalls, isEmpty);
+      expect(repository.catalogCalls, hasLength(1));
       final document = store.lanDocument;
       final record = document.records[firstSeason.id]!;
       final moved = record.withField(
@@ -399,7 +416,7 @@ void main() {
       );
       expect(store.hasNextSeason(firstSeason), false);
       await updates.refresh();
-      expect(repository.catalogCalls, hasLength(1));
+      expect(repository.catalogCalls, hasLength(2));
       expect(store.hasNextSeason(firstSeason), true);
     },
   );
@@ -484,7 +501,7 @@ void main() {
   );
 
   test(
-    'follow lookup batches library writes while checking every series',
+    'follow lookup persists each completed check and skips the warm batch',
     () async {
       final store = await createStore();
       for (var i = 0; i < 17; i++) {
@@ -504,7 +521,11 @@ void main() {
       await updates.refresh();
       expect(repository.catalogCalls, hasLength(51));
       expect(updates.checked, 17);
-      expect(writes, lessThanOrEqualTo(3));
+      expect(writes, 17);
+      await updates.refresh();
+      expect(repository.catalogCalls, hasLength(51));
+      expect(updates.total, 0);
+      expect(writes, 17);
     },
   );
 

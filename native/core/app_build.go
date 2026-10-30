@@ -37,6 +37,10 @@ func nativeDownloadAvailable(job nativeDownloadJob) bool {
 
 func nativeAuthorizeInput(input nativeInput) error {
 	switch input.Action {
+	case "seasonMetadata":
+		if !nativeDramaAvailable(input.Drama) || sourceFromDramaID(input.Drama.ID) != sourceHongguo {
+			return errNativeBuildSource
+		}
 	case "recommendations", "cachedRecommendations", "suggestions", "danmaku":
 		if !nativeSourceAvailable(sourceHongguo) {
 			return errNativeBuildSource

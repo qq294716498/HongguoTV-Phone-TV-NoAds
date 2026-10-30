@@ -80,6 +80,8 @@ type nativeDrama struct {
 	ID             string   `json:"id"`
 	Source         string   `json:"source"`
 	SourceID       string   `json:"sourceId"`
+	SeriesGroupID  string   `json:"seriesGroupId,omitempty"`
+	RelatedAlbumID string   `json:"relatedAlbumId,omitempty"`
 	Title          string   `json:"title"`
 	Description    string   `json:"description"`
 	Cover          string   `json:"cover"`
@@ -239,6 +241,7 @@ func nativeNormalize(drama Drama) nativeDrama {
 	}
 	source, sourceID, _ := splitProviderDramaID(drama.ID)
 	return nativeDrama{MetadataSchema: 1, ID: drama.ID, Source: source, SourceID: sourceID, Title: drama.DisplayTitle(),
+		SeriesGroupID: hongguoRelationID(drama.SeriesGroupID), RelatedAlbumID: hongguoRelationID(drama.RelatedAlbumID),
 		Description: firstNonEmpty(drama.Desc, drama.Intro), Cover: cover, Episodes: episodes,
 		Category: nativeDramaCategory(drama), VIP: drama.VIP,
 		Heat: drama.Heat, Views: drama.Views, OnlineDate: providerReleaseDate(drama.OnlineDate),
@@ -383,10 +386,12 @@ func nativeDispatch(input nativeInput) (any, error) {
 		duration = 10 * time.Second
 	} else if input.Action == "preload" {
 		duration = 15 * time.Second
+	} else if input.Action == "seasonMetadata" {
+		duration = 10 * time.Second
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), duration)
 	defer cancel()
-	if input.Action == "danmaku" || input.Action == "preload" || input.Action == "prepareHandoff" || input.Session != "" && (input.Action == "catalog" || input.Action == "categories" || input.Action == "suggestions" || input.Action == "recommendations" || input.Action == "metadata") {
+	if input.Action == "danmaku" || input.Action == "preload" || input.Action == "prepareHandoff" || input.Session != "" && (input.Action == "catalog" || input.Action == "categories" || input.Action == "suggestions" || input.Action == "recommendations" || input.Action == "metadata" || input.Action == "seasonMetadata" || input.Action == "detail") {
 		work, finish, err := engine.beginRead(ctx, input)
 		if err != nil {
 			return nil, err
@@ -489,6 +494,8 @@ func nativeDispatch(input nativeInput) (any, error) {
 		return engine.nativeDetail(ctx, input.Drama)
 	case "metadata":
 		return engine.nativeMetadata(ctx, input.Drama)
+	case "seasonMetadata":
+		return engine.nativeSeasonMetadata(ctx, input.Drama)
 	case "resolve", "fallback":
 		playback, finish, err := engine.nativeBeginPlayback(ctx, input.Sequence)
 		if err != nil {

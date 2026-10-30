@@ -272,6 +272,9 @@ bool hongguoSameSeries(Drama anchor, Drama candidate) {
       anchor.source != SourceSite.hongguo.id) {
     return false;
   }
+  if (anchor.seriesGroupId.isNotEmpty && candidate.seriesGroupId.isNotEmpty) {
+    return anchor.seriesGroupId == candidate.seriesGroupId;
+  }
   final left = _seriesTitleKey(anchor);
   final right = _seriesTitleKey(candidate);
   if (left.isEmpty || right.isEmpty) return false;
@@ -285,6 +288,25 @@ bool hongguoSameSeries(Drama anchor, Drama candidate) {
     return leftNames.isEmpty || rightNames.isEmpty || sharedNames.isNotEmpty;
   }
   return sharedNames.isNotEmpty;
+}
+
+bool hongguoVerifiedSameSeries(Drama anchor, Drama candidate) {
+  if (anchor.source != candidate.source ||
+      anchor.source != SourceSite.hongguo.id) {
+    return false;
+  }
+  if (anchor.id == candidate.id) return true;
+  if (anchor.seriesGroupId.isNotEmpty && candidate.seriesGroupId.isNotEmpty) {
+    return anchor.seriesGroupId == candidate.seriesGroupId;
+  }
+  if (!hongguoSimilarSeriesTitles(anchor, candidate)) {
+    return false;
+  }
+  final left = hongguoSeriesCharacters(anchor.description);
+  final right = hongguoSeriesCharacters(candidate.description);
+  return left.isNotEmpty &&
+      right.isNotEmpty &&
+      left.intersection(right).isNotEmpty;
 }
 
 bool hongguoSimilarSeriesTitles(Drama anchor, Drama candidate) {

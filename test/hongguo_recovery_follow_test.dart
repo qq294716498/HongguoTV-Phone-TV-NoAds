@@ -17,12 +17,14 @@ const original = Drama(
   source: 'hongguo',
   title: '觉醒伪神：神明弃我我自为神2',
   description: '主角林凡被神明抛弃，与苏月踏上逆天之路。',
+  episodes: 2,
 );
 const sequel = Drama(
   id: 'hongguo:b',
   source: 'hongguo',
   title: '觉醒伪神：神明弃我自为神3',
   description: '林凡获得新的力量，苏月在危机中与他并肩作战。',
+  episodes: 2,
 );
 
 class RecoveringRepository extends FixtureRepository {

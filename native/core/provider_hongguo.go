@@ -16,6 +16,25 @@ import (
 
 const hongguoBaseURL = "https://hongguoduanju.com"
 
+func hongguoRelationID(value string) string {
+	value = strings.TrimSpace(value)
+	if !hongguoNumericID.MatchString(value) || strings.Trim(value, "0") == "" {
+		return ""
+	}
+	return value
+}
+
+func (d *Downloader) hongguoWebSeriesMetadata(ctx context.Context, seriesID string) (Drama, error) {
+	if !hongguoNumericID.MatchString(seriesID) || strings.Trim(seriesID, "0") == "" {
+		return Drama{}, errors.New("红果剧集 ID 无效")
+	}
+	body, err := d.fetchProviderText(ctx, hongguoBaseURL+"/detail?series_id="+url.QueryEscape(seriesID), hongguoBaseURL+"/")
+	if err != nil {
+		return Drama{}, err
+	}
+	return parseHongguoSortDetail(body, seriesID)
+}
+
 func (d *Downloader) fetchHongguoDramas(ctx context.Context) ([]Drama, error) {
 	initialized := hongguoCatalogInitialized(d.hongguoCatalogSnapshot())
 	dramas, appErr := d.fetchHongguoAppCatalog(ctx)
@@ -287,7 +306,13 @@ func hongguoDramaFromAny(v any, category string) Drama {
 	if genre == "" && len(tags) > 0 {
 		genre = tags[0]
 	}
-	return Drama{ID: providerDramaID(sourceHongguo, sourceID), Source: sourceHongguo, SourceID: sourceID, Title: title, Name: title, Desc: intro, Intro: intro, Cover: cover, CoverURL: cover, CategoryName: firstNonEmpty(genre, category), ChannelName: "红果", Remark: remark, TotalEpisode: count, EpisodeCount: count, Tags: tags, ReleaseStatus: releaseStatus, Score: mapString(vd, "score"), Views: mapString(vd, "series_play_cnt", "play_cnt"), Heat: hongguoHeat(vd), OnlineDate: hongguoOnlineDate(vd, time.Now())}
+	groupID := hongguoRelationID(mapString(nestedMap(vd, "season_info"), "series_group_id"))
+	albumID := hongguoRelationID(mapString(vd, "related_album_id"))
+	if mapString(m, "series_id_str", "series_id", "keyword") == sourceID {
+		groupID = firstNonEmpty(groupID, hongguoRelationID(mapString(nestedMap(m, "season_info"), "series_group_id")))
+		albumID = firstNonEmpty(albumID, hongguoRelationID(mapString(m, "related_album_id")))
+	}
+	return Drama{ID: providerDramaID(sourceHongguo, sourceID), Source: sourceHongguo, SourceID: sourceID, SeriesGroupID: groupID, RelatedAlbumID: albumID, Title: title, Name: title, Desc: intro, Intro: intro, Cover: cover, CoverURL: cover, CategoryName: firstNonEmpty(genre, category), ChannelName: "红果", Remark: remark, TotalEpisode: count, EpisodeCount: count, Tags: tags, ReleaseStatus: releaseStatus, Score: mapString(vd, "score"), Views: mapString(vd, "series_play_cnt", "play_cnt"), Heat: hongguoHeat(vd), OnlineDate: hongguoOnlineDate(vd, time.Now())}
 }
 
 func nestedMap(v any, keys ...string) map[string]any {

@@ -18,16 +18,23 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'player_fixtures.dart';
 import 'playback_preloader_test.dart' show PendingPreloadRepository;
 
-const firstSeason = Drama(id: 'hongguo:s1', source: 'hongguo', title: '合成连续剧');
+const firstSeason = Drama(
+  id: 'hongguo:s1',
+  source: 'hongguo',
+  title: '合成连续剧',
+  seriesGroupId: '100',
+);
 const secondSeason = Drama(
   id: 'hongguo:s2',
   source: 'hongguo',
   title: '合成连续剧第二季',
+  seriesGroupId: '100',
 );
 
 class SeasonRepository extends RouteRepository {
   List<Drama> candidates = [secondSeason];
   final dramasPlayed = <String>[];
+  int seasonDetailCalls = 0;
   Completer<DramaDetail>? delayedDetail;
 
   @override
@@ -44,6 +51,7 @@ class SeasonRepository extends RouteRepository {
 
   @override
   Future<DramaDetail> detail(Drama drama) {
+    seasonDetailCalls++;
     if (drama.id == secondSeason.id && delayedDetail != null) {
       return delayedDetail!.future;
     }
@@ -105,11 +113,16 @@ void main() {
       isCurrent: () => true,
     );
     expect(result?.drama.id, secondSeason.id);
-    expect(repository.requests, [firstSeason.title]);
+    expect(repository.requests, ['合成连续剧 第2季']);
     repository.candidates = [
       const Drama(id: 'hongguo:s3', source: 'hongguo', title: '合成连续剧第三季'),
       const Drama(id: 'other:s2', source: 'other', title: '合成连续剧第二季'),
-      const Drama(id: 'hongguo:other', source: 'hongguo', title: '合成连续剧外传第二季'),
+      const Drama(
+        id: 'hongguo:other',
+        source: 'hongguo',
+        title: '合成连续剧外传第二季',
+        seriesGroupId: '200',
+      ),
     ];
     expect(
       await resolver.resolve(
@@ -135,6 +148,7 @@ void main() {
               id: 'hongguo:duplicate',
               source: 'hongguo',
               title: '合成连续剧第2季',
+              seriesGroupId: '100',
             ),
           ],
           isCurrent: () => true,
@@ -245,6 +259,65 @@ void main() {
       expect(store.watched(secondSeason.id)?.episode, 1);
       expect(store.watched(secondSeason.id)?.position, 12);
       expect(find.byKey(const ValueKey('next-season-notice')), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await frames(tester);
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      store.dispose();
+    },
+  );
+
+  testWidgets(
+    'fresh complete negative prevents old next playback and preserves progress',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = LocalStore(await SharedPreferences.getInstance());
+      final repository = SeasonRepository();
+      final platform = ScriptedPlayer();
+      await store.toggleSeriesFavorite(firstSeason);
+      await store.refreshDramas([firstSeason, secondSeason]);
+      expect(
+        store.seriesDramasFor(firstSeason).map((drama) => drama.id),
+        contains(secondSeason.id),
+      );
+      await store.applySeasonCheck(
+        followed: firstSeason,
+        anchor: firstSeason,
+        resolvedAnchor: firstSeason,
+        next: null,
+        complete: true,
+        isCurrent: () => true,
+      );
+      expect(store.hasFreshNoNextSeason(firstSeason), isTrue);
+      final detail = await repository.detail(firstSeason);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: PlayerScreen(
+            detail: detail,
+            initialIndex: 1,
+            repository: repository,
+            store: store,
+            playerFactory: () => Player(platformPlayer: platform),
+            videoBuilder: (controls) =>
+                ColoredBox(color: Colors.black, child: controls),
+          ),
+        ),
+      );
+      await frames(tester);
+      final previousSearches = repository.requests.length;
+      final previousDetails = repository.seasonDetailCalls;
+      platform.finishEpisode();
+      await frames(tester);
+      expect(repository.requests, hasLength(previousSearches));
+      expect(repository.seasonDetailCalls, previousDetails);
+      expect(repository.dramasPlayed, [firstSeason.id]);
+      expect(repository.requestedEpisodes, [2]);
+      expect(store.watched(firstSeason.id)?.episode, 2);
+      expect(store.watched(firstSeason.id)?.position, 120);
+      expect(store.watched(secondSeason.id), isNull);
+      expect(find.byKey(const ValueKey('next-season-notice')), findsNothing);
+      expect(find.byType(PlayerScreen), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       await frames(tester);
       await tester.runAsync(

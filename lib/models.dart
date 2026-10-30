@@ -104,12 +104,25 @@ class CatalogCategory {
 int intValue(Object? value) =>
     value is num ? value.toInt() : int.tryParse('$value') ?? 0;
 
+final _seriesRelationIdPattern = RegExp(r'^[0-9]{1,32}$');
+
+String _seriesRelationId(Object? value) {
+  if (value is! String) return '';
+  final id = value.trim();
+  return _seriesRelationIdPattern.hasMatch(id) &&
+          id.replaceAll('0', '').isNotEmpty
+      ? id
+      : '';
+}
+
 class Drama {
   const Drama({
     required this.id,
     required this.source,
     required this.title,
     this.sourceId = '',
+    this.seriesGroupId = '',
+    this.relatedAlbumId = '',
     this.description = '',
     this.cover = '',
     this.episodes = 0,
@@ -124,6 +137,8 @@ class Drama {
   final String id;
   final String source;
   final String sourceId;
+  final String seriesGroupId;
+  final String relatedAlbumId;
   final String title;
   final String description;
   final String cover;
@@ -146,6 +161,8 @@ class Drama {
     id: json['id'] as String? ?? '',
     source: json['source'] as String? ?? 'hongguo',
     sourceId: json['sourceId'] as String? ?? '',
+    seriesGroupId: _seriesRelationId(json['seriesGroupId']),
+    relatedAlbumId: _seriesRelationId(json['relatedAlbumId']),
     title: json['title'] as String? ?? '短剧',
     description: json['description'] as String? ?? '',
     cover: json['cover'] as String? ?? '',
@@ -169,6 +186,10 @@ class Drama {
     'id': id,
     'source': source,
     'sourceId': sourceId,
+    if (_seriesRelationId(seriesGroupId).isNotEmpty)
+      'seriesGroupId': _seriesRelationId(seriesGroupId),
+    if (_seriesRelationId(relatedAlbumId).isNotEmpty)
+      'relatedAlbumId': _seriesRelationId(relatedAlbumId),
     'title': title,
     'description': description,
     'cover': cover,
@@ -199,6 +220,12 @@ class Drama {
       id: id,
       source: fresh.source.isEmpty ? source : fresh.source,
       sourceId: fresh.sourceId.isEmpty ? sourceId : fresh.sourceId,
+      seriesGroupId: _seriesRelationId(fresh.seriesGroupId).isEmpty
+          ? seriesGroupId
+          : _seriesRelationId(fresh.seriesGroupId),
+      relatedAlbumId: _seriesRelationId(fresh.relatedAlbumId).isEmpty
+          ? relatedAlbumId
+          : _seriesRelationId(fresh.relatedAlbumId),
       title: fresh.title.isEmpty || fresh.title == '短剧' ? title : fresh.title,
       description: fresh.description.isEmpty ? description : fresh.description,
       cover: fresh.cover.isEmpty ? cover : fresh.cover,

@@ -12,6 +12,7 @@ import 'download_preferences.dart';
 import 'catalog_sort.dart';
 import 'follow_state.dart';
 import 'hongguo_series.dart';
+import 'season_check.dart';
 import 'lan_sync_models.dart';
 
 part 'local_store_sync.dart';
@@ -21,12 +22,15 @@ class LocalStore extends ChangeNotifier {
   LocalStore(
     this.preferences, {
     Future<String> Function(String, String)? pinHasher,
-  }) : _pinHasher = pinHasher ?? hashProfilePin {
+    DateTime Function()? now,
+  }) : _pinHasher = pinHasher ?? hashProfilePin,
+       _now = now ?? DateTime.now {
     _initialize();
   }
 
   final SharedPreferences preferences;
   final Future<String> Function(String pin, String salt) _pinHasher;
+  final DateTime Function() _now;
   LocalSnapshot? _snapshot;
   LanDocument? _lanDocumentCache;
   int _lanRevision = 0;
@@ -37,7 +41,9 @@ class LocalStore extends ChangeNotifier {
   final Map<String, Drama> _favorites = {};
   final Map<String, FollowState> _followStates = {};
   final Map<String, Drama> _seriesCandidates = {};
+  final Map<String, SeasonCheck> _seasonChecks = {};
   final _seriesIndex = <String, List<Drama>>{};
+  final _seriesGroupIndex = <String, List<Drama>>{};
   final _seriesCharacterIndex = <String, List<Drama>>{};
   final _seriesEntriesCache =
       <(String, String, String), List<HongguoSeriesEntry>>{};
@@ -120,12 +126,14 @@ class LocalStore extends ChangeNotifier {
     _favorites.clear();
     _followStates.clear();
     _seriesCandidates.clear();
+    _seasonChecks.clear();
     _epoch++;
   }
 
   void _invalidateSeries() {
     _seriesIndexReady = false;
     _seriesIndex.clear();
+    _seriesGroupIndex.clear();
     _seriesCharacterIndex.clear();
     _favoriteRanks.clear();
     _seriesEntriesCache.clear();
@@ -279,6 +287,7 @@ class LocalStore extends ChangeNotifier {
     _favorites.clear();
     _followStates.clear();
     _seriesCandidates.clear();
+    _seasonChecks.clear();
     if (_configurationError != null) return;
     for (final row in readJsonList(_string(_key('history')))) {
       try {
@@ -318,6 +327,21 @@ class LocalStore extends ChangeNotifier {
         }
       } catch (_) {}
     }
+    try {
+      final records = jsonDecode(_string(_key('seasonChecks')) ?? '{}');
+      if (records is Map && records.length <= 2000) {
+        for (final entry in records.entries) {
+          try {
+            final check = SeasonCheck.fromJson(
+              Map<String, dynamic>.from(entry.value as Map),
+            );
+            if (entry.key == check.anchorId) {
+              _seasonChecks[check.anchorId] = check;
+            }
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
   }
 
   List<WatchEntry> get history =>
@@ -393,6 +417,9 @@ class LocalStore extends ChangeNotifier {
     for (final drama in items.values) {
       if (drama.source == SourceSite.hongguo.id && allowsSource(drama.source)) {
         (_seriesIndex[_seriesKey(drama)] ??= []).add(drama);
+        if (drama.seriesGroupId.isNotEmpty) {
+          (_seriesGroupIndex[drama.seriesGroupId] ??= []).add(drama);
+        }
         for (final name in hongguoSeriesCharacters(drama.description)) {
           (_seriesCharacterIndex[name] ??= []).add(drama);
         }
@@ -410,6 +437,10 @@ class LocalStore extends ChangeNotifier {
     final candidates = <String, Drama>{
       for (final drama in _seriesIndex[_seriesKey(anchor)] ?? const <Drama>[])
         drama.id: drama,
+      if (anchor.seriesGroupId.isNotEmpty)
+        for (final drama
+            in _seriesGroupIndex[anchor.seriesGroupId] ?? const <Drama>[])
+          drama.id: drama,
       for (final name in hongguoSeriesCharacters(anchor.description))
         for (final drama in _seriesCharacterIndex[name] ?? const <Drama>[])
           if (hongguoSameSeries(anchor, drama)) drama.id: drama,
@@ -736,13 +767,127 @@ class LocalStore extends ChangeNotifier {
   }
 
   bool hasNextSeason(Drama drama) {
+    if (!allowsSource(drama.source)) return false;
     final current = seriesWatch(drama)?.drama ?? drama;
+    final check = _seasonChecks[current.id];
+    if (check != null && check.matches(current)) {
+      if (check.nextId == null) return false;
+      return _checkedNext(current, check);
+    }
     final entries = _seriesEntries(current);
-    final season = entries
-        .where((entry) => entry.drama.id == current.id)
-        .firstOrNull
-        ?.season;
-    return season != null && entries.any((entry) => entry.season > season);
+    final info = hongguoSeriesInfo(current);
+    return entries.any(
+      (entry) =>
+          entry.drama.id != current.id &&
+          entry.season == (info?.season ?? 1) + 1 &&
+          (info == null || entry.unit == info.unit) &&
+          hongguoVerifiedSameSeries(current, entry.drama),
+    );
+  }
+
+  bool _checkedNext(Drama anchor, SeasonCheck check) {
+    if (check.nextId == null) return false;
+    final next =
+        _seriesCandidates[check.nextId] ??
+        _favorites[check.nextId] ??
+        _history[check.nextId]?.drama;
+    if (next == null) return true;
+    if (next.id == anchor.id) return false;
+    final currentInfo = hongguoSeriesInfo(anchor);
+    final nextInfo = hongguoSeriesInfo(next);
+    return nextInfo != null &&
+        nextInfo.season == (currentInfo?.season ?? 1) + 1 &&
+        (currentInfo == null || nextInfo.unit == currentInfo.unit) &&
+        hongguoVerifiedSameSeries(anchor, next);
+  }
+
+  DateTime get seasonCheckTime => _now();
+
+  bool get seasonChecksBlocked =>
+      _seasonChecks.values.any((check) => check.isBlocked(_now()));
+
+  bool shouldCheckNextSeason(Drama anchor, {bool force = false}) {
+    if (!allowsSource(anchor.source) ||
+        anchor.source != SourceSite.hongguo.id ||
+        seasonChecksBlocked) {
+      return false;
+    }
+    final check = _seasonChecks[anchor.id];
+    if (force || check == null || !check.matches(anchor)) return true;
+    if (!check.isFresh(_now())) return true;
+    return check.nextId != null && !_checkedNext(anchor, check);
+  }
+
+  Drama _seasonLookupAnchor(Drama anchor) {
+    final stored =
+        _history[anchor.id]?.drama ??
+        _favorites[anchor.id] ??
+        _seriesCandidates[anchor.id];
+    var current = anchor;
+    if (stored != null && stored.source == anchor.source) {
+      final inputInfo = hongguoSeriesInfo(anchor);
+      final storedInfo = hongguoSeriesInfo(stored);
+      final conflicts =
+          inputInfo != null &&
+          storedInfo != null &&
+          (inputInfo.season != storedInfo.season ||
+              inputInfo.unit != storedInfo.unit);
+      current =
+          anchor.seriesGroupId.isEmpty &&
+              stored.seriesGroupId.isNotEmpty &&
+              !conflicts
+          ? anchor.merge(stored)
+          : stored.merge(anchor);
+    }
+    return current;
+  }
+
+  bool hasFreshNoNextSeason(Drama anchor) {
+    if (!allowsSource(anchor.source) ||
+        anchor.source != SourceSite.hongguo.id) {
+      return false;
+    }
+    final current = _seasonLookupAnchor(anchor);
+    final check = _seasonChecks[current.id];
+    if (check == null ||
+        !check.matches(current) ||
+        check.nextId != null ||
+        !check.complete ||
+        check.retryAt != null) {
+      return false;
+    }
+    final age = _now().toUtc().difference(check.checkedAt);
+    return !age.isNegative && age < const Duration(minutes: 10);
+  }
+
+  List<Drama> nextSeasonDramasFor(Drama anchor) {
+    if (!allowsSource(anchor.source) ||
+        anchor.source != SourceSite.hongguo.id) {
+      return const [];
+    }
+    final current = _seasonLookupAnchor(anchor);
+    final info = hongguoSeriesInfo(current);
+    bool eligible(Drama drama) {
+      final next = hongguoSeriesInfo(drama);
+      return drama.id != current.id &&
+          next != null &&
+          next.season == (info?.season ?? 1) + 1 &&
+          (info == null || next.unit == info.unit) &&
+          hongguoVerifiedSameSeries(current, drama);
+    }
+
+    final check = _seasonChecks[current.id];
+    if (check != null) {
+      if (!check.matches(current) || !check.hasFreshPositive(_now())) {
+        return [current];
+      }
+      final next =
+          _seriesCandidates[check.nextId] ??
+          _favorites[check.nextId] ??
+          _history[check.nextId]?.drama;
+      return [current, if (next != null && eligible(next)) next];
+    }
+    return [current, ...seriesDramasFor(current).where(eligible)];
   }
 
   List<Drama> get trackedSeries {
@@ -988,6 +1133,152 @@ class LocalStore extends ChangeNotifier {
   Future<void> refreshDramas(Iterable<Drama> dramas) =>
       _refreshDramas(dramas, cacheSeriesCandidates: true);
 
+  Future<void> applySeasonCheck({
+    required Drama followed,
+    required Drama anchor,
+    required Drama resolvedAnchor,
+    required Drama? next,
+    required bool complete,
+    required bool Function() isCurrent,
+    DateTime? retryAt,
+    bool blocked = false,
+  }) {
+    final epoch = _epoch;
+    final favoriteId = followedSeries(followed)?.id;
+    final expected = SeasonCheck.observed(
+      anchor,
+      checkedAt: _now(),
+      nextId: null,
+      complete: false,
+    );
+    bool current() {
+      if (_disposed ||
+          locked ||
+          epoch != _epoch ||
+          !isCurrent() ||
+          !allowsSource(anchor.source) ||
+          favoriteId == null ||
+          !_favorites.containsKey(favoriteId)) {
+        return false;
+      }
+      final favorite = _favorites[favoriteId]!;
+      return expected.matches(seriesWatch(favorite)?.drama ?? favorite);
+    }
+
+    return _queue(() async {
+      if (!current()) return;
+      if (resolvedAnchor.id != anchor.id ||
+          resolvedAnchor.source != anchor.source) {
+        throw StateError('续季检查返回了其他剧集');
+      }
+      final mergedAnchor = anchor.merge(resolvedAnchor);
+      final info = hongguoSeriesInfo(mergedAnchor);
+      final nextInfo = next == null ? null : hongguoSeriesInfo(next);
+      if (next != null &&
+          (next.id == anchor.id ||
+              nextInfo == null ||
+              nextInfo.season != (info?.season ?? 1) + 1 ||
+              info != null && nextInfo.unit != info.unit ||
+              !hongguoVerifiedSameSeries(mergedAnchor, next))) {
+        throw StateError('续季检查结果缺少连续季关系');
+      }
+      final changes = await _libraryChanges([
+        mergedAnchor,
+        ?next,
+      ], cacheSeriesCandidates: true);
+      if (!current()) return;
+      if (complete || next != null) {
+        final states = changes['followStates'] == null
+            ? Map.of(_followStates)
+            : {
+                for (final entry
+                    in (jsonDecode(changes['followStates']! as String) as Map)
+                        .entries)
+                  entry.key as String: FollowState.fromJson(
+                    Map<String, dynamic>.from(entry.value as Map),
+                  ),
+              };
+        final state = states[favoriteId];
+        if (state != null) {
+          final seasons = Map.of(state.seriesSeasons)
+            ..removeWhere(
+              (id, notice) =>
+                  notice.season == (info?.season ?? 1) + 1 &&
+                  (info == null || notice.unit == info.unit) &&
+                  id != next?.id,
+            );
+          states[favoriteId!] = state.copyWith(seriesSeasons: seasons);
+          final encoded = _encodeFollowStates(states);
+          if (encoded != _encodeFollowStates(_followStates)) {
+            changes['followStates'] = encoded;
+          } else {
+            changes.remove('followStates');
+          }
+        }
+      }
+      final now = _now().toUtc();
+      var check = SeasonCheck.observed(
+        mergedAnchor,
+        checkedAt: now,
+        nextId: next?.id,
+        complete: complete,
+      );
+      if (next == null && !complete) {
+        final previous = _seasonChecks[mergedAnchor.id];
+        if (previous != null &&
+            previous.matches(mergedAnchor) &&
+            previous.nextId != null &&
+            _checkedNext(mergedAnchor, previous)) {
+          check = previous;
+        }
+        final earliest = now.add(const Duration(seconds: 30));
+        check = check.retrying(
+          retryAt: retryAt != null && retryAt.isAfter(earliest)
+              ? retryAt
+              : earliest,
+          blocked: blocked,
+        );
+      }
+      final checks = Map.of(_seasonChecks)..[mergedAnchor.id] = check;
+      final sorted = checks.values.toList()
+        ..sort(
+          (a, b) =>
+              (b.retryAt ?? b.checkedAt).compareTo(a.retryAt ?? a.checkedAt),
+        );
+      changes['seasonChecks'] = jsonEncode({
+        for (final entry in sorted.take(2000)) entry.anchorId: entry.toJson(),
+      });
+      if (!current()) return;
+      await _commit({
+        for (final entry in changes.entries) _key(entry.key): entry.value,
+      });
+      _loadLibrary();
+      _notify();
+    });
+  }
+
+  Future<Map<String, Object>> _libraryChanges(
+    List<Drama> updates, {
+    required bool cacheSeriesCandidates,
+  }) async {
+    final input = (
+      updates,
+      Map.of(_favorites),
+      Map.of(_history),
+      Map.of(_followStates),
+      Map.of(_seriesCandidates),
+      sources.map((source) => source.id).toSet(),
+      cacheSeriesCandidates,
+    );
+    final largeMerge =
+        updates.length > 128 ||
+        _favorites.length + _history.length + _seriesCandidates.length > 256 ||
+        updates.length * _favorites.length > 256;
+    return largeMerge
+        ? await compute(_mergeLibraryDramas, input)
+        : _mergeLibraryDramas(input);
+  }
+
   Future<void> _refreshDramas(
     Iterable<Drama> dramas, {
     required bool cacheSeriesCandidates,
@@ -996,23 +1287,10 @@ class LocalStore extends ChangeNotifier {
     final updates = dramas.toList();
     return _queue(() async {
       if (locked || epoch != _epoch) return;
-      final input = (
+      final changes = await _libraryChanges(
         updates,
-        Map.of(_favorites),
-        Map.of(_history),
-        Map.of(_followStates),
-        Map.of(_seriesCandidates),
-        sources.map((source) => source.id).toSet(),
-        cacheSeriesCandidates,
+        cacheSeriesCandidates: cacheSeriesCandidates,
       );
-      final largeMerge =
-          updates.length > 128 ||
-          _favorites.length + _history.length + _seriesCandidates.length >
-              256 ||
-          updates.length * _favorites.length > 256;
-      final changes = largeMerge
-          ? await compute(_mergeLibraryDramas, input)
-          : _mergeLibraryDramas(input);
       if (_disposed || locked || epoch != _epoch) return;
       if (changes.isEmpty) return;
       await _commit({

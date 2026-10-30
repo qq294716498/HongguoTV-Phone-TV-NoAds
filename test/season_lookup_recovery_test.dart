@@ -5,8 +5,18 @@ import 'package:duanju_app/series_catalog.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'fixtures.dart';
 
-const anchor = Drama(id: 'hongguo:1', source: 'hongguo', title: '合成故事（第一季）');
-const next = Drama(id: 'hongguo:2', source: 'hongguo', title: '合成故事（2季）');
+const anchor = Drama(
+  id: 'hongguo:1',
+  source: 'hongguo',
+  title: '合成故事（第一季）',
+  seriesGroupId: '100',
+);
+const next = Drama(
+  id: 'hongguo:2',
+  source: 'hongguo',
+  title: '合成故事（2季）',
+  seriesGroupId: '100',
+);
 
 class TargetedSeasonRepository extends FixtureRepository {
   final queries = <String>[];

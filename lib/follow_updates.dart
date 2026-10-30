@@ -2,9 +2,9 @@ import 'package:flutter/foundation.dart';
 
 import 'core_bridge.dart';
 import 'local_store.dart';
-import 'hongguo_series.dart';
 import 'models.dart';
-import 'series_catalog.dart';
+import 'next_season_resolver.dart';
+import 'season_check.dart';
 
 class FollowUpdates extends ChangeNotifier {
   FollowUpdates(this.repository, this.store) : _epoch = store.profileEpoch;
@@ -28,7 +28,9 @@ class FollowUpdates extends ChangeNotifier {
     if (!_valid || checking) return;
     final dramas = store.trackedSeries
         .where((drama) => drama.source == SourceSite.hongguo.id)
-        .where((drama) => force || !store.hasNextSeason(drama))
+        .where(
+          (drama) => store.shouldCheckNextSeason(_anchor(drama), force: force),
+        )
         .toList();
     final generation = ++_generation;
     bool current() => _valid && generation == _generation;
@@ -38,65 +40,77 @@ class FollowUpdates extends ChangeNotifier {
     total = dramas.length;
     notifyListeners();
     var cursor = 0;
-    final pending = <String, Drama>{};
-    Future<void> flush() async {
-      if (pending.isEmpty || !current()) return;
-      final results = pending.values.toList();
-      pending.clear();
-      await store.refreshDramas(results);
-    }
-
     Future<void> worker() async {
-      while (current() && cursor < dramas.length) {
+      while (current() &&
+          !store.seasonChecksBlocked &&
+          cursor < dramas.length) {
         final drama = dramas[cursor++];
         if (store.followedSeries(drama) == null ||
-            !force && store.hasNextSeason(drama))
+            !store.shouldCheckNextSeason(_anchor(drama), force: force)) {
           continue;
+        }
         final anchor = _anchor(drama);
+        final expected = SeasonCheck.observed(
+          anchor,
+          checkedAt: store.seasonCheckTime,
+          nextId: null,
+          complete: false,
+        );
         bool stillCurrent() {
           if (!current() || store.followedSeries(drama) == null) return false;
-          final latest = _anchor(drama);
-          return (latest.source, latest.id, latest.title) ==
-              (anchor.source, anchor.id, anchor.title);
+          return expected.matches(_anchor(drama));
         }
 
-        final catalog = SeriesCatalog(
-          anchor: anchor,
-          repository: repository,
-          knownDramas: store.seriesDramasFor(drama),
-          allowed: stillCurrent,
-        );
         try {
-          await catalog.load();
+          final result = await NextSeasonResolver(repository).lookup(
+            anchor,
+            knownDramas: store.seriesDramasFor(drama),
+            isCurrent: stillCurrent,
+            trustKnownNext: false,
+            force: force,
+          );
           if (!current()) return;
           if (stillCurrent()) {
-            for (final entry in catalog.entries) {
-              pending[entry.drama.id] = entry.drama;
-            }
-            final next = (hongguoSeriesInfo(anchor)?.season ?? 1) + 1;
-            final foundNext = catalog.entries.any(
-              (entry) => entry.season == next,
+            final next = result.ambiguous ? null : result.next;
+            final complete =
+                result.complete && !result.ambiguous && result.warning.isEmpty;
+            await store.applySeasonCheck(
+              followed: drama,
+              anchor: anchor,
+              resolvedAnchor: result.anchor,
+              next: next,
+              complete: complete,
+              isCurrent: stillCurrent,
             );
-            if (!foundNext && (catalog.error.isNotEmpty || catalog.hasMore))
-              failed++;
+            if (next == null && !complete) failed++;
           }
-        } catch (_) {
-          if (current()) failed++;
-        } finally {
-          catalog.dispose();
+        } catch (error) {
+          if (stillCurrent()) {
+            failed++;
+            final failure = error is AppFailure ? error : null;
+            try {
+              await store.applySeasonCheck(
+                followed: drama,
+                anchor: anchor,
+                resolvedAnchor: anchor,
+                next: null,
+                complete: false,
+                isCurrent: stillCurrent,
+                retryAt: failure?.retryAt,
+                blocked: failure?.code == 'source_blocked',
+              );
+            } catch (_) {}
+          }
         }
         if (!current()) return;
         checked++;
-        if (checked % 8 == 0) await flush();
-        if (!current()) return;
         notifyListeners();
         await Future<void>.delayed(const Duration(milliseconds: 16));
       }
     }
 
     try {
-      await worker();
-      await flush();
+      await Future.wait([worker(), worker()]);
     } finally {
       if (current()) {
         checking = false;

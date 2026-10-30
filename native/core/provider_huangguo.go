@@ -128,6 +128,8 @@ func canonicalProviderSource(source string) string {
 }
 
 func mergeDramaMetadata(base, extra Drama) Drama {
+	base.SeriesGroupID = hongguoRelationID(base.SeriesGroupID)
+	base.RelatedAlbumID = hongguoRelationID(base.RelatedAlbumID)
 	if base.VIP == nil && extra.VIP != nil {
 		value := *extra.VIP
 		base.VIP = &value
@@ -143,6 +145,14 @@ func mergeDramaMetadata(base, extra Drama) Drama {
 	}
 	if strings.TrimSpace(base.SourceID) == "" {
 		base.SourceID = extra.SourceID
+	}
+	if base.ID == extra.ID {
+		if base.SeriesGroupID == "" {
+			base.SeriesGroupID = hongguoRelationID(extra.SeriesGroupID)
+		}
+		if base.RelatedAlbumID == "" {
+			base.RelatedAlbumID = hongguoRelationID(extra.RelatedAlbumID)
+		}
 	}
 	if strings.TrimSpace(base.Title) == "" {
 		base.Title = extra.Title
