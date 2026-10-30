@@ -144,17 +144,24 @@ class _PlayerMenuState extends State<PlayerMenu> {
                         ),
                       ),
                       if (widget.onAllSeasons != null)
-                        IconButton(
-                          key: const ValueKey('menu-all-seasons'),
-                          tooltip: '查看全季',
-                          constraints: const BoxConstraints.tightFor(
-                            width: 32,
-                            height: 32,
+                        Tooltip(
+                          message: '查看全季',
+                          child: TextButton.icon(
+                            key: const ValueKey('menu-all-seasons'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: colors.onSurfaceVariant,
+                              minimumSize: const Size(0, 32),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                              ),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              textStyle: const TextStyle(fontSize: 12),
+                              iconSize: 17,
+                            ),
+                            onPressed: widget.onAllSeasons,
+                            icon: const Icon(Icons.video_library_outlined),
+                            label: const Text('查看全季', maxLines: 1),
                           ),
-                          padding: EdgeInsets.zero,
-                          iconSize: 17,
-                          onPressed: widget.onAllSeasons,
-                          icon: const Icon(Icons.video_library_outlined),
                         ),
                       IconButton(
                         tooltip: '关闭菜单',

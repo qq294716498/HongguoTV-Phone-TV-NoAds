@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   for (final size in [
+    const Size(640, 360),
     const Size(667, 375),
     const Size(844, 390),
     const Size(932, 430),
@@ -19,6 +20,7 @@ void main() {
           addTearDown(tester.view.resetPhysicalSize);
           addTearDown(tester.view.resetDevicePixelRatio);
           int? selected;
+          var allSeasonsOpened = 0;
           await tester.pumpWidget(
             MaterialApp(
               builder: (context, child) => MediaQuery(
@@ -42,7 +44,7 @@ void main() {
                   favorite: false,
                   mobile: true,
                   onEpisode: (index) => selected = index,
-                  onAllSeasons: () {},
+                  onAllSeasons: () => allSeasonsOpened++,
                   onPreferences: (_) async {},
                   onFavorite: () async {},
                 ),
@@ -56,6 +58,25 @@ void main() {
           expect(panel.width, lessThanOrEqualTo(320));
           expect(panel.width, lessThan(size.width * .4));
           expect(panel.right, lessThanOrEqualTo(size.width - 24));
+          final allSeasons = find.byKey(const ValueKey('menu-all-seasons'));
+          expect(
+            find.descendant(of: allSeasons, matching: find.text('查看全季')),
+            findsOneWidget,
+          );
+          expect(
+            find.descendant(
+              of: allSeasons,
+              matching: find.byIcon(Icons.video_library_outlined),
+            ),
+            findsOneWidget,
+          );
+          final allSeasonsRect = tester.getRect(allSeasons);
+          final closeRect = tester.getRect(find.byTooltip('关闭菜单'));
+          expect(allSeasonsRect.height, 32);
+          expect(allSeasonsRect.left, greaterThanOrEqualTo(panel.left));
+          expect(allSeasonsRect.right, lessThanOrEqualTo(closeRect.left));
+          await tester.tap(allSeasons);
+          expect(allSeasonsOpened, 1);
           final grid = find.byKey(const ValueKey('compact-episode-scroll'));
           final gridRect = tester.getRect(grid);
           expect(gridRect.height / panel.height, greaterThanOrEqualTo(.8));

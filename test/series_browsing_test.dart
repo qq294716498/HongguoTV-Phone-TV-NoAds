@@ -889,15 +889,25 @@ void main() {
     },
   );
 
-  for (final television in [false, true]) {
+  for (final (television, landscape) in [
+    (false, false),
+    (false, true),
+    (true, false),
+  ]) {
     testWidgets(
       television
           ? 'TV selection dialog opens all seasons and returns to playback'
+          : landscape
+          ? 'phone fullscreen selection menu opens all seasons and returns to playback'
           : 'phone portrait selection sheet opens all seasons and returns to playback',
       (tester) async {
         viewport(
           tester,
-          television ? const Size(1280, 720) : const Size(390, 844),
+          television
+              ? const Size(1280, 720)
+              : landscape
+              ? const Size(640, 360)
+              : const Size(390, 844),
         );
         debugDefaultTargetPlatformOverride = TargetPlatform.android;
         addTearDown(() => debugDefaultTargetPlatformOverride = null);
@@ -923,21 +933,47 @@ void main() {
         for (var index = 0; index < 16; index++) {
           await tester.pump(const Duration(milliseconds: 20));
         }
+        if (landscape) {
+          await tester.tap(find.byKey(const ValueKey('player-fullscreen')));
+          await tester.pumpAndSettle();
+          expect(
+            tester
+                .widget<PlayerControls>(find.byType(PlayerControls))
+                .fullscreen,
+            isTrue,
+          );
+        }
         await tester.tap(
           find.byKey(
-            ValueKey(television ? 'tv-episodes' : 'player-portrait-episodes'),
+            ValueKey(
+              television
+                  ? 'tv-episodes'
+                  : landscape
+                  ? 'player-episodes'
+                  : 'player-portrait-episodes',
+            ),
           ),
         );
         await tester.pumpAndSettle();
         await tester.tap(
           find.byKey(
-            ValueKey(television ? 'tv-all-seasons' : 'player-all-seasons'),
+            ValueKey(
+              television
+                  ? 'tv-all-seasons'
+                  : landscape
+                  ? 'menu-all-seasons'
+                  : 'player-all-seasons',
+            ),
           ),
         );
         await tester.pumpAndSettle();
         expect(find.byType(SeriesBrowserScreen), findsOneWidget);
         expect(find.byTooltip('收起面板'), findsNothing);
-        await tester.tap(find.byKey(ValueKey('all-season-${thirdSeason.id}')));
+        final season = find.byKey(ValueKey('all-season-${thirdSeason.id}'));
+        await tester.ensureVisible(season);
+        await tester.pumpAndSettle();
+        expect(season.hitTestable(), findsOneWidget);
+        await tester.tap(season);
         await tester.pumpAndSettle();
         await tester.tap(find.byKey(const ValueKey('all-season-episode-2')));
         for (var index = 0; index < 20; index++) {
