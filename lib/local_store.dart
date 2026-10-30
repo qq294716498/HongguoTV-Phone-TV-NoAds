@@ -641,9 +641,37 @@ class LocalStore extends ChangeNotifier {
       {'light', 'dark', 'system'}.contains(value)
       ? _setting('themeMode', value)
       : Future.value();
-  Future<void> setPlaybackPreferences(PlaybackPreferences value) {
+  Future<void> setPlaybackPreferences(
+    PlaybackPreferences value, {
+    bool preserveWindowsVideoCompatibility = false,
+  }) {
     PlaybackPreferences.fromJson(value.toJson());
-    return _setting(_key('playback'), jsonEncode(value.toJson()));
+    return _updatePlaybackPreferences(
+      (current) => preserveWindowsVideoCompatibility
+          ? value.copyWith(
+              windowsVideoCompatibility: current.windowsVideoCompatibility,
+            )
+          : value,
+    );
+  }
+
+  Future<void> setWindowsVideoCompatibility(bool value) =>
+      _updatePlaybackPreferences(
+        (current) => current.copyWith(windowsVideoCompatibility: value),
+      );
+
+  Future<void> _updatePlaybackPreferences(
+    PlaybackPreferences Function(PlaybackPreferences current) update,
+  ) {
+    final epoch = _epoch;
+    final key = _key('playback');
+    return _queue(() async {
+      if (locked || epoch != _epoch) throw StateError('当前用户已变更，请重试');
+      final next = update(playbackPreferences);
+      PlaybackPreferences.fromJson(next.toJson());
+      await _commit({key: jsonEncode(next.toJson())});
+      _notify();
+    });
   }
 
   Future<void> setDownloadPreferences(DownloadPreferences value) {

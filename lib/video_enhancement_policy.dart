@@ -19,6 +19,21 @@ enum VideoEnhancementBackend {
   final String label;
 }
 
+bool videoHardwareEnhancementEligible({
+  required bool windows,
+  required bool gpu,
+  required bool recentMpv,
+  required String vendor,
+  required String hwdec,
+  required String format,
+}) =>
+    windows &&
+    gpu &&
+    recentMpv &&
+    (vendor == 'nvidia' || vendor == 'intel') &&
+    hwdec == 'd3d11va' &&
+    (format == 'nv12' || format == 'yuv420p');
+
 class VideoEnhancementPower {
   const VideoEnhancementPower({
     this.batterySaver = false,

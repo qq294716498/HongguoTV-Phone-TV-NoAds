@@ -13,6 +13,8 @@ import 'app_layout.dart';
 import 'core_bridge.dart';
 import 'danmaku_emoji_assets.dart';
 import 'media_pipeline.dart';
+import 'local_store.dart';
+import 'video_controller_settings.dart';
 import 'video_enhancement_assets.dart';
 import 'windows_desktop.dart';
 import 'dart:async';
@@ -41,6 +43,9 @@ Future<void> runPackageSmoke(List<String> arguments) async {
     }
     await preferences.remove('windows_package_smoke');
     evidence['preferences'] = true;
+    final store = LocalStore(preferences);
+    final playbackPreferences = store.playbackPreferences;
+    store.dispose();
     await rootBundle.load('${DanmakuEmojiAssets.directory}2764-fe0f.png');
     await VideoEnhancementAssets.prepare(VideoEnhancementAssets.ravuRgb);
     evidence['bundledAssets'] = true;
@@ -78,14 +83,10 @@ Future<void> runPackageSmoke(List<String> arguments) async {
     player = Player(configuration: const PlayerConfiguration(muted: true));
     final video = VideoController(
       player,
-      configuration: VideoControllerConfiguration(
-        enableHardwareAcceleration:
-            !Platform.isMacOS || AppDevice.macHardwareVideoOutput,
-        hwdec: Platform.isWindows
-            ? 'd3d11va-copy'
-            : Platform.isMacOS && !AppDevice.macHardwareVideoOutput
-            ? 'videotoolbox-copy'
-            : null,
+      configuration: playbackVideoConfiguration(
+        operatingSystem: Platform.operatingSystem,
+        preferences: playbackPreferences,
+        macHardwareVideoOutput: AppDevice.macHardwareVideoOutput,
       ),
     );
     if (Platform.isMacOS)

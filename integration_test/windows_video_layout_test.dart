@@ -294,6 +294,8 @@ void main() {
         'landscape-1080': const Size(1920, 1080),
         'portrait-1080': const Size(1080, 1920),
         'unaligned-width': const Size(854, 480),
+        'compatibility-1080': const Size(1080, 1920),
+        'restored-auto-1080': const Size(1080, 1920),
       }.entries) {
         final path = '${directory.path}/${fixture.key}.mp4';
         await executor.run([
@@ -323,11 +325,17 @@ void main() {
           VideoEnhancementMode.economy,
         ]) {
           final store = LocalStore(preferences);
+          final compatibility = fixture.key == 'compatibility-1080';
+          final restored = fixture.key == 'restored-auto-1080';
+          if (restored) {
+            expect(store.playbackPreferences.windowsVideoCompatibility, false);
+          }
           await store.setPlaybackPreferences(
             store.playbackPreferences.copyWith(
               danmaku: false,
               autoAdvance: false,
               preload: false,
+              windowsVideoCompatibility: restored ? null : compatibility,
               enhancement: VideoEnhancementPreferences(mode: enhancement),
             ),
           );
@@ -375,7 +383,8 @@ void main() {
               .platform
               .future;
           final native = player.platform! as NativePlayer;
-          expect(await native.getProperty('hwdec'), 'd3d11va-copy');
+          final expectedDecoder = compatibility ? 'd3d11va-copy' : 'auto';
+          expect(await native.getProperty('hwdec'), expectedDecoder);
           if (requestedDecoder.isNotEmpty) {
             await native.setProperty('hwdec', requestedDecoder);
             expect(await native.getProperty('hwdec'), requestedDecoder);
@@ -387,6 +396,38 @@ void main() {
                 find.byType(Texture).evaluate().isNotEmpty,
             'video ready ${fixture.key}',
           );
+          final activeController = tester
+              .widget<Video>(find.byType(Video))
+              .controller;
+          final activeDecoder = await native.getProperty('hwdec');
+          final handle = await player.handle;
+          final position = player.state.position;
+          await store.setWindowsVideoCompatibility(!compatibility);
+          expect(
+            store.playbackPreferences.windowsVideoCompatibility,
+            !compatibility,
+          );
+          final restoredStore = LocalStore(preferences);
+          expect(
+            restoredStore.playbackPreferences.windowsVideoCompatibility,
+            !compatibility,
+          );
+          restoredStore.dispose();
+          await tester.pump(const Duration(milliseconds: 100));
+          expect(
+            tester.widget<Video>(find.byType(Video)).controller,
+            same(activeController),
+          );
+          expect(await player.handle, handle);
+          expect(await native.getProperty('hwdec'), activeDecoder);
+          expect(player.state.position, greaterThanOrEqualTo(position));
+          debugPrint(
+            '[WindowsVideoCompatibility] ${fixture.key} '
+            'initial=$expectedDecoder '
+            'saved=${store.playbackPreferences.windowsVideoCompatibility} '
+            'active=$activeDecoder controllerRetained=true',
+          );
+          if (restored) await store.setWindowsVideoCompatibility(false);
           final unaligned =
               fixture.key.contains('1080') || fixture.key == 'unaligned-width';
           for (final mode in [

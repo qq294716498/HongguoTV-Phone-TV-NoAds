@@ -22,6 +22,7 @@ class PlaybackPreferences {
     this.preload = true,
     this.tvTextureOutput = false,
     this.tvDecoderMode = TvDecoderMode.automatic,
+    this.windowsVideoCompatibility = false,
     this.enhancement = const VideoEnhancementPreferences(),
   });
 
@@ -36,6 +37,7 @@ class PlaybackPreferences {
   final bool preload;
   final bool tvTextureOutput;
   final TvDecoderMode tvDecoderMode;
+  final bool windowsVideoCompatibility;
   final VideoEnhancementPreferences enhancement;
 
   double effectiveDanmakuSpeed({required bool mobile}) =>
@@ -63,6 +65,7 @@ class PlaybackPreferences {
     bool? preload,
     bool? tvTextureOutput,
     TvDecoderMode? tvDecoderMode,
+    bool? windowsVideoCompatibility,
     VideoEnhancementPreferences? enhancement,
   }) => PlaybackPreferences(
     speed: speed ?? this.speed,
@@ -75,6 +78,8 @@ class PlaybackPreferences {
     preload: preload ?? this.preload,
     tvTextureOutput: tvTextureOutput ?? this.tvTextureOutput,
     tvDecoderMode: tvDecoderMode ?? this.tvDecoderMode,
+    windowsVideoCompatibility:
+        windowsVideoCompatibility ?? this.windowsVideoCompatibility,
     enhancement: enhancement ?? this.enhancement,
   );
 
@@ -89,6 +94,7 @@ class PlaybackPreferences {
     'preload': preload,
     'tvTextureOutput': tvTextureOutput,
     'tvDecoderMode': tvDecoderMode.name,
+    'windowsVideoCompatibility': windowsVideoCompatibility,
     'enhancement': enhancement.toJson(),
   };
 
@@ -116,6 +122,7 @@ class PlaybackPreferences {
       preload: preload,
       tvTextureOutput: value['tvTextureOutput'] as bool? ?? false,
       tvDecoderMode: TvDecoderMode.parse(value['tvDecoderMode']),
+      windowsVideoCompatibility: value['windowsVideoCompatibility'] == true,
       enhancement: VideoEnhancementPreferences.fromJson(value['enhancement']),
     );
   }

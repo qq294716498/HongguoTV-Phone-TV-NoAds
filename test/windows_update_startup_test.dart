@@ -138,4 +138,16 @@ void main() {
       expect(await File(p.join(transaction.path, 'ack.txt')).exists(), isFalse);
     },
   );
+  test(
+    'invalid playback handoff cannot acknowledge the new application',
+    () async {
+      await writePlan();
+      await File(
+        p.join(transaction.path, 'resume.json'),
+      ).writeAsString('broken');
+      await load();
+      await expectLater(WindowsUpdateRuntime.ready(), throwsFormatException);
+      expect(await File(p.join(transaction.path, 'ack.txt')).exists(), isFalse);
+    },
+  );
 }

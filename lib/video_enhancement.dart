@@ -455,13 +455,14 @@ class VideoEnhancementController extends ChangeNotifier {
         }
       }
     }
-    _hardware =
-        Platform.isWindows &&
-        _gpu &&
-        recentMpv &&
-        (_vendor == 'nvidia' || _vendor == 'intel') &&
-        hwdec == 'd3d11va' &&
-        (format == 'nv12' || format == 'yuv420p');
+    _hardware = videoHardwareEnhancementEligible(
+      windows: Platform.isWindows,
+      gpu: _gpu,
+      recentMpv: recentMpv,
+      vendor: _vendor,
+      hwdec: hwdec,
+      format: format,
+    );
   }
 
   void _onLog(PlayerLog log) {

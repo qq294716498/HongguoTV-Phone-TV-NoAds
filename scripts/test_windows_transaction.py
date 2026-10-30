@@ -93,7 +93,8 @@ def transaction(base, fixtures, mode, real=False):
     tx = support / 'windows-updates' / nonce
     tx.mkdir(parents=True)
     shutil.copyfile(fixtures / f'fixture-{old_build}.exe', install / 'HongguoTV.exe')
-    (tx / 'test-mode').write_text(mode, encoding='ascii')
+    if not real:
+        (tx / 'test-mode').write_text(mode, encoding='ascii')
     config = support / 'shared_preferences.json'
     original = '{"flutter.localSnapshot.v1":"preserved"}' if not real else '{"flutter.app_origin_notice_acknowledged_v1":true}'
     existing_config = config.read_bytes() if config.exists() else None
@@ -101,6 +102,9 @@ def transaction(base, fixtures, mode, real=False):
     shutil.copyfile(config, tx / 'preferences-backup.json')
     records(install, tx / 'old-files.tsv')
     records(stage, tx / 'new-files.tsv')
+    cached_package = support / 'windows-updates' / 'pending.zip'
+    if real:
+        shutil.copyfile(package, cached_package)
     helper = tx / 'HongguoTV-updater.exe'
     helper_source = root / 'build/windows/x64/runner/Release/HongguoTV-updater.exe' if real else fixtures / 'updater-faults.exe'
     shutil.copyfile(helper_source, helper)
@@ -117,8 +121,20 @@ def transaction(base, fixtures, mode, real=False):
         fields['version'] = '0.1.15'
     plan.write_text('\n'.join(f'{key}={value}' for key, value in fields.items()), encoding='utf-8')
     handle = None
+    cleanup_handle = None
+    restarted = None
+    child_pids = []
+    cleanup_result = None
     process = None
     try:
+        if real:
+            kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+            kernel.CreateFileW.restype = ctypes.c_void_p
+            kernel.CreateFileW.argtypes = [ctypes.c_wchar_p, ctypes.c_ulong, ctypes.c_ulong,
+                                          ctypes.c_void_p, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_void_p]
+            cleanup_handle = kernel.CreateFileW(str(tx / 'old-files.tsv'), 0x80000000, 1, None, 3, 0, None)
+            if cleanup_handle in [None, ctypes.c_void_p(-1).value]:
+                raise RuntimeError('Cannot create cleanup retry fixture')
         if mode == 'tamper':
             with (stage / 'HongguoTV.exe').open('ab') as stream:
                 stream.write(b'tamper')
@@ -173,6 +189,8 @@ def transaction(base, fixtures, mode, real=False):
                     (tx / 'commit.txt').write_text(nonce, encoding='ascii')
                 (tx / 'stop-old').touch()
                 parent.wait(timeout=10)
+                if real:
+                    (tx / 'stop-old').unlink(missing_ok=True)
                 if mode == 'cross-directory-client':
                     other_install = base / 'other-installation'
                     other_install.mkdir()
@@ -184,11 +202,47 @@ def transaction(base, fixtures, mode, real=False):
         status = (tx / 'status.txt').read_text(encoding='utf-8')
         if mode == 'success':
             assert code == 0 and status.startswith('complete'), status
-            assert backup.is_dir() and install.is_dir()
+            assert install.is_dir()
             assert config.exists()
             if not real:
+                assert backup.is_dir()
                 wait_for(lambda: (tx / 'child-39').exists())
                 assert config.read_text(encoding='utf-8') == original
+            else:
+                pid_file = tx / 'started-pids.txt'
+                assert pid_file.exists(), 'Native helper did not record the started client'
+                child_pids = pid_file.read_text().splitlines()
+                phase_file = tx / f'startup-{build}.json'
+                if phase_file.exists():
+                    phase = json.loads(phase_file.read_text(encoding='utf-8'))
+                    assert phase['phase'] == 'acknowledged' and phase['nonce'] == nonce, phase
+                receipt = tx / 'cleanup-receipt.json'
+                wait_for(lambda: receipt.exists() and json.loads(receipt.read_text(encoding='utf-8'))['phase'] == 'finalizing', seconds=40)
+                assert not backup.exists() and not stage.exists() and not cached_package.exists()
+                assert not (tx / 'HongguoTV-updater.exe').exists()
+                assert not plan.exists() and (tx / 'old-files.tsv').exists()
+                kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+                kernel.CloseHandle(cleanup_handle)
+                cleanup_handle = None
+                for child_pid in child_pids:
+                    subprocess.run(['taskkill', '/F', '/PID', child_pid], check=True, capture_output=True)
+                restarted = subprocess.Popen([str(install / 'HongguoTV.exe')], env=environment, cwd=install)
+                def cleanup_finished():
+                    try:
+                        result = json.loads((support / 'windows-update-cleanup.json').read_text(encoding='utf-8'))
+                        return not tx.exists() and result.get('complete') is True and result.get('nonce') == nonce
+                    except (OSError, ValueError):
+                        return False
+                wait_for(cleanup_finished, seconds=40)
+                cleanup = json.loads((support / 'windows-update-cleanup.json').read_text(encoding='utf-8'))
+                assert cleanup['complete'] is True and cleanup['nonce'] == nonce, cleanup
+                assert not backup.exists() and not stage.exists() and not cached_package.exists()
+                cleanup_result = {'case': 'real-client-cleanup-retry', 'ok': True,
+                                  'build': build, 'oldBuild': old_build, 'cleanupVerified': True,
+                                  'backupRemoved': True, 'downloadRemoved': True,
+                                  'transactionRemoved': True, 'retryAfterRestart': True,
+                                  'installationDirectoryPreserved': str(install),
+                                  'configurationPreserved': True}
         elif mode == 'stop-unconfirmed':
             assert code == 1 and 'exit unconfirmed; rollback withheld' in status, status
             assert backup.is_dir() and install.is_dir() and not stage.exists()
@@ -227,14 +281,12 @@ def transaction(base, fixtures, mode, real=False):
             if mode == 'unowned':
                 assert (install / 'personal-file.txt').read_text() == 'preserve this file'
         if real:
-            phase_file = tx / f'startup-{build}.json'
-            phase = json.loads(phase_file.read_text(encoding='utf-8'))
-            assert phase['phase'] == 'acknowledged' and phase['nonce'] == nonce, phase
             assert json.loads(config.read_text(encoding='utf-8'))['flutter.app_origin_notice_acknowledged_v1'] is True
         return {'case': 'real-client-startup-ack' if real else mode, 'ok': True, 'status': status,
                 'configurationPreserved': mode != 'stop-unconfirmed',
-                'configurationBackupPreserved': True, 'architecture': 'x64',
-                'build': build, 'oldBuild': old_build, 'startupAcknowledged': real}
+                'configurationBackupPreserved': not real, 'architecture': 'x64',
+                'build': build, 'oldBuild': old_build, 'startupAcknowledged': real,
+                **({'cleanup': cleanup_result} if real else {})}
     except BaseException:
         if real:
             diagnostic = {'case': 'real-client-startup-ack', 'ok': False,
@@ -247,9 +299,10 @@ def transaction(base, fixtures, mode, real=False):
             print(json.dumps(diagnostic, ensure_ascii=True), flush=True)
         raise
     finally:
-        (tx / 'stop-old').touch()
-        (tx / 'stop-new').touch()
-        (tx / 'stop-other-client').touch()
+        if not real and tx.exists():
+            (tx / 'stop-old').touch()
+            (tx / 'stop-new').touch()
+            (tx / 'stop-other-client').touch()
         if parent.poll() is None:
             parent.terminate()
             parent.wait(timeout=5)
@@ -263,11 +316,19 @@ def transaction(base, fixtures, mode, real=False):
         if handle:
             kernel.CloseHandle.argtypes = [ctypes.c_void_p]
             kernel.CloseHandle(handle)
+        if cleanup_handle:
+            kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+            kernel.CloseHandle(cleanup_handle)
+        if restarted and restarted.poll() is None:
+            restarted.terminate()
+            restarted.wait(timeout=10)
         if real or mode == 'stop-unconfirmed':
             pid_file = tx / 'started-pids.txt'
             if pid_file.exists():
                 for child_pid in pid_file.read_text().splitlines():
                     subprocess.run(['taskkill', '/F', '/PID', child_pid], capture_output=True)
+            for child_pid in child_pids:
+                subprocess.run(['taskkill', '/F', '/PID', child_pid], capture_output=True)
         if real:
             if existing_config is not None:
                 config.write_bytes(existing_config)
@@ -292,6 +353,8 @@ def main():
             print(json.dumps(results[-1]))
         if not args.synthetic_only:
             results.append(transaction(base / 'real', base, 'success', real=True))
+            print(json.dumps(results[-1]))
+            results.append(results[-1].pop('cleanup'))
             print(json.dumps(results[-1]))
     report = root / 'dist/windows/Windows-update-transaction.json'
     identity = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(encoding='utf-8'), re.M).group(1).split('+')

@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_build.dart';
 import 'windows_update_runtime.dart';
+import 'windows_update_cleanup.dart';
 import 'app_layout.dart' show appVersion, windowsBuildNumber;
 
 const updateRepository = 'qq294716498/HongguoTV-Phone-TV-NoAds';
@@ -774,6 +775,7 @@ class AppUpdates extends ChangeNotifier {
     downloaded = 0;
     message = '正在确认当前版本…';
     _notify();
+    RandomAccessFile? cacheLock;
     try {
       if (!await _candidateStillNewer(candidate)) return;
       if (_cancelled || _disposed) throw const UpdateCancelled();
@@ -782,6 +784,7 @@ class AppUpdates extends ChangeNotifier {
       var notifiedAt = -200;
       final directory = Directory(await platform.directory());
       await directory.create(recursive: true);
+      if (windows) cacheLock = await lockWindowsUpdateCache(directory);
       _file = File('${directory.path}/$_pendingName');
       _partial = File('${directory.path}/$_pendingName.part');
       await _removeFile();
@@ -805,13 +808,18 @@ class AppUpdates extends ChangeNotifier {
       if (_cancelled || _disposed) throw const UpdateCancelled();
       stage = UpdateStage.ready;
       message = windows
-          ? '下载校验通过。暂停播放后点击安装并重启，将自动验证、替换并保留旧版。'
+          ? '下载校验通过。暂停播放后点击安装并重启，启动确认成功后清理本次缓存和旧版备份。'
           : '安装包验证通过。点击安装后由 Android 确认';
     } catch (error) {
-      await _removeFile();
+      if (!windows || cacheLock != null) await _removeFile();
       if (_disposed) return;
       stage = _cancelled ? UpdateStage.available : UpdateStage.failed;
       message = _cancelled ? '已取消下载，可重新下载' : '下载或验证失败：${_error(error)}';
+    } finally {
+      if (cacheLock != null) {
+        await cacheLock.unlock();
+        await cacheLock.close();
+      }
     }
     _notify();
   }

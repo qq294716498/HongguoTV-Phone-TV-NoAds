@@ -43,6 +43,7 @@ import 'lan_controller.dart';
 import 'lan_screen.dart';
 import 'video_enhancement.dart';
 import 'video_output_size.dart';
+import 'video_controller_settings.dart';
 import 'windows_update_runtime.dart';
 import 'windows_desktop.dart';
 import 'windows_drama_description.dart';
@@ -220,6 +221,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     reminders: widget.store.playbackPreferences.reminders,
     tvTextureOutput: widget.store.playbackPreferences.tvTextureOutput,
     tvDecoderMode: widget.store.playbackPreferences.tvDecoderMode,
+    windowsVideoCompatibility:
+        widget.store.playbackPreferences.windowsVideoCompatibility,
     enhancement: _enhancement.preferences,
   );
   String get _qualityLabel => _plan?.local == true
@@ -324,15 +327,10 @@ class _PlayerScreenState extends State<PlayerScreen>
     _video = widget.videoBuilder == null && !Platform.isAndroid
         ? VideoController(
             _player,
-            configuration: VideoControllerConfiguration(
-              enableHardwareAcceleration:
-                  !Platform.isIOS &&
-                  (!Platform.isMacOS || AppDevice.macHardwareVideoOutput),
-              hwdec: Platform.isWindows
-                  ? 'd3d11va-copy'
-                  : Platform.isMacOS && !AppDevice.macHardwareVideoOutput
-                  ? 'videotoolbox-copy'
-                  : null,
+            configuration: playbackVideoConfiguration(
+              operatingSystem: Platform.operatingSystem,
+              preferences: preferences,
+              macHardwareVideoOutput: AppDevice.macHardwareVideoOutput,
             ),
           )
         : null;
@@ -2326,7 +2324,10 @@ class _PlayerScreenState extends State<PlayerScreen>
                     _preferences.tvTextureOutput) ||
             (_televisionDevice &&
                 nextPreferences.tvDecoderMode != _preferences.tvDecoderMode));
-    await widget.store.setPlaybackPreferences(nextPreferences);
+    await widget.store.setPlaybackPreferences(
+      nextPreferences,
+      preserveWindowsVideoCompatibility: true,
+    );
     if (!mounted || _closed || widget.store.profileEpoch != _profileEpoch)
       return;
     final qualityChanged = nextPreferences.quality != _requestedQuality;

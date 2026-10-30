@@ -12,6 +12,7 @@ import 'package:window_manager/window_manager.dart';
 import 'app_layout.dart' show appVersion, windowsBuildNumber;
 import 'windows_update_package.dart';
 import 'windows_desktop.dart';
+import 'windows_update_cleanup.dart';
 
 class WindowsUpdateHelper {
   WindowsUpdateHelper({
@@ -126,17 +127,89 @@ class WindowsUpdateRuntime {
   static bool restarting = false;
   static Directory? startupTransaction;
   static String? startupFailure;
+  static Timer? _cleanupTimer;
+  static bool _cleanupRunning = false;
 
   static Future<void> initialize(List<String> arguments) async {
-    if (!Platform.isWindows ||
-        arguments.firstOrNull != '--windows-update-start')
-      return;
+    if (!Platform.isWindows) return;
     final support = await getApplicationSupportDirectory();
-    await loadStartup(
-      arguments,
-      support: support,
-      executable: Platform.resolvedExecutable,
-    );
+    if (arguments.firstOrNull == '--windows-update-start') {
+      await loadStartup(
+        arguments,
+        support: support,
+        executable: Platform.resolvedExecutable,
+      );
+    } else {
+      _scheduleCleanup(support.path, Platform.resolvedExecutable);
+    }
+  }
+
+  static void _scheduleCleanup(
+    String support,
+    String executable, {
+    String? authorize,
+    int attempt = 0,
+  }) {
+    _cleanupTimer?.cancel();
+    _cleanupTimer = Timer(Duration(seconds: attempt == 0 ? 2 : 5), () async {
+      if (_cleanupRunning) return;
+      _cleanupRunning = true;
+      var pending = false;
+      try {
+        pending = await Isolate.run(() async {
+          final worker = WindowsUpdateCleanup(
+            support: Directory(support),
+            executable: executable,
+            build: windowsBuildNumber,
+          );
+          var retry = false;
+          if (authorize != null && await Directory(authorize).exists()) {
+            try {
+              await worker.authorize(Directory(authorize));
+            } catch (_) {
+              final status = File(p.join(authorize, 'status.txt'));
+              retry =
+                  !await status.exists() ||
+                  !(await status.readAsString()).startsWith('failed:');
+            }
+          }
+          final updates = Directory(p.join(support, 'windows-updates'));
+          if (await FileSystemEntity.type(updates.path, followLinks: false) !=
+              FileSystemEntityType.directory) {
+            return retry;
+          }
+          var count = 0;
+          await for (final entry in updates.list(followLinks: false)) {
+            if (entry is! Directory ||
+                !RegExp(r'^[a-f0-9]{32}$').hasMatch(p.basename(entry.path)) ||
+                !await File(
+                  p.join(entry.path, WindowsUpdateCleanup.receiptName),
+                ).exists()) {
+              continue;
+            }
+            if (++count > 32) return true;
+            if (!await worker.retry(entry)) retry = true;
+          }
+          return retry;
+        });
+        final startup = startupTransaction;
+        if (startup != null && !await startup.exists()) {
+          startupTransaction = null;
+        }
+      } catch (_) {
+        pending = true;
+      } finally {
+        _cleanupRunning = false;
+      }
+      if (pending && attempt < 12) {
+        _scheduleCleanup(
+          support,
+          executable,
+          authorize: authorize,
+          attempt: attempt + 1,
+        );
+      }
+    });
   }
 
   static Future<void> loadStartup(
@@ -209,19 +282,29 @@ class WindowsUpdateRuntime {
         startupFailure = '$status\n更新诊断与恢复记录：${transaction.path}';
       }
     }
+    final delivered = File(
+      p.join(transaction.path, 'resume-$windowsBuildNumber.txt'),
+    );
+    final resume = File(p.join(transaction.path, 'resume.json'));
+    Map<String, dynamic>? result;
+    if (!await delivered.exists() && await resume.exists()) {
+      result = jsonDecode(await resume.readAsString()) as Map<String, dynamic>;
+      await delivered.writeAsString('consumed', flush: true);
+    }
     if (fields['build'] == '$windowsBuildNumber') {
       await File(
         p.join(transaction.path, 'ack.txt'),
       ).writeAsString(fields['nonce']!, flush: true);
       await startupPhase('acknowledged');
+      if (Platform.isWindows) {
+        _scheduleCleanup(
+          transaction.parent.parent.path,
+          Platform.resolvedExecutable,
+          authorize: transaction.path,
+        );
+      }
     }
-    final delivered = File(
-      p.join(transaction.path, 'resume-$windowsBuildNumber.txt'),
-    );
-    final resume = File(p.join(transaction.path, 'resume.json'));
-    if (await delivered.exists() || !await resume.exists()) return null;
-    await delivered.writeAsString('consumed', flush: true);
-    return jsonDecode(await resume.readAsString()) as Map<String, dynamic>;
+    return result;
   }
 
   static Future<String> install({
@@ -309,6 +392,16 @@ class WindowsUpdateRuntime {
         'oldVersion': appVersion.split('-').first,
         'config': config.path,
       };
+      final package = File(zipPath);
+      if (p.equals(
+        package.path,
+        p.join(support.path, 'windows-updates', 'pending.zip'),
+      )) {
+        fields['package'] = package.path;
+        fields['packageBytes'] = '${await package.length()}';
+        fields['packageSha256'] = (await sha256.bind(package.openRead()).first)
+            .toString();
+      }
       if (fields.values.any(
         (value) => value.contains('\n') || value.contains('\r'),
       )) {

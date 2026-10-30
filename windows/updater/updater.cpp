@@ -230,7 +230,7 @@ PROCESS_INFORMATION Start(const fs::path& root, const fs::path& plan) {
   startup.cb = sizeof(startup);
   SECURITY_ATTRIBUTES attributes{sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE};
   const auto output = CreateFileW((plan.parent_path() / L"startup-processes.log").c_str(), FILE_APPEND_DATA,
-      FILE_SHARE_READ | FILE_SHARE_WRITE, &attributes, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+      FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, &attributes, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
   const DWORD outputError = output == INVALID_HANDLE_VALUE ? GetLastError() : ERROR_SUCCESS;
   const auto input = CreateFileW(L"NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
       &attributes, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
@@ -449,7 +449,7 @@ int wmain(int argc, wchar_t** argv) {
     Log("startup-accepted", {{"childPid", std::to_string(child.dwProcessId)}});
     CloseHandle(child.hProcess); child.hProcess = nullptr;
     Phase("complete");
-    Write(transaction / L"status.txt", "complete; previous application retained in backup directory");
+    Write(transaction / L"status.txt", "complete; startup accepted; cleanup delegated to new application");
     CloseHandle(lock);
     return 0;
   } catch (const std::exception& error) {

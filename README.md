@@ -2,7 +2,15 @@
 
 基于 [guoapp](https://github.com/zhoufuweigg/guoapp) 的非官方独立客户端。手机与 Android TV 共用 Android 应用，另提供 Windows x64 与 macOS 通用客户端；支持浏览、搜索、播放、弹幕、追剧和下载。
 
-## 0.1.37+62（Windows 绿边兼容候选，仅本地，未发布）
+## 0.1.38+63（发布候选，验证中）
+
+- Android 手机／TV 保留 #18 遥控长按定位修复与手机全屏“查看全季”图标加文字，原短按导航及选集行为保持。
+- Windows 默认恢复 `auto`。在“设置与备份 → 视频兼容模式”中可选择 `d3d11va-copy`，旧配置默认关闭，选择按用户保存；重新打开播放页后生效，当前播放、进度和控制器保持，切集不临时切换模式。旧菜单回调与并发保存不会覆盖该选择。兼容模式可能增加开销，并使硬件 VSR 后端不再符合资格；增强资格以实际解码器为准，待生效的选择不提前改变当前增强。
+- Windows 升级保持当前 EXE 所在目录。新客户端消费恢复信息并确认启动、更新器交接成功后，在后台只清理该事务清单绑定的下载包、暂存、助手残留及旧版本备份。失败保留回滚；锁定残留按原子事务记录延迟及下次启动续清，不删除后续下载、配置、历史或无归属内容。实际备份名是 `.hongguo-backup-<nonce>`，不会按 `.back` 后缀猜测、删除用户现有目录。
+
+本轮 Linux Flutter 默认全量 799 项通过、8 项跳过，全站源 800 项通过、7 项跳过；包含兼容模式保存／迁移与并发、播放流程、增强资格和清理隔离回归。228 个 Dart 文件格式通过，静态检查无错误或警告、178 条风格 info；Python 90 项运行、19 项按环境跳过。三项 Windows 文件锁测试、真实原生升级续清与签名、公开更新入口仍以本轮 CI 及发布验证报告为准，不能把 Linux 回归当作 Windows 或 Intel 实机验收。尚无报告者 Intel 设备的绿边与长期流畅度验收，不保证兼容模式能解决所有设备问题。下方 0.1.37 的全局 copy 候选从未发布，已由本版默认自动、用户可选的方案替代。
+
+## 0.1.37+62（历史本地候选，未发布，已被 0.1.38 替代）
 
 [#16 的补充信息](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/issues/16#issuecomment-6517084993)为“Intel 九代核显、默认画质”。同一报告者此前在 [Xanerix/guoapp #2](https://github.com/Xanerix/guoapp/issues/2#issuecomment-6121315789) 报告过绿边，该项目 [6f5f670](https://github.com/Xanerix/guoapp/commit/6f5f67036d55187eeb434b87cbd8099c8c386df7) 与 0.2.72 发布记录采用 `d3d11va-copy`；修复时的 media_kit 版本和 [libmpv／ANGLE 固定归档及 SHA-256](https://github.com/Xanerix/guoapp/blob/6f5f67036d55187eeb434b87cbd8099c8c386df7/packages/media_kit_libs_windows_video/windows/CMakeLists.txt#L67-L81) 均与本项目一致。此关联支持兼容候选，不等同确认当前报告设备的驱动缺陷。
 

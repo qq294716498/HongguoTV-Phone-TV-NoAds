@@ -47,7 +47,21 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _busy = false;
+  bool _windowsVideoCompatibilitySaving = false;
   String? _message;
+
+  Future<void> _setWindowsVideoCompatibility(bool value) async {
+    if (_busy || _windowsVideoCompatibilitySaving) return;
+    setState(() => _windowsVideoCompatibilitySaving = true);
+    try {
+      await saveUserChange(
+        context,
+        () => widget.store.setWindowsVideoCompatibility(value),
+      );
+    } finally {
+      if (mounted) setState(() => _windowsVideoCompatibilitySaving = false);
+    }
+  }
 
   Future<void> _danmakuSettings() {
     final television = AppLayout.isTelevision(context);
@@ -76,7 +90,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             showDanmaku: true,
             onEpisode: (_) {},
             onFavorite: () async {},
-            onPreferences: widget.store.setPlaybackPreferences,
+            onPreferences: (value) => widget.store.setPlaybackPreferences(
+              value,
+              preserveWindowsVideoCompatibility: true,
+            ),
           ),
         ),
       ),
@@ -210,6 +227,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
             padding: const EdgeInsets.all(16),
             children: [
               const AppUpdateTile(),
+              if (defaultTargetPlatform == TargetPlatform.windows &&
+                  !AppLayout.isTelevision(context))
+                SwitchListTile(
+                  key: const ValueKey('windows-video-compatibility'),
+                  title: const Text('视频兼容模式'),
+                  subtitle: const Text(
+                    '用于缓解部分设备的视频绿边。可能增加性能开销，并影响硬件 VSR 增强。重新打开播放页后生效，当前播放不受影响。',
+                  ),
+                  value: widget
+                      .store
+                      .playbackPreferences
+                      .windowsVideoCompatibility,
+                  onChanged: _busy || _windowsVideoCompatibilitySaving
+                      ? null
+                      : _setWindowsVideoCompatibility,
+                ),
               if (defaultTargetPlatform == TargetPlatform.android &&
                   AppLayout.isTelevisionDevice(context))
                 ListTile(
