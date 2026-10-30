@@ -65,7 +65,8 @@ class TelevisionControls extends StatefulWidget {
   State<TelevisionControls> createState() => TelevisionControlsState();
 }
 
-class TelevisionControlsState extends State<TelevisionControls> {
+class TelevisionControlsState extends State<TelevisionControls>
+    with WidgetsBindingObserver {
   final _surface = FocusNode(debugLabel: 'tv-player-surface');
   final _play = FocusNode(debugLabel: 'tv-player-play');
   final _episodes = FocusNode(debugLabel: 'tv-player-episodes');
@@ -92,6 +93,7 @@ class TelevisionControlsState extends State<TelevisionControls> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _visible = widget.showOnPlaybackReady;
     _reportVisibility();
     for (final stream in [
@@ -112,7 +114,9 @@ class TelevisionControlsState extends State<TelevisionControls> {
     );
     _subscriptions.add(
       widget.player.stream.playing.listen((playing) {
-        if (!mounted || !widget.enabled || _panelOpen) return;
+        if (!mounted || !widget.enabled || _panelOpen || _heldKey != null) {
+          return;
+        }
         if (widget.quietEpisodeChange?.call() ?? false) {
           _visible = false;
           _reportVisibility();
@@ -140,10 +144,7 @@ class TelevisionControlsState extends State<TelevisionControls> {
   void didUpdateWidget(covariant TelevisionControls oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.title != oldWidget.title || !widget.enabled) {
-      _commitTimer?.cancel();
-      _seekTimer?.cancel();
-      _pendingSeek = _seekDisplay = null;
-      _heldKey = null;
+      _cancelSeek();
     }
     if (widget.enabled && !oldWidget.enabled) {
       if (widget.showOnPlaybackReady) {
@@ -156,6 +157,22 @@ class TelevisionControlsState extends State<TelevisionControls> {
       _hideTimer?.cancel();
     }
     _reportVisibility();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!mounted || state == AppLifecycleState.resumed) return;
+    _hideTimer?.cancel();
+    setState(_cancelSeek);
+    _reportVisibility();
+  }
+
+  void _cancelSeek() {
+    _commitTimer?.cancel();
+    _seekTimer?.cancel();
+    _pendingSeek = _seekDisplay = null;
+    _heldKey = null;
+    _repeatCount = 0;
   }
 
   void _focus(FocusNode node) {
@@ -254,18 +271,16 @@ class TelevisionControlsState extends State<TelevisionControls> {
     _reportVisibility();
     _hideTimer?.cancel();
     _commitTimer?.cancel();
-    _commitTimer = Timer(const Duration(milliseconds: 240), _commitSeek);
     _seekTimer?.cancel();
-    _seekTimer = Timer(const Duration(seconds: 2), () {
-      if (mounted) {
-        setState(() => _seekDisplay = null);
-        _reportVisibility();
-      }
-    });
+    if (_heldKey == null) {
+      _commitTimer = Timer(const Duration(milliseconds: 240), _commitSeek);
+    }
   }
 
   void _commitSeek() {
     _commitTimer?.cancel();
+    _heldKey = null;
+    _repeatCount = 0;
     final target = _pendingSeek;
     _pendingSeek = null;
     if (target == null || !widget.enabled) return;
@@ -276,6 +291,13 @@ class TelevisionControlsState extends State<TelevisionControls> {
         ((target - widget.player.state.position.inMilliseconds) / 1000).round(),
       );
     }
+    _seekTimer?.cancel();
+    _seekTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) {
+        setState(() => _seekDisplay = null);
+        _reportVisibility();
+      }
+    });
     _scheduleHide();
   }
 
@@ -334,7 +356,7 @@ class TelevisionControlsState extends State<TelevisionControls> {
       if (event is KeyDownEvent) widget.onPrevious?.call();
     } else if (key == LogicalKeyboardKey.contextMenu) {
       if (event is KeyDownEvent) unawaited(_openPanel(widget.onEpisodes));
-    } else if (((!_visible) &&
+    } else if (((!_visible || key == _heldKey) &&
             (key == LogicalKeyboardKey.arrowLeft ||
                 key == LogicalKeyboardKey.arrowRight)) ||
         key == LogicalKeyboardKey.mediaRewind ||
@@ -342,6 +364,8 @@ class TelevisionControlsState extends State<TelevisionControls> {
       if (event is KeyDownEvent) {
         _heldKey = key;
         _repeatCount = 0;
+      } else if (key != _heldKey) {
+        return KeyEventResult.handled;
       }
       if (event is KeyRepeatEvent) _repeatCount++;
       final direction =
@@ -370,6 +394,7 @@ class TelevisionControlsState extends State<TelevisionControls> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _hideTimer?.cancel();
     _seekTimer?.cancel();
     _commitTimer?.cancel();
@@ -470,6 +495,12 @@ class TelevisionControlsState extends State<TelevisionControls> {
       child: Focus(
         focusNode: _surface,
         onKeyEvent: _key,
+        onFocusChange: (focused) {
+          if (!focused && mounted && _heldKey != null) {
+            setState(_cancelSeek);
+            _reportVisibility();
+          }
+        },
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: widget.enabled ? _show : null,
