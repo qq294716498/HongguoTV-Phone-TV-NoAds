@@ -141,6 +141,18 @@ class CleanupFixture {
       newFiles['HongguoTV.exe'],
     );
   }
+
+  Future<bool> retry({WindowsUpdateCleanup? cleanup}) async {
+    final result = await (cleanup ?? worker).retry(transaction);
+    final report = File(p.join(support.path, 'windows-update-cleanup.json'));
+    stdout.writeln('Windows cleanup retry result=$result');
+    if (await report.exists()) {
+      stdout.writeln(await report.readAsString());
+    } else {
+      stdout.writeln('Windows cleanup report does not exist');
+    }
+    return result;
+  }
 }
 
 void main() {
@@ -163,7 +175,7 @@ void main() {
         await personal.parent.create();
         await personal.writeAsString('keep');
         expect(await fixture.worker.authorize(fixture.transaction), isTrue);
-        expect(await fixture.worker.retry(fixture.transaction), isTrue);
+        expect(await fixture.retry(), isTrue);
         expect(await fixture.backup.exists(), isFalse);
         expect(await fixture.package.exists(), isFalse);
         expect(await fixture.transaction.exists(), isFalse);
@@ -207,14 +219,14 @@ void main() {
     await fixture.worker.authorize(fixture.transaction);
     final personal = File(p.join(fixture.backup.path, 'personal.txt'));
     await personal.writeAsString('keep');
-    expect(await fixture.worker.retry(fixture.transaction), isFalse);
+    expect(await fixture.retry(), isFalse);
     expect(await personal.readAsString(), 'keep');
     expect(await fixture.package.exists(), isTrue);
     await personal.delete();
     await File(
       p.join(fixture.backup.path, 'HongguoTV.exe'),
     ).writeAsString('changed');
-    expect(await fixture.worker.retry(fixture.transaction), isFalse);
+    expect(await fixture.retry(), isFalse);
     expect(
       await File(p.join(fixture.backup.path, 'HongguoTV.exe')).readAsString(),
       'changed',
@@ -230,7 +242,7 @@ void main() {
       await fixture.package.writeAsString('next version package');
       final partial = File('${fixture.package.path}.part');
       await partial.writeAsString('next download');
-      expect(await fixture.worker.retry(fixture.transaction), isTrue);
+      expect(await fixture.retry(), isTrue);
       expect(await fixture.package.readAsString(), 'next version package');
       expect(await partial.readAsString(), 'next download');
       await fixture.expectUserData();
@@ -244,7 +256,7 @@ void main() {
       await fixture.worker.authorize(fixture.transaction);
       final plan = File(p.join(fixture.transaction.path, 'plan.txt'));
       await plan.writeAsString('${await plan.readAsString()}\nextra=changed');
-      expect(await fixture.worker.retry(fixture.transaction), isFalse);
+      expect(await fixture.retry(), isFalse);
       expect(await fixture.backup.exists(), isTrue);
       final outside = Directory(p.join(temporary.path, CleanupFixture.nonce));
       await outside.create();
@@ -267,7 +279,7 @@ void main() {
       executable: p.join(fixture.root.path, 'HongguoTV.exe'),
       build: 63,
     );
-    expect(await later.retry(fixture.transaction), isTrue);
+    expect(await fixture.retry(cleanup: later), isTrue);
     expect(
       await File(p.join(fixture.root.path, 'HongguoTV.exe')).readAsString(),
       'later application',
@@ -292,7 +304,7 @@ void main() {
       markTestSkipped('当前环境不能创建符号链接：$error');
       return;
     }
-    expect(await fixture.worker.retry(fixture.transaction), isFalse);
+    expect(await fixture.retry(), isFalse);
     expect(await personal.readAsString(), 'keep');
   });
 
@@ -301,10 +313,10 @@ void main() {
     await fixture.worker.authorize(fixture.transaction);
     final personal = File(p.join(fixture.transaction.path, 'personal.txt'));
     await personal.writeAsString('keep');
-    expect(await fixture.worker.retry(fixture.transaction), isFalse);
+    expect(await fixture.retry(), isFalse);
     expect(await personal.readAsString(), 'keep');
     await personal.delete();
-    expect(await fixture.worker.retry(fixture.transaction), isTrue);
+    expect(await fixture.retry(), isTrue);
   });
 
   test(
@@ -326,7 +338,7 @@ void main() {
       calloc.free(path);
       expect(handle.address, isNot(-1));
       try {
-        expect(await fixture.worker.retry(fixture.transaction), isFalse);
+        expect(await fixture.retry(), isFalse);
         expect(await fixture.backup.exists(), isFalse);
         final receipt =
             jsonDecode(
@@ -346,7 +358,7 @@ void main() {
       } finally {
         close(handle);
       }
-      expect(await fixture.worker.retry(fixture.transaction), isTrue);
+      expect(await fixture.retry(), isTrue);
       expect(await fixture.transaction.exists(), isFalse);
       await fixture.expectUserData();
     },
@@ -360,13 +372,13 @@ void main() {
       await fixture.worker.authorize(fixture.transaction);
       final lease = await lockWindowsUpdateCache(fixture.transaction.parent);
       try {
-        expect(await fixture.worker.retry(fixture.transaction), isFalse);
+        expect(await fixture.retry(), isFalse);
         expect(await fixture.package.exists(), isTrue);
       } finally {
         await lease.unlock();
         await lease.close();
       }
-      expect(await fixture.worker.retry(fixture.transaction), isTrue);
+      expect(await fixture.retry(), isTrue);
     },
     skip: !Platform.isWindows,
   );
@@ -396,7 +408,7 @@ void main() {
       calloc.free(path);
       expect(handle.address, isNot(-1));
       try {
-        expect(await fixture.worker.retry(fixture.transaction), isFalse);
+        expect(await fixture.retry(), isFalse);
         expect(
           await File(
             p.join(fixture.transaction.path, WindowsUpdateCleanup.receiptName),
@@ -406,7 +418,7 @@ void main() {
       } finally {
         close(handle);
       }
-      expect(await fixture.worker.retry(fixture.transaction), isTrue);
+      expect(await fixture.retry(), isTrue);
       expect(await fixture.transaction.exists(), isFalse);
     },
     skip: !Platform.isWindows,

@@ -1,0 +1,26 @@
+name: Windows cleanup filesystem diagnostics
+
+on:
+  push:
+    branches: [verify/windows-cleanup-fs-0.1.38-63]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  filesystem:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - name: Verify isolated filesystem behavior with error reports
+        run: flutter test --no-pub test/windows_update_cleanup_test.dart test/windows_update_startup_test.dart --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true --reporter=expanded
