@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -21,17 +22,22 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../test/fixtures.dart';
+import 'windows_video_pixels.dart';
 
 class LayoutRepository extends FixtureRepository {
-  LayoutRepository(this.path);
+  LayoutRepository(this.path, {required this.beforeResolve});
   final String path;
+  final Future<void> beforeResolve;
 
   @override
   Future<PlaybackPlan> resolve(
     Drama drama,
     Episode episode, {
     int quality = 0,
-  }) async => PlaybackPlan(url: Uri.file(path).toString(), local: true);
+  }) async {
+    await beforeResolve;
+    return PlaybackPlan(url: Uri.file(path).toString(), local: true);
+  }
 }
 
 List<double> rectangle(Rect rect) => [
@@ -170,27 +176,11 @@ void main() {
         final data = (await image.toByteData(
           format: ui.ImageByteFormat.rawRgba,
         ))!;
-        final bytes = data.buffer.asUint8List();
-        var left = image.width, top = image.height, right = -1, bottom = -1;
-        for (var y = 0; y < image.height; y++) {
-          for (var x = 0; x < image.width; x++) {
-            final offset = (y * image.width + x) * 4;
-            if (bytes[offset] < 155 &&
-                bytes[offset + 1] > 175 &&
-                bytes[offset + 2] > 195) {
-              if (x < left) left = x;
-              if (x > right) right = x;
-              if (y < top) top = y;
-              if (y > bottom) bottom = y;
-            }
-          }
-        }
-        pixels = Rect.fromLTRB(
-          left.toDouble(),
-          top.toDouble(),
-          (right + 1).toDouble(),
-          (bottom + 1).toDouble(),
-        ).shift(origin);
+        pixels = syntheticVideoBounds(
+          data.buffer.asUint8List(),
+          image.width,
+          image.height,
+        )?.shift(origin);
         final expectedPixels = bakedBottom
             ? Rect.fromLTWH(
                 expected.left,
@@ -199,17 +189,36 @@ void main() {
                 expected.height * 15 / 16,
               )
             : expected;
-        for (final delta in [
-          pixels.left - expectedPixels.left,
-          pixels.top - expectedPixels.top,
-          pixels.right - expectedPixels.right,
-          pixels.bottom - expectedPixels.bottom,
-        ]) {
-          if (delta.abs() > 3) failures.add('$name decoded pixels $delta');
-        }
+        failures.addAll(
+          decodedVideoPixelFailures(
+            pixels,
+            expectedPixels,
+          ).map((failure) => '$name $failure'),
+        );
       }
       final query = MediaQuery.of(tester.element(videoFinder));
       final view = View.of(tester.element(videoFinder));
+      final platform = video.controller.player.platform! as NativePlayer;
+      final decoder = <String, String>{};
+      for (final property in [
+        'mpv-version',
+        'ffmpeg-version',
+        'hwdec',
+        'hwdec-current',
+        'gpu-hwdec-interop',
+        'current-vo',
+        'video-codec',
+        'video-params',
+        'video-dec-params',
+        'video-out-params',
+      ]) {
+        try {
+          final value = await platform.getProperty(property);
+          decoder[property] = value.isEmpty ? '<unavailable>' : value;
+        } catch (error) {
+          decoder[property] = '<unavailable: $error>';
+        }
+      }
       final sample = <String, Object?>{
         'name': name,
         'source': [source.width, source.height],
@@ -218,6 +227,7 @@ void main() {
         'texture': rectangle(texture),
         'decodedPixels': pixels == null ? null : rectangle(pixels),
         'textureSize': video.controller.rect.value?.toString(),
+        'decoder': decoder,
         'padding': query.padding.toString(),
         'viewInsets': query.viewInsets.toString(),
         'devicePixelRatio': query.devicePixelRatio,
@@ -275,6 +285,9 @@ void main() {
         'portrait': const Size(720, 1280),
         'wide': const Size(1920, 800),
         'baked-bottom': const Size(1280, 720),
+        'landscape-1080': const Size(1920, 1080),
+        'portrait-1080': const Size(1080, 1920),
+        'unaligned-width': const Size(854, 480),
       }.entries) {
         final path = '${directory.path}/${fixture.key}.mp4';
         await executor.run([
@@ -312,6 +325,7 @@ void main() {
               enhancement: VideoEnhancementPreferences(mode: enhancement),
             ),
           );
+          final sourceReady = Completer<void>();
           final player = Player(
             configuration: const PlayerConfiguration(muted: true),
           );
@@ -332,7 +346,10 @@ void main() {
                     ],
                   ),
                   initialIndex: 0,
-                  repository: LayoutRepository(path),
+                  repository: LayoutRepository(
+                    path,
+                    beforeResolve: sourceReady.future,
+                  ),
                   store: store,
                   playerFactory: () => player,
                 ),
@@ -340,20 +357,35 @@ void main() {
             ),
           );
           await until(
+            () => find.byType(Video).evaluate().isNotEmpty,
+            'video controller created ${fixture.key}',
+          );
+          const requestedDecoder = String.fromEnvironment(
+            'WINDOWS_VIDEO_HWDEC',
+          );
+          final native = player.platform! as NativePlayer;
+          if (requestedDecoder.isNotEmpty) {
+            await native.setProperty('hwdec', requestedDecoder);
+            expect(await native.getProperty('hwdec'), requestedDecoder);
+          } else {
+            expect(await native.getProperty('hwdec'), 'auto');
+          }
+          sourceReady.complete();
+          await until(
             () =>
-                find.byType(Video).evaluate().isNotEmpty &&
                 player.state.position.inMilliseconds > 400 &&
                 find.byType(Texture).evaluate().isNotEmpty,
             'video ready ${fixture.key}',
           );
+          final unaligned =
+              fixture.key.contains('1080') || fixture.key == 'unaligned-width';
           for (final mode in [
             'window',
             'fullscreen-window',
-            'maximized',
-            'fullscreen-maximized',
+            if (!unaligned) ...['maximized', 'fullscreen-maximized'],
             'mini',
             'restored-fullscreen',
-            'restored-maximized',
+            if (unaligned) 'restored-window' else 'restored-maximized',
           ]) {
             if (mode == 'maximized') {
               await desktop.setFullscreen(false);
@@ -365,7 +397,7 @@ void main() {
               await desktop.enterMini(aspectRatio: fixture.value.aspectRatio);
             }
             if (mode == 'restored-fullscreen') await desktop.leaveMini();
-            if (mode == 'restored-maximized')
+            if (mode == 'restored-maximized' || mode == 'restored-window')
               await desktop.setFullscreen(false);
             await tester.pump(const Duration(seconds: 1));
             final mouse = await tester.createGesture(
