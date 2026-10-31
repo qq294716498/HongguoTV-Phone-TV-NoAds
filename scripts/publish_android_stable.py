@@ -12,16 +12,16 @@ root = Path(__file__).resolve().parents[1]
 output = root / 'dist/android'
 repository = 'qq294716498/HongguoTV-Phone-TV-NoAds'
 certificate = '55c3c3395a00e56e99b8bfd580b14c99618da74db19692a2e42606eb05c47ba9'
-windows_tag = 'windows-v0.1.38-63'
-windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48', 'windows-v0.1.24-49', 'windows-v0.1.25-50', 'windows-v0.1.29-54', 'windows-v0.1.30-55', 'windows-v0.1.31-56', 'windows-v0.1.32-57', 'windows-v0.1.34-59', windows_tag)
-previous_android_tag = 'app-v0.1.34-59'
-previous_android_commit = '03245b6c814da9201a011ec8ddbc85f5139a1cab'
+windows_tag = 'windows-v0.1.39-64'
+windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48', 'windows-v0.1.24-49', 'windows-v0.1.25-50', 'windows-v0.1.29-54', 'windows-v0.1.30-55', 'windows-v0.1.31-56', 'windows-v0.1.32-57', 'windows-v0.1.34-59', 'windows-v0.1.38-63', windows_tag)
+previous_android_tag = 'app-v0.1.38-63'
+previous_android_commit = '3994339b3c57d1e94f2d203defa3c07f23de500e'
 pending_publication_note = '公开发布核验进行中：尚未完成三 ABI 公网下载、签名复核及 Android / Windows 升级通道隔离检查。'
 verified_publication_note = '公开发布核验已完成：三 ABI 公网下载、SHA-256、正式证书与版本复核通过；Android Latest 和 Windows 升级通道隔离、旧版本资产保持检查通过。'
 windows_verified_publication_note = '公开发布核验已完成：Windows 公网 ZIP 下载与 SHA-256、正式升级通道和 API 限流回退检查通过；Android Latest 隔离及旧版本资产保持检查通过。'
 offsets = {'arm64-v8a': 2000, 'armeabi-v7a': 1000, 'x86_64': 4000}
-release_branch = 'release/windows-android-0.1.38-63'
-approved_source = '6eb716d0c0c19a8a08fac8b2441b3acf4b673a9c'
+release_branch = 'release/windows-android-0.1.39-64'
+approved_source = '59cee3a00f8e97c49483e485569e7deaf2805383'
 release_only_paths = frozenset({
     'README.md', '.github/workflows/android-stable.yml',
     '.github/workflows/windows-preview.yml',
@@ -52,6 +52,8 @@ def github(*arguments):
 def release_description(version):
     return (
         f'红果TV Android {version} · 手机 / Android TV\n\n'
+        '- 优化下一季检查：优先定向搜索，按需核对官方分组，只提示紧接的下一季；命中立即显示，最多并行检查两部剧。\n'
+        '- 复用搜索及检查缓存；有效无结果缓存十分钟，手动刷新可撤销旧提示。缺季、同名或部分响应证据不足时不误报，保留观看进度和追剧记录。\n'
         '- 修复 TV 遥控长按左右定位提前提交并跳入菜单的问题：按住连续预览，松开提交一次；切集、后台和焦点离开时清理未提交定位，保留原有短按导航。\n'
         '- 手机全屏选集菜单保留全季图标，并显示“查看全季”文字；保留原点击行为，适配窄屏、安全区和大字体。\n'
         '\n本次构建、静态检查、默认及全站源回归和三 ABI 安装包校验由发布门禁验证，详细结果见随附报告。\n'
@@ -64,7 +66,7 @@ def release(tag):
 
 def finalize_release_notes(tag):
     published = release(tag)
-    if tag != 'app-v0.1.38-63' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
+    if tag != 'app-v0.1.39-64' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
         raise ValueError('Only the current verified Android stable release notes may be finalized')
     body = published['body']
     if body.count(pending_publication_note) != 1:
@@ -142,8 +144,8 @@ def main():
     os.chdir(root)
     version, raw_build = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(), re.M).group(1).split('+')
     build = int(raw_build)
-    if version != '0.1.38' or build != 63:
-        raise ValueError('This workflow only publishes Android 0.1.38+63')
+    if version != '0.1.39' or build != 64:
+        raise ValueError('This workflow only publishes Android 0.1.39+64')
     validate_release_source(os.environ['GITHUB_SHA'])
     tag = f'app-v{version}-{build}'
     phase = sys.argv[1]
@@ -168,7 +170,7 @@ def main():
             if match and int(match[1]) >= build:
                 raise ValueError('A newer or reserved Android build already exists')
         write('Release-before.json', {'android': snapshot(latest), 'windows': validated_windows_snapshots(os.environ['GITHUB_SHA'])})
-        subprocess.run([sys.executable, 'scripts/finish_task.py', '--message', 'Android 0.1.38 遥控长按定位和手机全屏全季文字修复；包含Windows可选兼容模式及更新完成清理；三ABI既有正式签名和自动化回归通过，实体设备仍未验收'], check=True)
+        subprocess.run([sys.executable, 'scripts/finish_task.py', '--message', 'Android 0.1.39 下一季定向搜索、官方分组核验、缓存和相邻季优化；三ABI既有正式签名和自动化回归通过，实体设备仍未验收'], check=True)
         subprocess.run([sys.executable, 'scripts/sync_source.py', '--check'], check=True)
         source = max(root.parent.glob('真果·鉴-*.zip'), key=lambda p: p.stat().st_mtime_ns)
         source_package = output / f'HongguoTV-{version}-source.zip'

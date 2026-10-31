@@ -12,11 +12,11 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[1]
 output = root / 'dist/windows'
 repository = 'qq294716498/HongguoTV-Phone-TV-NoAds'
-release_branch = 'release/windows-android-0.1.38-63'
-approved_source = '6eb716d0c0c19a8a08fac8b2441b3acf4b673a9c'
-previous_windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48', 'windows-v0.1.24-49', 'windows-v0.1.25-50', 'windows-v0.1.29-54', 'windows-v0.1.30-55', 'windows-v0.1.31-56', 'windows-v0.1.32-57', 'windows-v0.1.34-59')
-previous_android_tag = 'app-v0.1.34-59'
-previous_android_commit = '03245b6c814da9201a011ec8ddbc85f5139a1cab'
+release_branch = 'release/windows-android-0.1.39-64'
+approved_source = '59cee3a00f8e97c49483e485569e7deaf2805383'
+previous_windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48', 'windows-v0.1.24-49', 'windows-v0.1.25-50', 'windows-v0.1.29-54', 'windows-v0.1.30-55', 'windows-v0.1.31-56', 'windows-v0.1.32-57', 'windows-v0.1.34-59', 'windows-v0.1.38-63')
+previous_android_tag = 'app-v0.1.38-63'
+previous_android_commit = '3994339b3c57d1e94f2d203defa3c07f23de500e'
 pending_publication_note = '公开发布核验进行中：尚未完成 Windows 公网 ZIP 下载、升级通道及 Android Latest 隔离检查。'
 verified_publication_note = '公开发布核验已完成：Windows 公网 ZIP 下载与 SHA-256、正式升级通道和 API 限流回退检查通过；Android Latest 隔离及旧版本资产保持检查通过。'
 release_only_paths = frozenset({
@@ -49,6 +49,8 @@ def github(*arguments):
 def release_description(version):
     return (
         f'红果TV Windows {version} · x64\n\n'
+        '- 优化下一季检查：优先定向搜索，按需核对官方分组，只提示紧接的下一季；命中立即显示，最多并行检查两部剧。\n'
+        '- 复用搜索及检查缓存；有效无结果缓存十分钟，手动刷新可撤销旧提示。缺季、同名或部分响应证据不足时不误报，保留观看进度和追剧记录。\n'
         '- 默认保留自动解码。在“设置与备份 → 视频兼容模式”中可主动开启绿边兼容模式，保存后重新打开播放页生效，不中断当前播放。回拷模式可能增加性能开销，并影响硬件 VSR 增强；报告者 Intel 设备上的绿边效果尚未验收，不保证能够解决。\n'
         '- 更新继续沿当前 EXE 所在目录替换；确认新版本启动和安装交接完成后，清理本次更新自有的下载缓存、暂存文件、辅助程序和不再需要的旧版本备份。失败或中断保留安全回滚，文件锁定残留按事务记录重试，不按“.back”等后缀清理个人文件或无归属目录。\n'
         '\n本次构建、静态回归、合成媒体启动、更新事务及清理使用隔离夹具验证，详细结果见随附报告。Windows 10 / 11 x64 应用仍未签名；实体 Intel 兼容效果、连续播放性能及消费级 GPU / 音频设备仍需实机验收。\n'
@@ -57,7 +59,7 @@ def release_description(version):
 
 def finalize_release_notes(tag):
     published = json.loads(github('api', f'repos/{repository}/releases/tags/{tag}'))
-    if tag != 'windows-v0.1.38-63' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
+    if tag != 'windows-v0.1.39-64' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
         raise ValueError('Only the current verified Windows stable release notes may be finalized')
     body = published['body']
     if body.count(pending_publication_note) != 1:
@@ -185,8 +187,8 @@ def main():
     version, build = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(encoding='utf-8'), re.MULTILINE).group(1).split('+')
     if not re.fullmatch(r'\d+\.\d+\.\d+', version):
         raise ValueError('Only Windows stable releases are allowed')
-    if version != '0.1.38' or build != '63':
-        raise ValueError('This workflow only publishes Windows 0.1.38+63')
+    if version != '0.1.39' or build != '64':
+        raise ValueError('This workflow only publishes Windows 0.1.39+64')
     tag = f'windows-v{version}-{build}'
     package = output / f'HongguoTV-{version}-windows-x64.zip'
     if sys.argv[1] == 'stage':
@@ -250,7 +252,7 @@ def main():
         write_json('Android-isolation.json', {'before': android, 'androidParserUnchanged': True,
                                               'parserSha256': hashlib.sha256(old.encode()).hexdigest()})
         subprocess.run([sys.executable, 'scripts/finish_task.py', '--message',
-                        '完成 Windows 0.1.38 x64 可选视频兼容模式、更新成功清理及既有播放修复的新构建与自动化验证；实体Intel设备仍未验收'], check=True)
+                        '完成 Windows 0.1.39 x64 下一季定向搜索、官方分组核验、缓存和相邻季优化的新构建及自动化验证；实体设备仍未验收'], check=True)
         subprocess.run([sys.executable, 'scripts/sync_source.py', '--check'], check=True)
         source = max(root.parent.glob('真果·鉴-*.zip'), key=lambda file: file.stat().st_mtime_ns)
         source_package = output / f'HongguoTV-{version}-source.zip'
