@@ -35,6 +35,10 @@ type nativeEpisodeCache struct {
 	startupTargets  map[string]bool
 	startupIndex    bool
 	startupWorkers  sync.WaitGroup
+	paused          bool
+	pauseChanged    chan struct{}
+	workSequence    uint64
+	works           map[uint64]nativeEpisodeWork
 }
 
 func (engine *nativeEngine) startEpisodeCache(input nativeInput, plan nativePlan, choice nativePlaybackChoice, stream *nativeStreamServer) error {
@@ -106,14 +110,20 @@ func (cache *nativeEpisodeCache) run(ctx context.Context, input nativeInput, med
 	ctx = context.WithValue(ctx, nativePreloadKey{}, true)
 	ctx = context.WithValue(ctx, nativeStartupCacheKey{}, cache)
 	forceHLS := false
-	for attempt := 0; ctx.Err() == nil; attempt++ {
+	attempt, refreshedAttempt := 0, -1
+	for ctx.Err() == nil {
+		work, finish, err := cache.beginWork(ctx, true)
+		if err != nil {
+			return
+		}
 		cache.mu.Lock()
-		cache.plan.PreloadState = "caching"
-		cache.plan.PreloadError = ""
+		if !cache.paused {
+			cache.plan.PreloadState = "caching"
+			cache.plan.PreloadError = ""
+		}
 		cache.mu.Unlock()
-		work, cancel := context.WithCancel(ctx)
-		var err error
-		if attempt > 0 && attempt%3 == 0 {
+		err = work.Err()
+		if err == nil && attempt > 0 && attempt%3 == 0 && refreshedAttempt != attempt {
 			fresh, resolveErr := cache.manager.engine.downloader.resolveProviderMedia(work, Task{DramaID: input.Drama.ID, DramaTitle: input.Drama.Title, Chapter: input.Chapter, Index: input.Index})
 			if resolveErr == nil {
 				choices := nativePlaybackChoices(fresh, input.Quality)
@@ -127,6 +137,9 @@ func (cache *nativeEpisodeCache) run(ctx context.Context, input nativeInput, med
 				}
 			} else {
 				err = resolveErr
+			}
+			if err == nil {
+				refreshedAttempt = attempt
 			}
 		}
 		var result nativeDownloadResult
@@ -150,24 +163,30 @@ func (cache *nativeEpisodeCache) run(ctx context.Context, input nativeInput, med
 		}
 		if err == nil {
 			cache.mu.Lock()
-			cache.plan.PreloadState = "verifying"
+			if !cache.paused {
+				cache.plan.PreloadState = "verifying"
+			}
 			cache.mu.Unlock()
 			err = cache.verify(work, result, stream)
 		}
-		cancel()
+		cause := context.Cause(work)
+		finish()
 		if err == nil || ctx.Err() != nil {
 			return
 		}
+		if errors.Is(cause, errNativePreloadPaused) {
+			continue
+		}
 		cache.mu.Lock()
-		cache.plan.PreloadState = "retrying"
-		cache.plan.PreloadError = publicError(err).Error()
+		if !cache.paused {
+			cache.plan.PreloadState = "retrying"
+			cache.plan.PreloadError = publicError(err).Error()
+		}
 		cache.mu.Unlock()
-		timer := time.NewTimer(time.Duration(min(30, 3<<min(attempt, 4))) * time.Second)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
+		delay := time.Duration(min(30, 3<<min(attempt, 4))) * time.Second
+		attempt++
+		if !cache.waitRetry(ctx, delay) {
 			return
-		case <-timer.C:
 		}
 	}
 }

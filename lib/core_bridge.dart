@@ -110,6 +110,11 @@ abstract class AppRepository {
   Future<void> cancelPreload() async {}
   Future<PlaybackPlan> preloadStatus(Drama drama, PlaybackPlan plan) async =>
       plan;
+  Future<void> setPreloadPaused(
+    Drama drama,
+    PlaybackPlan plan,
+    bool paused,
+  ) async {}
   Future<PlaybackPlan?> preload(
     Drama drama,
     Episode episode, {
@@ -490,6 +495,20 @@ class NativeRepository extends AppRepository {
       );
 
   @override
+  Future<void> setPreloadPaused(
+    Drama drama,
+    PlaybackPlan plan,
+    bool paused,
+  ) async {
+    await _call({
+      'action': 'setPreloadPaused',
+      'drama': drama.toJson(),
+      'playbackSession': plan.session,
+      'paused': paused,
+    });
+  }
+
+  @override
   Future<PlaybackPlan?> preload(
     Drama drama,
     Episode episode, {
@@ -749,6 +768,7 @@ class NativeRepository extends AppRepository {
         'resolve',
         'preload',
         'preloadStatus',
+        'setPreloadPaused',
         'prepareHandoff',
         'enqueueDownloads',
         'localPlayback',
@@ -793,7 +813,9 @@ class NativeRepository extends AppRepository {
       }
       final data = response['data'];
       if (!unrestricted && epoch != access?.profileEpoch) {
-        if (data is Map && data['session'] is String) {
+        if (action != 'setPreloadPaused' &&
+            data is Map &&
+            data['session'] is String) {
           await release(data['session'] as String);
         }
         if (action == 'workLease' && input['command'] == 'start') {

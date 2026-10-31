@@ -15,6 +15,7 @@ import io.flutter.Log;
 import io.flutter.embedding.engine.plugins.FlutterPlugin;
 import io.flutter.plugin.common.BinaryMessenger;
 import io.flutter.plugin.common.MethodChannel;
+import io.flutter.plugin.common.EventChannel;
 import io.flutter.plugins.videoplayer.platformview.PlatformVideoViewFactory;
 import io.flutter.plugins.videoplayer.platformview.PlatformViewVideoPlayer;
 import io.flutter.plugins.videoplayer.texture.TextureVideoPlayer;
@@ -70,7 +71,10 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi {
     diagnosticChannel.setMethodCallHandler((call, result) -> {
       if (!call.method.equals("snapshot") && !call.method.equals("transition")
           && !call.method.equals("prepareNext") && !call.method.equals("clearNext")
-          && !call.method.equals("captureFrame") && !call.method.equals("waitForFirstFrame")) {
+          && !call.method.equals("captureFrame") && !call.method.equals("waitForFirstFrame")
+          && !call.method.equals("queueStage") && !call.method.equals("queueAdvance")
+          && !call.method.equals("queueClear") && !call.method.equals("queueSuspend")
+          && !call.method.equals("queueSnapshot")) {
         result.notImplemented();
         return;
       }
@@ -109,6 +113,26 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi {
         result.success(player.clearNext(call.argument("identity")));
         return;
       }
+      if (call.method.equals("queueSnapshot")) {
+        result.success(player.queueSnapshot());
+        return;
+      }
+      if (call.method.equals("queueAdvance")) {
+        result.success(player.advanceQueue(call.argument("identity"),
+            Boolean.TRUE.equals(call.argument("play"))));
+        return;
+      }
+      if (call.method.equals("queueClear") || call.method.equals("queueSuspend")) {
+        Number revision = call.argument("revision");
+        long value = revision == null ? 0L : revision.longValue();
+        if (call.method.equals("queueClear")) {
+          result.success(player.clearQueue(call.argument("identity"), value));
+        } else {
+          player.suspendQueue(Boolean.TRUE.equals(call.argument("paused")), value);
+          result.success(null);
+        }
+        return;
+      }
       String url = call.argument("url");
       if (url == null || url.isEmpty()) {
         result.error("invalid_media", "播放地址为空", null);
@@ -119,7 +143,13 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi {
       try {
         PreparedMediaRequest request = new PreparedMediaRequest(
             call.argument("identity"), url, call.argument("headers"), mediaType);
-        if (call.method.equals("prepareNext")) {
+        if (call.method.equals("queueStage")) {
+          Number generation = call.argument("generation");
+          Number revision = call.argument("revision");
+          result.success(player.stageQueue(flutterState.applicationContext, request,
+              generation == null ? 0L : generation.longValue(),
+              revision == null ? 0L : revision.longValue()));
+        } else if (call.method.equals("prepareNext")) {
           player.prepareNext(flutterState.applicationContext, request, result);
         } else {
           Number elapsed = call.argument("requestElapsedMs");
@@ -233,8 +263,22 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi {
     BinaryMessenger messenger = flutterState.binaryMessenger;
     final String channelSuffix = Long.toString(id);
     VideoPlayerInstanceApi.Companion.setUp(messenger, player, channelSuffix);
-    player.setDisposeHandler(
-        () -> VideoPlayerInstanceApi.Companion.setUp(messenger, null, channelSuffix));
+    EventChannel queueChannel = new EventChannel(messenger, "hongguo/video_queue/" + id);
+    queueChannel.setStreamHandler(new EventChannel.StreamHandler() {
+      @Override
+      public void onListen(Object arguments, EventChannel.EventSink events) {
+        player.listenQueue(events);
+      }
+
+      @Override
+      public void onCancel(Object arguments) {
+        player.stopListeningQueue();
+      }
+    });
+    player.setDisposeHandler(() -> {
+      queueChannel.setStreamHandler(null);
+      VideoPlayerInstanceApi.Companion.setUp(messenger, null, channelSuffix);
+    });
 
     videoPlayers.put(id, player);
   }

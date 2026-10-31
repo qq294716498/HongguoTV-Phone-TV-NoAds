@@ -17,6 +17,8 @@ import 'package:video_player/video_player.dart';
 
 import 'diary_service.dart';
 import 'playback_frame_hold.dart';
+import 'playback_queue_contract.dart';
+import 'models.dart';
 
 /// 模拟与 media_kit.PlayerStream 接口对齐的流集合
 class LunaPlayerStreams implements PlayerStream {
@@ -122,6 +124,21 @@ class _PlayerMediaOperation {
   }
 }
 
+class _QueuedAndroidMedia {
+  _QueuedAndroidMedia(
+    this.identity,
+    this.generation,
+    this.media,
+    this.mediaType,
+  );
+
+  final String identity;
+  final int generation;
+  final Media media;
+  final String mediaType;
+  bool activated = false;
+}
+
 /// 采用和 LunaTV-Mobile 完全相同架构的 ExoPlayer (AndroidX Media3) 播放器封装，
 /// 同时对上层红果鉴播控 UI (PlayerControls & TelevisionControls) 暴露完全兼容的 Player 契约。
 class LunaExoPlayer implements Player {
@@ -188,6 +205,23 @@ class LunaExoPlayer implements Player {
   final frameHold = PlaybackFrameHold();
   final frameHoldFailure = ValueNotifier<String?>(null);
   int _frameRetentionSequence = 0;
+
+  final _queueEvents = StreamController<PlaybackQueueEvent>.broadcast(
+    sync: true,
+  );
+  final _queueMedia = <String, _QueuedAndroidMedia>{};
+  StreamSubscription<dynamic>? _queueSubscription;
+  VideoPlayerController? _queueController;
+  String? _queueCandidate;
+  String? _queueCurrent;
+  String? _currentMediaUrl;
+  String? _currentMediaType;
+  Map<String, String>? _currentMediaHeaders;
+  int _queueCommandRevision = 0;
+  bool _queueSuspended = false;
+  bool _queueUnavailable = false;
+
+  Stream<PlaybackQueueEvent> get queueEvents => _queueEvents.stream;
 
   final ValueNotifier<int> revision = ValueNotifier<int>(0);
 
@@ -443,12 +477,384 @@ class LunaExoPlayer implements Player {
     }
   }
 
+  Future<void> _ensureQueueEvents(VideoPlayerController controller) async {
+    if (_queueController == controller && _queueSubscription != null) return;
+    await _queueSubscription?.cancel();
+    _queueController = controller;
+    _queueUnavailable = false;
+    _queueSubscription =
+        EventChannel(
+          'hongguo/video_queue/${controller.playerId}',
+        ).receiveBroadcastStream().listen(
+          (dynamic value) {
+            if (_disposed || _controller != controller || value is! Map) return;
+            _handleQueueEvent(Map<String, dynamic>.from(value));
+          },
+          onError: (Object error) {
+            if (_disposed || _controller != controller) return;
+            _queueUnavailable = true;
+            final media = _queueMedia[_queueCandidate];
+            if (media != null && !_queueEvents.isClosed) {
+              _queueEvents.add(
+                PlaybackQueueEvent(
+                  identity: media.identity,
+                  generation: media.generation,
+                  kind: PlaybackQueueEventKind.failed,
+                  message: '播放器队列事件不可用',
+                ),
+              );
+            }
+          },
+        );
+    final snapshot = await diagnosticChannel
+        .invokeMapMethod<String, dynamic>('queueSnapshot', {
+          'playerId': controller.playerId,
+        })
+        .timeout(operationTimeout);
+    if (!_disposed && _controller == controller && snapshot != null) {
+      _handleQueueEvent(snapshot);
+    }
+  }
+
+  void _handleQueueEvent(Map<String, dynamic> values) {
+    final identity = values['identity'];
+    final generation = (values['generation'] as num?)?.toInt();
+    final media = _queueMedia[identity];
+    final controller = _controller;
+    if (_disposed ||
+        controller == null ||
+        media == null ||
+        media.generation != generation ||
+        values['url'] != media.media.uri) {
+      return;
+    }
+    final kind = values['kind'];
+    if (kind != 'activated' && kind != 'ready' && kind != 'failed') return;
+    if ((kind == 'activated' || kind == 'ready') && !media.activated) {
+      if (_queueCandidate != identity) return;
+      media.activated = true;
+      final previous = _queueCurrent;
+      _queueCurrent = media.identity;
+      _queueCandidate = null;
+      if (previous != null && previous != identity) {
+        _queueMedia.remove(previous);
+      }
+      _cancelOperations();
+      ++_prepareGeneration;
+      _preparedIdentity = _preparedUrl = _preparedMediaType = null;
+      _preparedHeaders = null;
+      _preparingNext = null;
+      _prepareRetryAt = DateTime(2000);
+      _currentMediaUrl = media.media.uri;
+      _currentMediaType = media.mediaType;
+      _currentMediaHeaders = _headers(media.media);
+      clearRetainedFrame();
+      _queueEvents.add(
+        PlaybackQueueEvent(
+          identity: media.identity,
+          generation: media.generation,
+          kind: PlaybackQueueEventKind.activated,
+        ),
+      );
+      _stopDiagnostics();
+      controller.value = controller.value.copyWith(
+        position: Duration.zero,
+        duration: Duration.zero,
+        buffered: const [],
+        isCompleted: false,
+        isPlaying: values['playing'] == true,
+        isBuffering: values['buffering'] == true,
+        errorDescription: null,
+      );
+      state = state.copyWith(
+        completed: false,
+        position: Duration.zero,
+        duration: Duration.zero,
+        buffer: Duration.zero,
+      );
+      _safeAdd(stream.completedController, false);
+      _safeAdd(stream.positionController, Duration.zero);
+      _safeAdd(stream.durationController, Duration.zero);
+      _safeAdd(stream.bufferController, Duration.zero);
+      _startDiagnostics();
+    }
+    if (kind == 'failed') {
+      _queueEvents.add(
+        PlaybackQueueEvent(
+          identity: media.identity,
+          generation: media.generation,
+          kind: PlaybackQueueEventKind.failed,
+          message: values['message'] as String? ?? '下一集队列播放失败',
+        ),
+      );
+      if (!media.activated) {
+        _queueMedia.remove(identity);
+        if (_queueCandidate == identity) _queueCandidate = null;
+      }
+      return;
+    }
+    if (kind == 'ready' && _queueCurrent == identity) {
+      final duration = Duration(
+        milliseconds: (values['durationMs'] as num?)?.toInt() ?? 0,
+      );
+      final position = Duration(
+        milliseconds: (values['positionMs'] as num?)?.toInt() ?? 0,
+      );
+      final buffered = Duration(
+        milliseconds: (values['bufferedMs'] as num?)?.toInt() ?? 0,
+      );
+      final width = (values['width'] as num?)?.toDouble() ?? 0;
+      final height = (values['height'] as num?)?.toDouble() ?? 0;
+      controller.value = controller.value.copyWith(
+        position: position,
+        duration: duration,
+        buffered: [DurationRange(Duration.zero, buffered)],
+        size: width > 0 && height > 0
+            ? Size(width, height)
+            : controller.value.size,
+        isInitialized: true,
+        isCompleted: false,
+        isPlaying: values['playing'] == true,
+        isBuffering: values['buffering'] == true,
+        errorDescription: null,
+      );
+      final size = controller.value.size;
+      final params = VideoParams(
+        w: size.width.round(),
+        h: size.height.round(),
+        dw: size.width.round(),
+        dh: size.height.round(),
+      );
+      state = state.copyWith(
+        width: params.w,
+        height: params.h,
+        videoParams: params,
+      );
+      lastTransitionUsedPrepared = values['prepared'] == true;
+      lastTransitionFirstFrame = values['firstFrame'] == true;
+      _safeAdd(stream.videoParamsController, params);
+      _onControllerValue(controller);
+      _queueEvents.add(
+        PlaybackQueueEvent(
+          identity: media.identity,
+          generation: media.generation,
+          kind: PlaybackQueueEventKind.ready,
+          firstFrame: values['firstFrame'] == true,
+        ),
+      );
+      revision.value++;
+    }
+  }
+
+  bool _matchesQueueCurrent(PlaybackPlan current) =>
+      _currentMediaUrl == Media(current.url).uri &&
+      _currentMediaType == current.mediaType &&
+      mapEquals(
+        _currentMediaHeaders,
+        _headers(Media(current.url, httpHeaders: current.headers)),
+      );
+
+  Future<bool> stageQueue({
+    required PlaybackPlan current,
+    required PlaybackPlan next,
+    required String identity,
+    required int generation,
+  }) async {
+    if (!canTransition ||
+        _queueSuspended ||
+        _queueUnavailable ||
+        identity.isEmpty ||
+        !_matchesQueueCurrent(current) ||
+        state.completed) {
+      return false;
+    }
+    final controller = _controller!;
+    final media = Media(next.url, httpHeaders: next.headers);
+    final existing = _queueMedia[identity];
+    if (existing != null &&
+        existing.generation == generation &&
+        existing.media.uri == media.uri &&
+        existing.mediaType == next.mediaType &&
+        mapEquals(_headers(existing.media), _headers(media))) {
+      return true;
+    }
+    final pending = _queueCandidate;
+    if (pending != null) {
+      await clearQueue(identity: pending);
+      if (_disposed ||
+          _controller != controller ||
+          _queueSuspended ||
+          _queueUnavailable ||
+          !_matchesQueueCurrent(current)) {
+        return false;
+      }
+    }
+    final ticket = ++_queueCommandRevision;
+    final candidate = _QueuedAndroidMedia(
+      identity,
+      generation,
+      media,
+      next.mediaType,
+    );
+    try {
+      await _ensureQueueEvents(controller);
+      if (_disposed ||
+          _controller != controller ||
+          _queueSuspended ||
+          ticket != _queueCommandRevision ||
+          _queueUnavailable) {
+        return false;
+      }
+      await prepareNext(media, identity: identity, mediaType: next.mediaType);
+      if (_disposed ||
+          _controller != controller ||
+          _queueSuspended ||
+          ticket != _queueCommandRevision) {
+        return false;
+      }
+      final old = _queueCandidate;
+      if (old != null && old != _queueCurrent) _queueMedia.remove(old);
+      _queueCandidate = identity;
+      _queueMedia[identity] = candidate;
+      final queued = await diagnosticChannel
+          .invokeMethod<bool>('queueStage', {
+            'playerId': controller.playerId,
+            'identity': identity,
+            'generation': generation,
+            'revision': ticket,
+            'url': media.uri,
+            'headers': _headers(media),
+            'mediaType': next.mediaType,
+          })
+          .timeout(operationTimeout);
+      if (_disposed ||
+          _controller != controller ||
+          (ticket != _queueCommandRevision && _queueCurrent != identity)) {
+        return false;
+      }
+      if (queued != true) {
+        if (_queueCandidate == identity) _queueCandidate = null;
+        if (!candidate.activated) _queueMedia.remove(identity);
+        return false;
+      }
+      final snapshot = await diagnosticChannel
+          .invokeMapMethod<String, dynamic>('queueSnapshot', {
+            'playerId': controller.playerId,
+          })
+          .timeout(operationTimeout);
+      if (_controller == controller && snapshot != null) {
+        _handleQueueEvent(snapshot);
+      }
+      return true;
+    } catch (_) {
+      if (!candidate.activated) await clearQueue(identity: identity);
+      return candidate.activated;
+    }
+  }
+
+  Future<bool> advanceQueue({
+    required String identity,
+    required bool play,
+  }) async {
+    final controller = _controller;
+    if (_disposed ||
+        controller == null ||
+        _queueSuspended ||
+        !_queueMedia.containsKey(identity)) {
+      return false;
+    }
+    try {
+      return await diagnosticChannel
+              .invokeMethod<bool>('queueAdvance', {
+                'playerId': controller.playerId,
+                'identity': identity,
+                'play': play,
+              })
+              .timeout(operationTimeout) ==
+          true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> clearQueue({String? identity}) async {
+    final ticket = ++_queueCommandRevision;
+    await clearPreparedNext(identity: identity);
+    final controller = _controller;
+    if (_disposed || controller == null) return;
+    final pending = _queueMedia[_queueCandidate];
+    var removed = false;
+    try {
+      removed =
+          await diagnosticChannel
+              .invokeMethod<bool>('queueClear', {
+                'playerId': controller.playerId,
+                'identity': identity,
+                'revision': ticket,
+              })
+              .timeout(operationTimeout) ==
+          true;
+      final snapshot = await diagnosticChannel
+          .invokeMapMethod<String, dynamic>('queueSnapshot', {
+            'playerId': controller.playerId,
+          })
+          .timeout(operationTimeout);
+      if (_controller == controller && snapshot != null) {
+        _handleQueueEvent(snapshot);
+      }
+      final candidate = _queueCandidate;
+      if (candidate != null && (identity == null || candidate == identity)) {
+        _queueMedia.remove(candidate);
+        _queueCandidate = null;
+      }
+    } catch (_) {
+      _queueUnavailable = true;
+      if (!removed &&
+          pending != null &&
+          !pending.activated &&
+          _controller == controller) {
+        _cancelOperations();
+        await _releaseController();
+        if (!_disposed && !_queueEvents.isClosed) {
+          _queueEvents.add(
+            PlaybackQueueEvent(
+              identity: pending.identity,
+              generation: pending.generation,
+              kind: PlaybackQueueEventKind.failed,
+              message: 'queue_state_unknown',
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> suspendQueue(bool paused) async {
+    if (_disposed || _queueSuspended == paused) return;
+    _queueSuspended = paused;
+    if (paused) await clearQueue();
+    final ticket = ++_queueCommandRevision;
+    final controller = _controller;
+    if (_disposed || controller == null) return;
+    try {
+      await diagnosticChannel
+          .invokeMethod<void>('queueSuspend', {
+            'playerId': controller.playerId,
+            'paused': paused,
+            'revision': ticket,
+          })
+          .timeout(operationTimeout);
+    } catch (_) {}
+  }
+
   Future<void> prepareNext(
     Media media, {
     required String identity,
     String mediaType = '',
   }) {
-    if (!canTransition || identity.isEmpty) return Future<void>.value();
+    if (!canTransition || _queueSuspended || identity.isEmpty) {
+      return Future<void>.value();
+    }
     final headers = _headers(media);
     if (_preparedIdentity == identity &&
         _preparedUrl == media.uri &&
@@ -562,6 +968,9 @@ class LunaExoPlayer implements Player {
       );
       if (_disposed || ticket != _openGeneration || _controller != c) return;
       if (result == null) throw StateError('切集未返回首帧结果');
+      _currentMediaUrl = media.uri;
+      _currentMediaType = mediaType;
+      _currentMediaHeaders = Map.of(headers);
       lastTransitionUsedPrepared = result['usedPrepared'] == true;
       lastTransitionFirstFrame = result['firstFrame'] == true;
       final duration = Duration(
@@ -904,6 +1313,9 @@ class LunaExoPlayer implements Player {
     }
 
     _controller = c;
+    _currentMediaUrl = media.uri;
+    _currentMediaType = mediaType;
+    _currentMediaHeaders = Map.of(headers);
     if (identical(_openingController, c)) _openingController = null;
     _lastControllerError = null;
     _startDiagnostics();
@@ -1188,6 +1600,15 @@ class LunaExoPlayer implements Player {
   }
 
   Future<void> _releaseController() async {
+    await _queueSubscription?.cancel();
+    _queueSubscription = null;
+    _queueController = null;
+    _queueMedia.clear();
+    _queueCandidate = _queueCurrent = _currentMediaUrl = null;
+    _currentMediaType = null;
+    _currentMediaHeaders = null;
+    _queueSuspended = _queueUnavailable = false;
+    ++_queueCommandRevision;
     clearRetainedFrame();
     ++_prepareGeneration;
     _preparedIdentity = _preparedUrl = _preparedMediaType = null;
@@ -1344,6 +1765,7 @@ class LunaExoPlayer implements Player {
     frameHold.dispose();
     frameHoldFailure.dispose();
     stream.dispose();
+    await _queueEvents.close();
   }
 
   void _safeAdd<T>(StreamController<T> ctl, T value) {

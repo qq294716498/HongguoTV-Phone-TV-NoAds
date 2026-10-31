@@ -102,6 +102,7 @@ type nativeInput struct {
 	Settings         nativeResourceSettings  `json:"settings"`
 	JobIDs           []string                `json:"jobIds"`
 	PlaybackSession  string                  `json:"playbackSession"`
+	Paused           *bool                   `json:"paused"`
 	StartMS          int64                   `json:"startMs"`
 	DurationMS       int64                   `json:"durationMs"`
 	Board            string                  `json:"board"`
@@ -420,6 +421,8 @@ func nativeDispatch(input nativeInput) (any, error) {
 		return engine.nativePreload(ctx, input)
 	case "preloadStatus":
 		return engine.nativePreloadStatus(input.PlaybackSession)
+	case "setPreloadPaused":
+		return engine.nativeSetPreloadPaused(ctx, input)
 	case "prepareHandoff":
 		return engine.nativeResolve(ctx, input)
 	case "danmaku":

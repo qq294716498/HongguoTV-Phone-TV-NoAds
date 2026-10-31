@@ -17,6 +17,11 @@ import 'app_theme.dart';
 import 'core_bridge.dart';
 import 'diary_service.dart';
 import 'luna_exo_player.dart';
+import 'android_playback_queue.dart';
+import 'media_kit_playback_queue.dart';
+import 'playback_queue_contract.dart';
+import 'hongguo_series.dart';
+import 'video_enhancement_preferences.dart';
 import 'danmaku_controller.dart';
 import 'danmaku_overlay.dart';
 import 'watch_reminder_models.dart';
@@ -49,6 +54,8 @@ import 'windows_desktop.dart';
 import 'windows_drama_description.dart';
 import 'episode_label.dart';
 
+part 'player_queue_runtime.dart';
+
 class PlayerScreen extends StatefulWidget {
   const PlayerScreen({
     super.key,
@@ -62,6 +69,7 @@ class PlayerScreen extends StatefulWidget {
     this.allowOnlineFallback = true,
     this.mediaId,
     this.playerFactory,
+    this.queueDriverFactory,
     this.videoBuilder,
     this.handoff,
     this.healthClock,
@@ -80,6 +88,8 @@ class PlayerScreen extends StatefulWidget {
   final DateTime Function()? healthClock;
   @visibleForTesting
   final Player Function()? playerFactory;
+  @visibleForTesting
+  final PlaybackQueueDriver? Function(Player)? queueDriverFactory;
   @visibleForTesting
   final Widget Function(Widget controls)? videoBuilder;
   @override
@@ -100,6 +110,18 @@ class _PlayerScreenState extends State<PlayerScreen>
   late final VideoEnhancementController _enhancement;
   late final PlaybackLoader _loader;
   late final PlaybackPreloader _preloader;
+  PlaybackQueueDriver? _queueDriver;
+  _QueueTarget? _preloadTarget;
+  _QueuedEpisode? _queuedEpisode;
+  int _queueSequence = 0;
+  bool _queueDetaching = false;
+  String? _queueBlockedIdentity;
+  bool? _preloadPauseWanted;
+  Timer? _preloadControlRetry;
+  bool _probingQueuedSeason = false;
+  int _queuedSeasonGeneration = -1;
+  DramaDetail? _queuedSeason;
+  Future<void> _progressWrites = Future<void>.value();
   bool _preloadEnabled = true;
   late final DanmakuController _danmaku;
   int _seekSequence = 0;
@@ -283,19 +305,22 @@ class _PlayerScreenState extends State<PlayerScreen>
     _loader = PlaybackLoader(widget.repository);
     _preloader = PlaybackPreloader(
       widget.repository,
-      onPrepared: (plan) {
-        final player = _player;
-        if (!_closed && _foreground && player is LunaExoPlayer) {
-          unawaited(
-            player.prepareNext(
-              Media(plan.url, httpHeaders: plan.headers),
-              identity: plan.session,
-              mediaType: plan.mediaType,
-            ),
-          );
-        }
-      },
+      onPrepared: (plan) => unawaited(_prepareQueuedMedia(plan)),
+      onSuspended: _suspendQueuedMedia,
       onRelease: (plan) async {
+        final queued = _queuedEpisode;
+        if (queued != null &&
+            !queued.activated &&
+            queued.plan.session == plan.session) {
+          await _queueDriver?.clear(identity: queued.identity);
+          if (queued.activated) {
+            await _player.stop();
+            queued.finish(queued.ready, false);
+          } else if (identical(_queuedEpisode, queued)) {
+            queued.cancel();
+            _queuedEpisode = null;
+          }
+        }
         final player = _player;
         if (player is LunaExoPlayer) {
           await player.clearPreparedNext(identity: plan.session);
@@ -324,6 +349,23 @@ class _PlayerScreenState extends State<PlayerScreen>
               ));
     if (_player is LunaExoPlayer) {
       _player.frameHold.addListener(_retainedFrameChanged);
+    }
+    _queueDriver = widget.queueDriverFactory != null
+        ? widget.queueDriverFactory!(_player)
+        : _player is LunaExoPlayer
+        ? AndroidPlaybackQueueDriver(_player)
+        : _player.platform is NativePlayer
+        ? MediaKitPlaybackQueueDriver(_player)
+        : null;
+    final queueDriver = _queueDriver;
+    if (queueDriver != null) {
+      _subscriptions.add(
+        queueDriver.events.listen(
+          _queuedEvent,
+          onError: (Object error) =>
+              DiaryService.add('[Queue] event error: $error'),
+        ),
+      );
     }
     _video = widget.videoBuilder == null && !Platform.isAndroid
         ? VideoController(
@@ -415,6 +457,24 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
     _subscriptions.add(
       _player.stream.completed.listen((completed) {
+        final queued = _queuedEpisode;
+        if (completed &&
+            queued != null &&
+            queued.valid &&
+            queued.armed &&
+            !queued.activated) {
+          final state = _player.state;
+          if (state.completed &&
+              state.duration == queued.previousDuration &&
+              state.position > queued.previousPosition) {
+            queued.previousPosition = state.position;
+          }
+          _freezeQueuedProgress(queued);
+          if (_autoAdvance && _foreground && _playIntent && !_panelOpen) {
+            _autoAdvanceQueued(queued);
+          }
+          return;
+        }
         if (completed &&
             !_loading &&
             !_closed &&
@@ -442,6 +502,30 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
     _subscriptions.add(
       _player.stream.position.listen((position) {
+        final queued = _queuedEpisode;
+        if (queued != null && queued.valid) {
+          if (queued.frozen &&
+              position <= const Duration(milliseconds: 500) &&
+              !_player.state.completed) {
+            queued.finish(queued.positionReset, true);
+          }
+          if (!queued.activated && !queued.frozen) {
+            if (position + const Duration(milliseconds: 500) <
+                queued.previousPosition) {
+              queued.frozen = true;
+              queued.finish(queued.positionReset, true);
+              if (_autoAdvance && _foreground && _playIntent && !_panelOpen) {
+                _autoAdvanceQueued(queued);
+              }
+            } else if (position > Duration.zero) {
+              queued.previousPosition = position;
+              if (queued.previousDuration <= Duration.zero &&
+                  _player.state.duration > Duration.zero) {
+                queued.previousDuration = _player.state.duration;
+              }
+            }
+          }
+        }
         if (!_closed && _openedCurrent && position > Duration.zero) {
           _resumePosition = position.inMilliseconds / 1000;
           if (!_loading &&
@@ -567,8 +651,9 @@ class _PlayerScreenState extends State<PlayerScreen>
           _loading ||
           _findingNextSeason;
       WindowsUpdateRuntime.savePlayback = () async {
-        if (_playIntent || _player.state.playing || _loading)
+        if (_playIntent || _player.state.playing || _loading) {
           throw StateError('请先暂停播放后安装更新');
+        }
         await _saveWindowsVolume();
         await _saveProgress(flush: true);
         await widget.store.flushPendingWrites();
@@ -977,10 +1062,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       LanPlaybackHost(
         identity: _lanIdentity,
         title:
-            _detail.drama.title +
-            ' · 第 ' +
-            _detail.episodes[_index].number.toString() +
-            ' 集',
+            '${_detail.drama.title} · 第 ${_detail.episodes[_index].number} 集',
         stop: _stopForLan,
       ),
     );
@@ -997,8 +1079,9 @@ class _PlayerScreenState extends State<PlayerScreen>
         _error != null ||
         !_openedCurrent ||
         _index != widget.initialIndex ||
-        widget.store.profileEpoch != _profileEpoch)
+        widget.store.profileEpoch != _profileEpoch) {
       return;
+    }
     final state = _player.state;
     final position = state.position.inMilliseconds / 1000;
     final duration = state.duration.inMilliseconds / 1000;
@@ -1010,8 +1093,9 @@ class _PlayerScreenState extends State<PlayerScreen>
         state.buffering ||
         (state.width ?? 0) <= 0 ||
         position < handoff.position - .5 ||
-        position > handoff.position + 20)
+        position > handoff.position + 20) {
       return;
+    }
     _lanFirstPosition ??= position;
     if (position >= _lanFirstPosition! + .15) handoff.acknowledge(position);
   }
@@ -1023,8 +1107,9 @@ class _PlayerScreenState extends State<PlayerScreen>
       await _serialize(() async {
         if (_closed ||
             generation != _generation ||
-            widget.store.profileEpoch != _profileEpoch)
+            widget.store.profileEpoch != _profileEpoch) {
           return;
+        }
         _playIntent = false;
         if (!_loading) _attempt?.stable();
         _interactions.cancel();
@@ -1034,7 +1119,9 @@ class _PlayerScreenState extends State<PlayerScreen>
         if (_closed || generation != _generation) return;
         await _saveProgress(flush: true);
       });
-    } on PlaybackAttemptCancelled {}
+    } on PlaybackAttemptCancelled {
+      return;
+    }
   }
 
   Future<void> _pushToDevice() async {
@@ -1044,8 +1131,9 @@ class _PlayerScreenState extends State<PlayerScreen>
         _closed ||
         _loading ||
         _error != null ||
-        widget.mediaId != null)
+        widget.mediaId != null) {
       return;
+    }
     final generation = _generation;
     final index = _index;
     bool current() =>
@@ -1056,6 +1144,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         widget.store.profileEpoch == _profileEpoch;
     _interactions.cancel();
     setState(() => _panelOpen = true);
+    _syncPreload();
     try {
       await showLanPush(
         context,
@@ -1081,37 +1170,666 @@ class _PlayerScreenState extends State<PlayerScreen>
       }
     } finally {
       if (mounted && !_closed) setState(() => _panelOpen = false);
+      _syncPreload();
     }
   }
 
+  bool _targetCurrent(_QueueTarget target) =>
+      !_closed &&
+      mounted &&
+      target.generation == _generation &&
+      widget.store.profileEpoch == _profileEpoch &&
+      !widget.store.locked &&
+      target.quality == _requestedQuality &&
+      (target.detail.drama.id != _detail.drama.id ||
+          target.online == _forceOnline) &&
+      widget.store.allowsSource(target.detail.drama.source);
+
+  void _freezeQueuedProgress(_QueuedEpisode queued) {
+    if (queued.frozen) return;
+    queued.frozen = true;
+    final state = _player.state;
+    if (state.position >= queued.previousPosition &&
+        (queued.previousDuration <= Duration.zero ||
+            state.position <=
+                queued.previousDuration + const Duration(seconds: 2))) {
+      queued.previousPosition = state.position;
+    }
+    if (queued.previousDuration <= Duration.zero &&
+        state.duration > Duration.zero) {
+      queued.previousDuration = state.duration;
+    }
+  }
+
+  Future<void> _releaseQueuePrevious(_QueuedEpisode queued) async {
+    if (queued.previousReleased) return;
+    queued.previousReleased = true;
+    final previous = queued.previousPlan;
+    if (previous != null && previous.session != _plan?.session) {
+      await _releaseSession(previous.session);
+    }
+  }
+
+  Future<void> _prepareQueuedMedia(PlaybackPlan plan) async {
+    final target = _preloadTarget;
+    if (target == null || !_targetCurrent(target) || _preloader.suspended) {
+      return;
+    }
+    try {
+      if (_player is LunaExoPlayer) {
+        await _player.prepareNext(
+          Media(plan.url, httpHeaders: plan.headers),
+          identity: plan.session,
+          mediaType: plan.mediaType,
+        );
+      }
+      if (!_targetCurrent(target) ||
+          _preloader.suspended ||
+          _loading ||
+          !_openedCurrent ||
+          !_foreground ||
+          !_playIntent ||
+          _panelOpen ||
+          _plan == null ||
+          _preferences.enhancement.mode != VideoEnhancementMode.off ||
+          (!plan.local && !plan.preloadComplete) ||
+          plan.decryptionKey.isNotEmpty ||
+          _queueDriver == null) {
+        return;
+      }
+      final identity = plan.session.isEmpty
+          ? 'queue-${target.generation}-${target.index}-${plan.url.hashCode}'
+          : plan.session;
+      if (_queueBlockedIdentity == identity) return;
+      final existing = _queuedEpisode;
+      if (existing != null && existing.valid && existing.identity == identity) {
+        return;
+      }
+      if (existing != null) await _suspendQueuedMedia(true);
+      if (!_targetCurrent(target) || _preloader.suspended) return;
+      final queued = _QueuedEpisode(
+        target,
+        plan,
+        identity,
+        ++_queueSequence,
+        _openedDetail!,
+        _openedIndex,
+        _player.state.position,
+        _player.state.duration,
+      );
+      _queuedEpisode = queued;
+      final staged = await _queueDriver!.stage(
+        current: _plan!,
+        next: plan,
+        identity: identity,
+        generation: queued.generation,
+      );
+      if (queued.activated) return;
+      if (!queued.valid ||
+          !identical(_queuedEpisode, queued) ||
+          !_targetCurrent(target)) {
+        await _queueDriver?.clear(identity: identity);
+        return;
+      }
+      if (!staged) {
+        _queueBlockedIdentity = identity;
+        queued.cancel();
+        _queuedEpisode = null;
+        return;
+      }
+      queued.armed = true;
+      DiaryService.add(
+        '[Queue] staged episode=${target.detail.episodes[target.index].number}',
+      );
+    } catch (error) {
+      final queued = _queuedEpisode;
+      if (queued != null && !queued.activated) {
+        queued.cancel();
+        _queueBlockedIdentity = queued.identity;
+        _queuedEpisode = null;
+        try {
+          await _queueDriver?.clear(identity: queued.identity);
+        } catch (_) {}
+      }
+      DiaryService.add('[Queue] preparation fallback: $error');
+    }
+  }
+
+  Future<void> _suspendQueuedMedia(bool paused) async {
+    final queued = _queuedEpisode;
+    await _queueDriver?.suspend(paused);
+    if (paused &&
+        queued != null &&
+        identical(_queuedEpisode, queued) &&
+        !queued.activated) {
+      await _queueDriver?.clear(identity: queued.identity);
+      if (identical(_queuedEpisode, queued) && !queued.activated) {
+        queued.cancel();
+        _queuedEpisode = null;
+      }
+    }
+    if (paused && _player is LunaExoPlayer) await _player.clearPreparedNext();
+  }
+
+  void _requestPreloadSuspension(bool paused) {
+    if (_closed || _preloadPauseWanted == paused) return;
+    _preloadPauseWanted = paused;
+    _preloadControlRetry?.cancel();
+    _preloadControlRetry = null;
+    unawaited(
+      _preloader
+          .setSuspended(paused)
+          .then((_) {
+            if (!_closed && !paused) _syncPreload();
+          })
+          .catchError((Object error) {
+            DiaryService.add('[Preload] priority update failed: $error');
+            if (!_closed && _preloadPauseWanted == paused) {
+              _preloadControlRetry?.cancel();
+              _preloadControlRetry = Timer(const Duration(seconds: 3), () {
+                _preloadControlRetry = null;
+                if (_closed || _preloadPauseWanted != paused) return;
+                _preloadPauseWanted = null;
+                _syncPreload();
+              });
+            }
+          }),
+    );
+  }
+
+  void _autoAdvanceQueued(_QueuedEpisode queued) {
+    unawaited(
+      _advanceQueued(queued, automatic: true).then((handled) {
+        if (!handled &&
+            !_closed &&
+            _generation == queued.target.generation &&
+            identical(_detail, queued.previousDetail) &&
+            _index == queued.previousIndex &&
+            _foreground &&
+            _playIntent &&
+            !_panelOpen &&
+            !queued.fallbackClaimed) {
+          queued.fallbackClaimed = true;
+          unawaited(
+            _play(
+              queued.target.index,
+              nextDetail: queued.target.detail,
+              showControlsOnReady: false,
+              automaticAdvance: true,
+              useQueue: false,
+            ),
+          );
+        }
+      }),
+    );
+  }
+
+  Future<void> _abandonQueuedMedia() async {
+    final queued = _queuedEpisode;
+    if (queued == null) return;
+    _freezeQueuedProgress(queued);
+    queued.fallbackClaimed = true;
+    queued.cancel();
+    _queuedEpisode = null;
+    ++_queueSequence;
+    final detachingGeneration = _generation;
+    _queueDetaching = true;
+    try {
+      await _saveProgress(
+        flush: true,
+        snapshotDetail: queued.previousDetail,
+        snapshotIndex: queued.previousIndex,
+        snapshotPosition: queued.previousPosition,
+        snapshotDuration: queued.previousDuration,
+      );
+      if (_closed || detachingGeneration != _generation) return;
+      _resumePosition = queued.previousPosition.inMilliseconds / 1000;
+      _openedIndex = -1;
+      try {
+        await _player.stop();
+      } catch (error) {
+        DiaryService.add('[Queue] stop before detach failed: $error');
+      }
+      try {
+        await _queueDriver?.clear(identity: queued.identity);
+      } catch (error) {
+        DiaryService.add('[Queue] detach failed: $error');
+      }
+    } finally {
+      if (queued.activated) await _releaseQueuePrevious(queued);
+      _queueDetaching = false;
+    }
+  }
+
+  Future<void> _restartUnknownQueue(_QueuedEpisode queued) async {
+    final generation = _generation;
+    await _saveProgress(
+      flush: true,
+      snapshotDetail: queued.previousDetail,
+      snapshotIndex: queued.previousIndex,
+      snapshotPosition: queued.previousPosition,
+      snapshotDuration: queued.previousDuration,
+    );
+    if (_closed ||
+        generation != _generation ||
+        widget.store.profileEpoch != _profileEpoch) {
+      return;
+    }
+    await _play(
+      queued.previousIndex,
+      nextDetail: queued.previousDetail,
+      position: queued.previousPosition.inMilliseconds / 1000,
+      playWhenReady: _playIntent && _foreground,
+      showControlsOnReady: false,
+      useQueue: false,
+    );
+  }
+
+  void _queuedEvent(PlaybackQueueEvent event) {
+    final queued = _queuedEpisode;
+    if (_closed ||
+        queued == null ||
+        !queued.valid ||
+        event.identity != queued.identity ||
+        event.generation != queued.generation ||
+        widget.store.profileEpoch != _profileEpoch ||
+        widget.store.locked) {
+      return;
+    }
+    if (event.kind == PlaybackQueueEventKind.failed) {
+      DiaryService.add('[Queue] native fallback: ${event.message}');
+      if (queued.activated) {
+        queued.finish(queued.ready, false);
+      } else {
+        _queueBlockedIdentity = queued.identity;
+        queued.cancel();
+        _queuedEpisode = null;
+        unawaited(
+          _queueDriver
+              ?.clear(identity: queued.identity)
+              .catchError((Object _) {}),
+        );
+        if (event.message == 'queue_state_unknown') {
+          _freezeQueuedProgress(queued);
+          queued.fallbackClaimed = true;
+          _acceptErrors = false;
+          unawaited(_restartUnknownQueue(queued));
+        } else if (queued.advancing == null &&
+            _playIntent &&
+            !_player.state.completed &&
+            (!_player.state.playing || _player.state.buffering)) {
+          _queueRecovery(error: event.message);
+        }
+      }
+      return;
+    }
+    if (event.kind == PlaybackQueueEventKind.ready) {
+      queued.finish(queued.ready, true);
+      return;
+    }
+    if (queued.activated || !_targetCurrent(queued.target)) return;
+    _freezeQueuedProgress(queued);
+    queued.activated = true;
+    queued.armed = true;
+    queued.previousPlan = _plan;
+    queued.lease = _preloader.claimActivated(
+      queued.target.detail.drama,
+      queued.target.detail.episodes[queued.target.index],
+      quality: queued.target.quality,
+      online: queued.target.online,
+    );
+    if (queued.lease != null) queued.plan = queued.lease!.plan;
+    _attempt?.cancel();
+    _attempt = null;
+    _cancelOperations();
+    ++_generation;
+    _cancelSeasonAdvance();
+    _completedSeasonKey = null;
+    _errorTimer?.cancel();
+    _pendingError = false;
+    _acceptErrors = false;
+    _interactions.cancel();
+    _enhancement.suspend();
+    _danmaku.setPlan(null);
+    _health.reset();
+    _openedIndex = -1;
+    _openedDetail = null;
+    _preloadTarget = null;
+    _recovery.reset();
+    _decoderFailure = false;
+    _lowerQualityOffered = false;
+    _handoffOwned = false;
+    widget.handoff?.fail('接收端已更换播放内容');
+    LanController.current?.detachPlayback(_lanIdentity);
+    _lanIdentity = Object();
+    setState(() {
+      if (_detail.drama.id != queued.target.detail.drama.id) _mobileTab = 0;
+      _detail = queued.target.detail;
+      _index = queued.target.index;
+      _forceOnline = queued.target.online;
+      _plan = queued.plan;
+      _resumePosition = 0;
+      _loading = true;
+      _loadingEpisodeChange = true;
+      _smoothTransition = true;
+      _showControlsOnPlaybackReady = false;
+      _error = null;
+      _sourceBlocked = false;
+      _localFailure = false;
+    });
+    queued.finish(queued.selected, true);
+    _menuRevision.value++;
+    _attachLanPlayback();
+    if (!_foreground || !_playIntent) unawaited(_player.pause());
+    unawaited(_finishQueuedActivation(queued));
+  }
+
+  Future<void> _finishQueuedActivation(_QueuedEpisode queued) async {
+    try {
+      await _saveProgress(
+        flush: true,
+        snapshotDetail: queued.previousDetail,
+        snapshotIndex: queued.previousIndex,
+        snapshotPosition: queued.previousPosition,
+        snapshotDuration: queued.previousDuration,
+      );
+      if (queued.lease == null) throw StateError('下一集缓存交接已失效');
+      await queued.lease!.resumed.timeout(const Duration(seconds: 3));
+      final ready = await queued.ready.future.timeout(
+        const Duration(seconds: 9),
+        onTimeout: () => false,
+      );
+      if (!ready || !queued.valid) throw StateError('下一集队列未确认加载');
+      final reset = await queued.positionReset.future.timeout(
+        const Duration(seconds: 2),
+        onTimeout: () => false,
+      );
+      if (!reset ||
+          !queued.valid ||
+          _closed ||
+          !identical(_queuedEpisode, queued) ||
+          widget.store.profileEpoch != _profileEpoch) {
+        throw PlaybackAttemptCancelled();
+      }
+      _openedIndex = _index;
+      _openedDetail = _detail;
+      _resumePosition = _player.state.position.inMilliseconds / 1000;
+      _acceptErrors = true;
+      _attemptPosition = Duration.zero;
+      _savedProgressKey = null;
+      _health.reset();
+      _enhancement.mediaReady();
+      _danmaku.setPlan(queued.plan);
+      _syncDanmaku();
+      _syncWatchReminders();
+      _acknowledgeHandoff();
+      if (!_foreground || !_playIntent) await _player.pause();
+      await _interactions.applySpeed();
+      if (_closed || !queued.valid || !identical(_queuedEpisode, queued)) {
+        return;
+      }
+      setState(() {
+        _loading = false;
+        _smoothTransition = false;
+        _transitionWaitVisible = false;
+      });
+      if (queued.previousDetail.drama.id != _detail.drama.id) {
+        widget.repository.catalogUpdates.publish(_detail.drama);
+        unawaited(
+          widget.store.refreshDrama(_detail.drama).catchError((Object _) {}),
+        );
+        _showSeasonNotice(_detail, _index);
+      }
+      await _releaseQueuePrevious(queued);
+      if (_closed ||
+          !queued.valid ||
+          !identical(_queuedEpisode, queued) ||
+          widget.store.profileEpoch != _profileEpoch) {
+        return;
+      }
+      _queuedEpisode = null;
+      _queueBlockedIdentity = null;
+      queued.finish(queued.finished, true);
+      _menuRevision.value++;
+      _syncScreenOn();
+      _syncPreload();
+      DiaryService.add(
+        '[Queue] adopted episode=${_detail.episodes[_index].number}',
+      );
+    } catch (error) {
+      if (!_closed &&
+          queued.valid &&
+          identical(_queuedEpisode, queued) &&
+          widget.store.profileEpoch == _profileEpoch) {
+        await _fallbackQueuedActivation(queued, error);
+      }
+    } finally {
+      if (!queued.valid || _closed) await _releaseQueuePrevious(queued);
+      queued.finish(queued.finished, queued.activated);
+    }
+  }
+
+  Future<void> _fallbackQueuedActivation(
+    _QueuedEpisode queued,
+    Object error,
+  ) async {
+    if (queued.fallingBack) return;
+    queued.fallingBack = true;
+    final generation = _generation;
+    bool current() =>
+        !_closed &&
+        queued.valid &&
+        identical(_queuedEpisode, queued) &&
+        generation == _generation &&
+        widget.store.profileEpoch == _profileEpoch;
+    DiaryService.add('[Queue] load fallback: $error');
+    final lease = queued.lease;
+    try {
+      await _player.stop();
+    } catch (failure) {
+      DiaryService.add('[Queue] stop failed: $failure');
+    }
+    if (!current()) return;
+    try {
+      await _queueDriver?.clear(identity: queued.identity);
+    } catch (failure) {
+      DiaryService.add('[Queue] fallback detach failed: $failure');
+    }
+    if (!current()) return;
+    _queuedEpisode = null;
+    queued.valid = false;
+    _openedIndex = -1;
+    _openedDetail = null;
+    _plan = null;
+    await _releaseQueuePrevious(queued);
+    if (_closed ||
+        generation != _generation ||
+        widget.store.profileEpoch != _profileEpoch) {
+      if (lease != null && lease.plan.session != _plan?.session) {
+        await _releaseSession(lease.plan.session);
+      }
+      return;
+    }
+    await _play(
+      queued.target.index,
+      nextDetail: queued.target.detail,
+      handoffPlan: lease?.plan,
+      showControlsOnReady: false,
+      useQueue: false,
+    );
+    queued.finish(queued.finished, true);
+  }
+
+  Future<bool> _advanceQueued(_QueuedEpisode queued, {bool automatic = false}) {
+    return queued.advancing ??= () async {
+      if (_closed ||
+          !queued.valid ||
+          !identical(_queuedEpisode, queued) ||
+          widget.store.profileEpoch != _profileEpoch) {
+        return false;
+      }
+      _freezeQueuedProgress(queued);
+      try {
+        var selected = queued.activated;
+        if (automatic && !selected) {
+          selected = await queued.selected.future.timeout(
+            const Duration(milliseconds: 350),
+            onTimeout: () => false,
+          );
+        }
+        if (!selected && queued.valid && identical(_queuedEpisode, queued)) {
+          final requested = await _queueDriver!.advance(
+            identity: queued.identity,
+            play: _foreground && _playIntent,
+          );
+          if (!requested) return false;
+          selected = await queued.selected.future.timeout(
+            const Duration(seconds: 3),
+            onTimeout: () => false,
+          );
+        }
+        if (!selected) return false;
+        return await queued.finished.future.timeout(
+          const Duration(seconds: 15),
+          onTimeout: () => false,
+        );
+      } catch (error) {
+        DiaryService.add('[Queue] advance fallback: $error');
+        return queued.activated;
+      }
+    }();
+  }
+
+  void _probeQueuedSeason() {
+    if (_closed ||
+        _probingQueuedSeason ||
+        _queuedSeasonGeneration == _generation ||
+        _index != _detail.episodes.length - 1 ||
+        widget.localOnly ||
+        !widget.allowOnlineFallback ||
+        widget.mediaId != null ||
+        _detail.drama.source != 'hongguo' ||
+        _detail.drama.releaseStatus == 'ongoing' ||
+        hongguoSeriesInfo(_detail.drama) == null ||
+        widget.store.hasFreshNoNextSeason(_detail.drama)) {
+      return;
+    }
+    final state = _player.state;
+    if (state.duration <= Duration.zero ||
+        state.duration - state.position > const Duration(seconds: 30)) {
+      return;
+    }
+    final generation = _generation;
+    final detail = _detail;
+    _probingQueuedSeason = true;
+    _queuedSeasonGeneration = generation;
+    bool current() =>
+        !_closed &&
+        mounted &&
+        generation == _generation &&
+        identical(detail, _detail) &&
+        _foreground &&
+        !_panelOpen &&
+        widget.store.profileEpoch == _profileEpoch &&
+        !widget.store.locked;
+    unawaited(() async {
+      try {
+        final next = await NextSeasonResolver(widget.repository).resolve(
+          detail.drama,
+          knownDramas: widget.store.nextSeasonDramasFor(detail.drama),
+          isCurrent: current,
+        );
+        if (current() && next != null) {
+          _queuedSeason = next;
+          _syncPreload();
+        }
+      } catch (error) {
+        DiaryService.add(
+          '[Queue] next season stays on normal fallback: $error',
+        );
+      } finally {
+        _probingQueuedSeason = false;
+      }
+    }());
+  }
+
   void _syncPreload() {
-    if (_closed) return;
+    if (_closed || _queueDetaching || _queuedEpisode?.activated == true) return;
     if (!_preloadEnabled ||
-        !_foreground ||
         widget.localOnly ||
         _loading ||
         _error != null ||
         !_openedCurrent ||
         widget.store.profileEpoch != _profileEpoch ||
-        widget.store.locked ||
-        _index + 1 >= _detail.episodes.length) {
+        widget.store.locked) {
+      _preloadTarget = null;
       _preloader.clear();
       return;
     }
     final state = _player.state;
-    if (!state.playing || state.buffering || !_playIntent) return;
-    final duration = state.duration.inMilliseconds;
-    final position = state.position.inMilliseconds;
-    if (duration <= 0) return;
-    final buffered = state.buffer.inMilliseconds;
-    final fullyBuffered = buffered >= duration;
-    if (!fullyBuffered && (position < 500 || buffered - position < 2000)) {
+    final queued = _queuedEpisode;
+    if (queued != null &&
+        queued.valid &&
+        !queued.activated &&
+        !queued.frozen &&
+        state.position + const Duration(milliseconds: 500) <
+            queued.previousPosition) {
+      _freezeQueuedProgress(queued);
+      queued.finish(queued.positionReset, true);
+      if (_autoAdvance && _foreground && _playIntent && !_panelOpen) {
+        _autoAdvanceQueued(queued);
+      }
+    }
+    if (queued != null &&
+        queued.valid &&
+        queued.frozen &&
+        queued.advancing != null) {
       return;
     }
+    if (state.completed && queued?.armed == true && _playIntent) return;
+    final duration = state.duration.inMilliseconds;
+    final position = state.position.inMilliseconds;
+    final fullyBuffered =
+        duration > 0 && state.buffer.inMilliseconds >= duration;
+    final ahead = state.buffer.inMilliseconds - position;
+    if (!_foreground ||
+        !_playIntent ||
+        _panelOpen ||
+        !state.playing ||
+        state.buffering ||
+        duration <= 0 ||
+        !fullyBuffered && (position < 500 || ahead < 2000)) {
+      _requestPreloadSuspension(true);
+      return;
+    }
+    if (_preloader.suspended && !fullyBuffered && ahead < 5000) return;
+    _requestPreloadSuspension(false);
+    if (_preloader.suspended) return;
+    _QueueTarget? target;
+    if (_index + 1 < _detail.episodes.length) {
+      target = _QueueTarget(
+        _detail,
+        _index + 1,
+        _generation,
+        _requestedQuality,
+        _forceOnline,
+      );
+    } else {
+      _probeQueuedSeason();
+      final next = _queuedSeasonGeneration == _generation
+          ? _queuedSeason
+          : null;
+      if (next != null && next.episodes.isNotEmpty) {
+        target = _QueueTarget(next, 0, _generation, _requestedQuality, false);
+      }
+    }
+    if (target == null) return;
+    _preloadTarget = target;
     _preloader.prepare(
-      _detail.drama,
-      _detail.episodes[_index + 1],
-      quality: _requestedQuality,
+      target.detail.drama,
+      target.detail.episodes[target.index],
+      quality: target.quality,
+      online: target.online,
       immediate: true,
     );
   }
@@ -1319,6 +2037,9 @@ class _PlayerScreenState extends State<PlayerScreen>
       return;
     }
     _acceptErrors = false;
+    final recoveringGeneration = _generation;
+    if (_queuedEpisode != null) await _abandonQueuedMedia();
+    if (_closed || recoveringGeneration != _generation) return;
     if (weakNetwork && !_lowerQualityOffered && _lowerQuality != null) {
       _lowerQualityOffered = true;
       final generation = _generation;
@@ -1460,11 +2181,14 @@ class _PlayerScreenState extends State<PlayerScreen>
       }
       _interactions.hint('本季已播完，正在查找下一季', persistent: true);
       DiaryService.add('[Season] 查找下一季: ${detail.drama.title}');
-      final next = await NextSeasonResolver(widget.repository).resolve(
-        detail.drama,
-        knownDramas: widget.store.nextSeasonDramasFor(detail.drama),
-        isCurrent: current,
-      );
+      final next =
+          _queuedSeasonGeneration == generation && _queuedSeason != null
+          ? _queuedSeason
+          : await NextSeasonResolver(widget.repository).resolve(
+              detail.drama,
+              knownDramas: widget.store.nextSeasonDramasFor(detail.drama),
+              isCurrent: current,
+            );
       if (!current()) return;
       if (next == null) {
         _notice('本季已播完，暂未找到下一季');
@@ -1488,6 +2212,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     } catch (error) {
       DiaryService.add('[Season] 下一季加载未完成: $error');
       if (!current()) return;
+      if (!mounted) return;
       final message = error is AppFailure ? error.message : '下一季加载失败，请检查网络后重试';
       final retryable =
           error is! AppFailure || !error.code.startsWith('next_season_');
@@ -1534,42 +2259,68 @@ class _PlayerScreenState extends State<PlayerScreen>
     _syncDanmaku();
   }
 
-  Future<void> _saveProgress({bool flush = false}) async {
-    final openedDetail = _openedDetail;
+  Future<void> _saveProgress({
+    bool flush = false,
+    DramaDetail? snapshotDetail,
+    int? snapshotIndex,
+    Duration? snapshotPosition,
+    Duration? snapshotDuration,
+  }) async {
+    final openedDetail = snapshotDetail ?? _openedDetail;
+    final openedIndex = snapshotIndex ?? _openedIndex;
     if (openedDetail == null ||
-        _openedIndex < 0 ||
-        _openedIndex >= openedDetail.episodes.length ||
+        openedIndex < 0 ||
+        openedIndex >= openedDetail.episodes.length ||
         widget.store.profileEpoch != _profileEpoch) {
       return;
     }
-    final position = _player.state.position.inMilliseconds / 1000;
-    final duration = _player.state.duration.inMilliseconds / 1000;
+    final queued = _queuedEpisode;
+    final frozen =
+        snapshotPosition == null &&
+        queued != null &&
+        queued.frozen &&
+        !queued.activated &&
+        identical(openedDetail, queued.previousDetail) &&
+        openedIndex == queued.previousIndex;
+    final position =
+        (snapshotPosition ??
+                (frozen ? queued.previousPosition : _player.state.position))
+            .inMilliseconds /
+        1000;
+    final duration =
+        (snapshotDuration ??
+                (frozen ? queued.previousDuration : _player.state.duration))
+            .inMilliseconds /
+        1000;
     if (position < .1) {
       return;
     }
     final store = widget.store;
     final progressKey =
-        '${widget.mediaId ?? openedDetail.drama.id}:$_openedIndex:$position:$duration';
+        '${widget.mediaId ?? openedDetail.drama.id}:$openedIndex:$position:$duration';
     if (_savedProgressKey == progressKey && _saveWarning == null) {
       if (flush && widget.mediaId == null) LanController.current?.flush();
       return;
     }
     final entry = WatchEntry(
       drama: widget.repository.catalogUpdates.current(openedDetail.drama),
-      episode: openedDetail.episodes[_openedIndex].number,
+      episode: openedDetail.episodes[openedIndex].number,
       position: position,
       duration: duration,
       updatedAt: DateTime.now(),
     );
     try {
-      await Future<void>.value();
-      if (store.profileEpoch != _profileEpoch) return;
-      if (widget.mediaId == null) {
-        await store.saveWatch(entry);
-        if (flush) LanController.current?.flush();
-      } else {
-        await store.saveMediaWatch(widget.mediaId!, entry);
-      }
+      final pending = _progressWrites.catchError((Object _) {}).then((_) async {
+        if (store.profileEpoch != _profileEpoch) return;
+        if (widget.mediaId == null) {
+          await store.saveWatch(entry);
+          if (flush) LanController.current?.flush();
+        } else {
+          await store.saveMediaWatch(widget.mediaId!, entry);
+        }
+      });
+      _progressWrites = pending;
+      await pending;
       _savedProgressKey = progressKey;
       if (mounted && !_closed && _saveWarning != null) {
         setState(() => _saveWarning = null);
@@ -1690,8 +2441,34 @@ class _PlayerScreenState extends State<PlayerScreen>
     bool showControlsOnReady = true,
     bool automaticAdvance = false,
     bool gestureAdvance = false,
+    bool useQueue = true,
   }) async {
     final detail = nextDetail ?? _detail;
+    final queued = _queuedEpisode;
+    if (useQueue &&
+        recoveryAction == null &&
+        handoffPlan == null &&
+        position == 0 &&
+        queued != null &&
+        queued.valid &&
+        queued.armed &&
+        identical(queued.target.detail, detail) &&
+        queued.target.index == index &&
+        queued.target.quality == _requestedQuality &&
+        queued.target.online == _forceOnline) {
+      final queueGeneration = _generation;
+      if (await _advanceQueued(queued, automatic: automaticAdvance) ||
+          _generation != queueGeneration ||
+          queued.fallbackClaimed) {
+        return;
+      }
+      queued.fallbackClaimed = true;
+    }
+    final requestedGeneration = _generation;
+    if (_queuedEpisode != null) await _abandonQueuedMedia();
+    if (_closed || requestedGeneration != _generation) return;
+    _queueBlockedIdentity = null;
+    _preloadTarget = null;
     final changingSeason = !identical(detail, _detail);
     if ((Platform.isWindows && WindowsUpdateRuntime.restarting) ||
         _closed ||
@@ -1749,21 +2526,12 @@ class _PlayerScreenState extends State<PlayerScreen>
     final warmedFuture = handoffPlan != null
         ? Future<PlaybackPlan?>.value(handoffPlan)
         : recoveryAction == null && _preloadEnabled && !widget.localOnly
-        ? smooth
-              ? _preloader.takeWhenReady(
-                  detail.drama,
-                  detail.episodes[index],
-                  quality: _requestedQuality,
-                  online: _forceOnline,
-                )
-              : Future<PlaybackPlan?>.value(
-                  _preloader.take(
-                    detail.drama,
-                    detail.episodes[index],
-                    quality: _requestedQuality,
-                    online: _forceOnline,
-                  ),
-                )
+        ? _preloader.takeWhenReady(
+            detail.drama,
+            detail.episodes[index],
+            quality: _requestedQuality,
+            online: _forceOnline,
+          )
         : Future<PlaybackPlan?>.value();
     _preloader.clear();
     _transitionWaitTimer?.cancel();
@@ -2334,8 +3102,9 @@ class _PlayerScreenState extends State<PlayerScreen>
       nextPreferences,
       preserveWindowsVideoCompatibility: true,
     );
-    if (!mounted || _closed || widget.store.profileEpoch != _profileEpoch)
+    if (!mounted || _closed || widget.store.profileEpoch != _profileEpoch) {
       return;
+    }
     final qualityChanged = nextPreferences.quality != _requestedQuality;
     _enhancement.setPreferences(nextPreferences.enhancement);
     setState(() {
@@ -2429,6 +3198,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     _cancelSeasonAdvance();
     _interactions.cancel();
     setState(() => _panelOpen = true);
+    _syncPreload();
     try {
       final selection = await Navigator.of(context)
           .push<SeriesEpisodeSelection>(
@@ -2460,6 +3230,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     } finally {
       if (mounted && !_closed) {
         setState(() => _panelOpen = false);
+        _syncPreload();
         _playerFocus.requestFocus();
       }
     }
@@ -2469,6 +3240,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (_panelOpen || _closed) return;
     _interactions.cancel();
     setState(() => _panelOpen = true);
+    _syncPreload();
     final menuTheme = _showFullscreen ? AppTheme.dark : Theme.of(context);
     var browseSeasons = false;
     try {
@@ -2522,6 +3294,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     } finally {
       if (mounted && !_closed) {
         setState(() => _panelOpen = false);
+        _syncPreload();
         _playerFocus.requestFocus();
       }
     }
@@ -2530,6 +3303,12 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Future<void> _seekTo(Duration target, {bool resumeAfterSeek = false}) async {
     if (_closed || _loading || _error != null) return;
+    final seekingGeneration = _generation;
+    _requestPreloadSuspension(true);
+    try {
+      await _preloader.setSuspended(true);
+    } catch (_) {}
+    if (_closed || _loading || seekingGeneration != _generation) return;
     _cancelSeasonAdvance();
     _completedSeasonKey = null;
     _handoffOwned = false;
@@ -2580,6 +3359,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       }
       if (!_closed && generation == _generation) _syncDanmaku();
     }
+    if (!_closed && generation == _generation) _syncPreload();
   }
 
   void _seek(int seconds, {bool resumeAfterSeek = false}) {
@@ -2605,6 +3385,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   Future<void> _televisionEpisodes(BuildContext context) async {
     if (_panelOpen || _closed) return;
     setState(() => _panelOpen = true);
+    _syncPreload();
     int? index;
     try {
       index = await showDialog<int>(
@@ -2622,6 +3403,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       );
     } finally {
       if (mounted && !_closed) setState(() => _panelOpen = false);
+      _syncPreload();
     }
     if (index == -1 && mounted && !_closed) {
       await _browseSeasons();
@@ -2672,6 +3454,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   Future<void> _televisionSettings(BuildContext context) async {
     if (_panelOpen || _closed) return;
     setState(() => _panelOpen = true);
+    _syncPreload();
     TelevisionPlaybackSetting? selection;
     try {
       selection = await showDialog<TelevisionPlaybackSetting>(
@@ -2712,6 +3495,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       );
     } finally {
       if (mounted && !_closed) setState(() => _panelOpen = false);
+      _syncPreload();
     }
     if (selection == null || !mounted || _closed) return;
     try {
@@ -2766,6 +3550,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       WindowsUpdateRuntime.savePlayback = null;
     }
     _transitionWaitTimer?.cancel();
+    _preloadControlRetry?.cancel();
     _watchReminders?.removeListener(_reminderChanged);
     _watchReminders?.detachPlayback(this);
     _closed = true;
@@ -2786,6 +3571,15 @@ class _PlayerScreenState extends State<PlayerScreen>
     LanController.current?.detachPlayback(_lanIdentity);
     widget.handoff?.fail('接收端已退出播放');
     widget.store.removeListener(_accessChanged);
+    final queued = _queuedEpisode;
+    queued?.cancel();
+    _queuedEpisode = null;
+    if (queued != null) unawaited(_releaseQueuePrevious(queued));
+    final queueDisposal =
+        _queueDriver?.dispose().catchError((Object error) {
+          DiaryService.add('[Queue] cleanup incomplete: $error');
+        }) ??
+        Future<void>.value();
     _danmaku.dispose();
     _preloader.dispose();
     _generation++;
@@ -2802,7 +3596,19 @@ class _PlayerScreenState extends State<PlayerScreen>
     _interactions.dispose();
     _playerFocus.dispose();
     _menuRevision.dispose();
-    unawaited(_saveProgress(flush: true));
+    if (queued != null && !queued.activated && queued.frozen) {
+      unawaited(
+        _saveProgress(
+          flush: true,
+          snapshotDetail: queued.previousDetail,
+          snapshotIndex: queued.previousIndex,
+          snapshotPosition: queued.previousPosition,
+          snapshotDuration: queued.previousDuration,
+        ),
+      );
+    } else {
+      unawaited(_saveProgress(flush: true));
+    }
     for (final subscription in _subscriptions) {
       subscription.cancel();
     }
@@ -2815,6 +3621,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       await enhancementClosed
           .timeout(const Duration(seconds: 2))
           .catchError((Object _) {});
+      await queueDisposal;
       try {
         await _player.dispose().timeout(const Duration(seconds: 5));
       } catch (error) {
@@ -3593,6 +4400,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       _panelOpen = true;
       _mobileTab = tab;
     });
+    _syncPreload();
     var browseSeasons = false;
     try {
       await showModalBottomSheet<void>(
@@ -3631,6 +4439,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     } finally {
       if (mounted && !_closed) {
         setState(() => _panelOpen = false);
+        _syncPreload();
         _playerFocus.requestFocus();
       }
     }

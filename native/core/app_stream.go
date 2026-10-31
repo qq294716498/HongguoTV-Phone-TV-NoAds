@@ -251,6 +251,33 @@ func (stream *nativeStreamServer) nativeServe(writer http.ResponseWriter, reques
 		http.Error(writer, "播放已结束", http.StatusGone)
 		return
 	}
+	session.mu.Lock()
+	cache := session.preload
+	session.mu.Unlock()
+	localCache := false
+	if cache != nil {
+		cache.mu.Lock()
+		complete := cache.plan.PreloadComplete
+		cache.mu.Unlock()
+		if complete {
+			if stream.nativeServeEpisodeCache(writer, request, session, parts) {
+				return
+			}
+			session.mu.Lock()
+			asset, found := session.assets[parts[1]]
+			localCache = found && (asset.file != "" || len(asset.data) > 0 && asset.total <= int64(len(asset.data)))
+			session.mu.Unlock()
+		}
+	}
+	if cache != nil && !localCache {
+		ctx, finish, err := cache.beginWork(request.Context(), false)
+		if err != nil {
+			http.Error(writer, "预缓冲读取已取消", http.StatusGone)
+			return
+		}
+		defer finish()
+		request = request.WithContext(ctx)
+	}
 	if stream.nativeServeEpisodeCache(writer, request, session, parts) {
 		return
 	}

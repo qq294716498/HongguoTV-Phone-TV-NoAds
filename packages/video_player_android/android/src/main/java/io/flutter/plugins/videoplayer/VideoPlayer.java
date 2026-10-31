@@ -43,6 +43,7 @@ public abstract class VideoPlayer implements VideoPlayerInstanceApi {
   @NonNull private final PlaybackDiagnostics playbackDiagnostics;
   @NonNull private final PlaybackTransition playbackTransition;
   @Nullable private final PreparedNext preparedNext;
+  @NonNull private final PlaybackQueue playbackQueue;
   @NonNull private final FrameCapture frameCapture = new FrameCapture();
   private long mediaGeneration;
   @Nullable private Surface platformCaptureSurface;
@@ -86,6 +87,7 @@ public abstract class VideoPlayer implements VideoPlayerInstanceApi {
     exoPlayer = exoPlayerProvider.get();
     preparedNext = exoPlayerProvider instanceof PreparedPlayerProvider
         ? ((PreparedPlayerProvider) exoPlayerProvider).preparedNext : null;
+    playbackQueue = new PlaybackQueue(exoPlayer, preparedNext, () -> mediaGeneration++);
     playbackTransition = new PlaybackTransition(exoPlayer);
     playbackDiagnostics = new PlaybackDiagnostics(
         exoPlayer, surfaceProducer == null ? "surface-hybrid" : "flutter-texture");
@@ -108,6 +110,7 @@ public abstract class VideoPlayer implements VideoPlayerInstanceApi {
     java.util.Map<String, Object> values = playbackDiagnostics.snapshot();
     values.putAll(playbackTransition.snapshot());
     if (preparedNext != null) values.putAll(preparedNext.snapshot());
+    values.put("queueMediaItemCount", exoPlayer.getMediaItemCount());
     return values;
   }
 
@@ -138,10 +141,45 @@ public abstract class VideoPlayer implements VideoPlayerInstanceApi {
   void transitionTo(android.content.Context context, PreparedMediaRequest request,
       long requestElapsedMs, io.flutter.plugin.common.MethodChannel.Result result) {
     mediaGeneration++;
+    playbackQueue.invalidate();
     PreparedNext.Selection prepared = preparedNext == null ? null : preparedNext.take(request);
     playbackTransition.replace(prepared == null
         ? request.createSource(context, PreparedMediaRequest.nextGeneration()) : prepared.source,
         prepared, requestElapsedMs, result);
+  }
+
+  @UnstableApi
+  boolean stageQueue(android.content.Context context, PreparedMediaRequest request,
+      long generation, long revision) {
+    if (playbackTransition.pending()) return false;
+    PreparedNext.Selection selected = preparedNext == null ? null : preparedNext.take(request);
+    return playbackQueue.stage(request, selected == null
+        ? request.createSource(context, PreparedMediaRequest.nextGeneration()) : selected.source,
+        generation, revision, selected);
+  }
+
+  boolean advanceQueue(String identity, boolean play) {
+    return playbackQueue.advance(identity, play);
+  }
+
+  boolean clearQueue(String identity, long revision) {
+    return playbackQueue.clear(identity, revision);
+  }
+
+  void suspendQueue(boolean paused, long revision) {
+    playbackQueue.suspend(paused, revision);
+  }
+
+  void listenQueue(io.flutter.plugin.common.EventChannel.EventSink sink) {
+    playbackQueue.listen(sink);
+  }
+
+  void stopListeningQueue() {
+    playbackQueue.stopListening();
+  }
+
+  java.util.Map<String, Object> queueSnapshot() {
+    return playbackQueue.snapshot();
   }
 
   void waitForFirstFrame(long generation, io.flutter.plugin.common.MethodChannel.Result result) {
@@ -563,6 +601,7 @@ public abstract class VideoPlayer implements VideoPlayerInstanceApi {
     mediaGeneration++;
     frameCapture.dispose();
     platformCaptureSurface = null;
+    playbackQueue.dispose();
     playbackTransition.dispose();
     if (preparedNext != null) preparedNext.dispose();
     isDisposed = true;

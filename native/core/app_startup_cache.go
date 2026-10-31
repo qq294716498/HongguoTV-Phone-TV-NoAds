@@ -3,6 +3,7 @@ package core
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -150,14 +151,26 @@ func (cache *nativeEpisodeCache) publishStartup(asset nativeStreamAsset, complet
 			cache.startupWorkers.Add(1)
 			go func() {
 				defer cache.startupWorkers.Done()
-				_, err := cache.stream.nativeCENCIndex(session.ctx, session, asset)
-				cache.mu.Lock()
-				cache.plan.StartupReady = cache.plan.PreloadComplete || err == nil && session.ctx.Err() == nil
-				if err == nil {
-					cache.plan.MediaType = "mp4"
+				for {
+					work, finish, err := cache.beginWork(session.ctx, true)
+					if err != nil {
+						return
+					}
+					_, err = cache.stream.nativeCENCIndex(work, session, asset)
+					cause := context.Cause(work)
+					finish()
+					if errors.Is(cause, errNativePreloadPaused) {
+						continue
+					}
+					cache.mu.Lock()
+					cache.plan.StartupReady = cache.plan.PreloadComplete || err == nil && session.ctx.Err() == nil
+					if err == nil {
+						cache.plan.MediaType = "mp4"
+					}
+					cache.startupIndex = err == nil
+					cache.mu.Unlock()
+					return
 				}
-				cache.startupIndex = err == nil
-				cache.mu.Unlock()
 			}()
 		}
 	} else if (complete || len(asset.data) >= 256<<10) && len(asset.data) >= 12 && string(asset.data[4:8]) == "ftyp" {
