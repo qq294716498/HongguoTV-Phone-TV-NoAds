@@ -1,26 +1,52 @@
-name: Windows cleanup filesystem diagnostics
+name: Windows transaction fixture diagnostics
 
 on:
   push:
-    branches: [verify/windows-cleanup-fs-0.1.38-63]
+    branches: [verify/windows-transaction-0.1.39-64]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  filesystem:
+  synthetic:
     runs-on: windows-2022
-    timeout-minutes: 15
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.47.4'
-          channel: stable
-          cache: true
-      - run: flutter pub get --enforce-lockfile
-      - name: Verify isolated filesystem behavior with error reports
-        run: flutter test --no-pub test/windows_update_cleanup_test.dart test/windows_update_startup_test.dart --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true --reporter=expanded
+      - name: Diagnose isolated native updater cases
+        shell: pwsh
+        run: |
+          @'
+          import importlib.util
+          import json
+          from pathlib import Path
+          import tempfile
+          import traceback
+          spec = importlib.util.spec_from_file_location('transactions', 'scripts/test_windows_transaction.py')
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          def annotate(kind, title, data):
+              text = json.dumps(data, ensure_ascii=True).replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+              print(f'::{kind} title={title}::{text}', flush=True)
+          with tempfile.TemporaryDirectory(prefix='hongguo-isolated-diagnostic-') as temporary:
+              base = Path(temporary)
+              module.compile_fixtures(base)
+              modes = ['success', 'crash', 'hang', 'busy', 'tamper', 'version', 'semantic', 'architecture', 'unowned', 'junction', 'second-instance', 'cancel-before-ready', 'cancel-after-ready', 'no-handoff', 'stop-unconfirmed', 'cross-directory-client']
+              for mode in modes:
+                  print('Starting ' + mode, flush=True)
+                  try:
+                      result = module.transaction(base / mode, base, mode)
+                      annotate('notice', 'updater-' + mode, result)
+                  except BaseException as failure:
+                      files = {}
+                      for path in (base / mode).rglob('*'):
+                          if path.is_file() and path.name in ['status.txt', 'helper-diagnostics.jsonl', 'startup-processes.log', 'cleanup-receipt.json']:
+                              files[str(path.relative_to(base))] = path.read_text(encoding='utf-8', errors='replace')[-4000:]
+                      annotate('error', 'updater-' + mode, {'case': mode, 'error': str(failure), 'traceback': traceback.format_exc()[-5000:], 'files': files})
+                      raise
+          annotate('notice', 'updater-synthetic-complete', {'ok': True, 'cases': len(modes), 'realClientTested': False, 'previousArtifactOrLogAccessed': False})
+          '@ | python -u -
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
