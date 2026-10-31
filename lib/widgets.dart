@@ -103,10 +103,12 @@ class DramaCover extends StatelessWidget {
     required this.drama,
     required this.repository,
     this.radius = 14,
+    this.showMetadata = true,
   });
   final Drama drama;
   final AppRepository repository;
   final double radius;
+  final bool showMetadata;
   static bool imagesDisabled = const bool.fromEnvironment(
     'DISABLE_REMOTE_IMAGES',
   );
@@ -159,7 +161,7 @@ class DramaCover extends StatelessWidget {
               ),
             ),
           ),
-          if (drama.episodes > 0)
+          if (showMetadata && drama.episodes > 0)
             Positioned(
               left: 9,
               bottom: 9,
@@ -168,7 +170,7 @@ class DramaCover extends StatelessWidget {
                 style: const TextStyle(color: Colors.white, fontSize: 12),
               ),
             ),
-          if (drama.vip)
+          if (showMetadata && drama.vip)
             Positioned(
               left: 8,
               top: 8,

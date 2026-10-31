@@ -1185,7 +1185,8 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 if (television) ...[
                   SizedBox(
-                    width: 164,
+                    width: (MediaQuery.textScalerOf(context).scale(17) * 4 + 92)
+                        .clamp(164.0, double.infinity),
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(8, 24, 8, 12),
                       child: Column(

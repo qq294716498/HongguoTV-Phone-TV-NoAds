@@ -14,6 +14,7 @@ import 'models.dart';
 import 'remote_widgets.dart';
 import 'widgets.dart';
 import 'television_search_field.dart';
+import 'television_saved_library.dart';
 
 class SavedLibrary extends StatefulWidget {
   const SavedLibrary({
@@ -155,7 +156,12 @@ class _SavedLibraryState extends State<SavedLibrary> {
     );
   }
 
-  Widget _tile(Drama drama, {FocusNode? focusNode, VoidCallback? onFocus}) {
+  Widget _tile(
+    Drama drama, {
+    FocusNode? focusNode,
+    VoidCallback? onFocus,
+    bool compact = false,
+  }) {
     final watched = widget.history
         ? widget.store.watched(drama.id)
         : widget.store.seriesWatch(drama);
@@ -168,6 +174,26 @@ class _SavedLibraryState extends State<SavedLibrary> {
         ? '已追剧'
         : null;
     final season = watched == null ? null : hongguoSeriesInfo(watched.drama);
+    if (compact) {
+      return TelevisionSavedTile(
+        key: ValueKey('saved-${drama.id}'),
+        drama: target,
+        repository: widget.repository,
+        focusNode: focusNode,
+        onFocus: onFocus,
+        onTap: () => _open(target, resume: true),
+        onMore: () => _actions(drama),
+        actions: DramaActionButton(
+          drama: drama,
+          onPressed: () => _actions(drama),
+        ),
+        badge: badge,
+        hasNextSeason: hasNextSeason,
+        subtitle: watched == null
+            ? SourceSite.byId(drama.source).name
+            : '${season == null ? '' : '第 ${season.season} ${season.unit} · '}第 ${watched.episode} 集 · ${formatPosition(watched.position)}',
+      );
+    }
     return DramaTile(
       key: ValueKey('saved-${drama.id}'),
       drama: target,
@@ -354,6 +380,50 @@ class _SavedLibraryState extends State<SavedLibrary> {
     );
     return LayoutBuilder(
       builder: (context, constraints) {
+        if (AppLayout.isTelevision(context) && !widget.history) {
+          final minimumWidth = MediaQuery.textScalerOf(
+            context,
+          ).scale(240).clamp(240.0, 300.0);
+          final columns = ((constraints.maxWidth - 20) / (minimumWidth + 12))
+              .floor()
+              .clamp(1, 6);
+          return Column(
+            children: [
+              TelevisionSavedHeader(
+                count: all.length,
+                search: _search,
+                onChanged: (_) => setState(() {}),
+                onClear: () => setState(_search.clear),
+                updates: _updates,
+                onRefresh: () => _refreshUpdates(force: true),
+                resume: resume,
+                onContinue: resume == null
+                    ? null
+                    : () => _open(resume.drama, resume: true),
+              ),
+              Expanded(
+                child: items.isEmpty
+                    ? empty
+                    : RemoteGrid(
+                        key: ValueKey(
+                          'saved-tv-${widget.history}-${_search.text}',
+                        ),
+                        itemKeys: items.map((item) => item.id).toList(),
+                        columns: columns,
+                        itemExtent: TelevisionSavedTile.extentFor(context),
+                        spacing: 12,
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                        itemBuilder: (_, index, node, onFocus) => _tile(
+                          items[index],
+                          focusNode: node,
+                          onFocus: onFocus,
+                          compact: true,
+                        ),
+                      ),
+              ),
+            ],
+          );
+        }
         if (AppLayout.isTelevision(context)) {
           final columns = ((constraints.maxWidth - 36) / 150).floor().clamp(
             1,

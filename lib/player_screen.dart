@@ -138,6 +138,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   int _generation = 0;
   int _requestedQuality = 0;
   bool _loading = true;
+  bool _loadingEpisodeChange = false;
   bool _smoothTransition = false;
   bool _transitionWaitVisible = false;
   Timer? _transitionWaitTimer;
@@ -1794,6 +1795,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     _showControlsOnPlaybackReady = showControlsOnReady;
     setState(() {
       if (changingSeason || _index != index) _lowerQualityOffered = false;
+      _loadingEpisodeChange = changingSeason || _index != index;
       _detail = detail;
       if (changingSeason) _mobileTab = 0;
       _index = index;
@@ -3355,6 +3357,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                 ),
               if (_televisionDevice &&
                   _loading &&
+                  !_loadingEpisodeChange &&
                   _error == null &&
                   !hideOverlayForPictureInPicture)
                 Positioned(

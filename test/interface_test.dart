@@ -8,6 +8,7 @@ import 'package:duanju_app/local_store.dart';
 import 'package:duanju_app/main.dart';
 import 'package:duanju_app/models.dart';
 import 'package:duanju_app/widgets.dart';
+import 'package:duanju_app/television_saved_library.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -147,7 +148,7 @@ void main() {
     (const Size(1280, 800), 1.0, false),
     (const Size(960, 540), 1.0, true),
   ]) {
-    testWidgets('posters align across catalog and saved pages at $layout', (
+    testWidgets('posters align while TV follows use compact cards at $layout', (
       tester,
     ) async {
       viewport(tester, layout.$1, layout.$2);
@@ -170,6 +171,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       Size? catalogSize;
+      Size? catalogTileSize;
       for (var tab = 0; tab < 3; tab++) {
         if (tab > 0) {
           final destination = layout.$3
@@ -184,12 +186,24 @@ void main() {
           await tester.pumpAndSettle();
         }
         final covers = find.byType(DramaCover);
-        final tiles = find.byType(DramaTile);
+        final compact = layout.$3 && tab == 1;
+        final tiles = find.byType(compact ? TelevisionSavedTile : DramaTile);
         expect(covers, findsNWidgets(3));
+        expect(tiles, findsNWidgets(3));
         final first = tester.getRect(covers.first);
         catalogSize ??= first.size;
-        expect(first.width, closeTo(catalogSize.width, .01));
-        expect(first.height, closeTo(catalogSize.height, .01));
+        catalogTileSize ??= tester.getSize(tiles.first);
+        if (compact) {
+          expect(first.width, lessThan(catalogSize.width));
+          expect(first.height, lessThan(catalogSize.height));
+          expect(
+            tester.getSize(tiles.first).height,
+            lessThan(catalogTileSize.height),
+          );
+        } else {
+          expect(first.width, closeTo(catalogSize.width, .01));
+          expect(first.height, closeTo(catalogSize.height, .01));
+        }
         for (var index = 0; index < 3; index++) {
           final rect = tester.getRect(covers.at(index));
           expect(rect.width / rect.height, closeTo(2 / 3, .001));
