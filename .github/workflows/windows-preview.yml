@@ -2,7 +2,7 @@ name: Windows desktop
 
 on:
   push:
-    branches: ['windows/**', fix/hongguo-playback-release-0.1.22-47, release/windows-android-0.1.22-47, release/windows-android-0.1.23-48, release/windows-android-0.1.39-64, candidate/hongguo-retry-single-instance-0.1.23-48]
+    branches: ['windows/**', fix/hongguo-playback-release-0.1.22-47, release/windows-android-0.1.22-47, release/windows-android-0.1.23-48, release/windows-android-0.1.42-67, candidate/hongguo-retry-single-instance-0.1.23-48]
   workflow_dispatch:
     inputs:
       publish_release:
@@ -112,6 +112,9 @@ jobs:
       - name: Verify native Windows video configuration and pixel boundaries
         timeout-minutes: 20
         run: flutter test -d windows integration_test/windows_video_layout_test.dart --no-pub --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true --reporter=expanded
+      - name: Verify native single-player queue and fallback with synthetic media
+        timeout-minutes: 10
+        run: flutter test -d windows integration_test/windows_playback_queue_test.dart --no-pub --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true --reporter=expanded
       - name: Verify update commit, restart, rollback and locked-directory handling
         run: python scripts/test_windows_transaction.py
       - name: Record Authenticode status
@@ -137,7 +140,7 @@ jobs:
           retention-days: 14
 
   release:
-    if: github.ref == 'refs/heads/release/windows-android-0.1.39-64' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_release))
+    if: github.ref == 'refs/heads/release/windows-android-0.1.42-67' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_release))
     needs: [checks, windows]
     runs-on: ubuntu-latest
     timeout-minutes: 20

@@ -12,11 +12,11 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[1]
 output = root / 'dist/windows'
 repository = 'qq294716498/HongguoTV-Phone-TV-NoAds'
-release_branch = 'release/windows-android-0.1.39-64'
-approved_source = '59cee3a00f8e97c49483e485569e7deaf2805383'
-previous_windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48', 'windows-v0.1.24-49', 'windows-v0.1.25-50', 'windows-v0.1.29-54', 'windows-v0.1.30-55', 'windows-v0.1.31-56', 'windows-v0.1.32-57', 'windows-v0.1.34-59', 'windows-v0.1.38-63')
-previous_android_tag = 'app-v0.1.38-63'
-previous_android_commit = '3994339b3c57d1e94f2d203defa3c07f23de500e'
+release_branch = 'release/windows-android-0.1.42-67'
+approved_source = 'e4dc42891766f8931248245fee6c982472e9338e'
+previous_windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48', 'windows-v0.1.24-49', 'windows-v0.1.25-50', 'windows-v0.1.29-54', 'windows-v0.1.30-55', 'windows-v0.1.31-56', 'windows-v0.1.32-57', 'windows-v0.1.34-59', 'windows-v0.1.38-63', 'windows-v0.1.39-64')
+previous_android_tag = 'app-v0.1.39-64'
+previous_android_commit = '963ae470a6e36cb6186673c6757c6c4d28c753c7'
 pending_publication_note = '公开发布核验进行中：尚未完成 Windows 公网 ZIP 下载、升级通道及 Android Latest 隔离检查。'
 verified_publication_note = '公开发布核验已完成：Windows 公网 ZIP 下载与 SHA-256、正式升级通道和 API 限流回退检查通过；Android Latest 隔离及旧版本资产保持检查通过。'
 release_only_paths = frozenset({
@@ -26,6 +26,8 @@ release_only_paths = frozenset({
     'scripts/publish_windows_stable.py', 'scripts/test_windows_stable_publish.py',
     'scripts/reuse_windows_package.py', 'scripts/test_reuse_windows_package.py',
     'test/app_update_live_test.dart', 'test/windows_update_live_test.dart',
+    'integration_test/windows_playback_queue_test.dart',
+    'scripts/verify_android_player_tests.py', 'scripts/test_verify_android_player_tests.py',
     'scripts/test_windows_single_instance_native.py',
     'scripts/tests/windows_single_instance_harness.cpp',
 })
@@ -49,6 +51,10 @@ def github(*arguments):
 def release_description(version):
     return (
         f'红果TV Windows {version} · x64\n\n'
+        '- 单播放器队列提前准备经过核验的下一集媒体，按原生实际切项事件交接集数、标题、弹幕和观看记录；不创建第二播放器或预热第二个解码器。格式或能力不满足时沿用普通缓存播放回退；慢网、编码变化仍可能停顿，不承诺物理音画零间隙。\n'
+        '- 当前集缓冲不足、暂停、打开菜单或转入后台时，优先当前播放，暂停下一集远端预取并保留缓存会话及已收片段；恢复时校验候选代次，避免旧任务重挂或覆盖新选择。\n'
+        '- 搜索输入保留输入法组合文字和光标，减少每键目录过滤与排序，修复同文本组合提交的候选显示、旧结果迟到和草稿误触发分页；实际设备输入延迟仍待验收。\n'
+        '- TV 追剧页压缩顶部并提高卡片密度，排行榜改为随宽度与字体自适应的多列多行卡片，保留遥控焦点和返回位置；正常切集加载不再自动弹出底部恢复按钮。\n'
         '- 优化下一季检查：优先定向搜索，按需核对官方分组，只提示紧接的下一季；命中立即显示，最多并行检查两部剧。\n'
         '- 复用搜索及检查缓存；有效无结果缓存十分钟，手动刷新可撤销旧提示。缺季、同名或部分响应证据不足时不误报，保留观看进度和追剧记录。\n'
         '- 默认保留自动解码。在“设置与备份 → 视频兼容模式”中可主动开启绿边兼容模式，保存后重新打开播放页生效，不中断当前播放。回拷模式可能增加性能开销，并影响硬件 VSR 增强；报告者 Intel 设备上的绿边效果尚未验收，不保证能够解决。\n'
@@ -59,7 +65,7 @@ def release_description(version):
 
 def finalize_release_notes(tag):
     published = json.loads(github('api', f'repos/{repository}/releases/tags/{tag}'))
-    if tag != 'windows-v0.1.39-64' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
+    if tag != 'windows-v0.1.42-67' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
         raise ValueError('Only the current verified Windows stable release notes may be finalized')
     body = published['body']
     if body.count(pending_publication_note) != 1:
@@ -118,6 +124,21 @@ def validate_single_instance(value):
         raise ValueError('Native single-instance behavior not validated with MSVC')
     if value.get('sourceCommit') != os.environ['GITHUB_SHA'] or value.get('workflowRun') != os.environ['GITHUB_RUN_ID']:
         raise ValueError('Native single-instance evidence must come from this source and workflow run')
+
+
+def validate_playback_queue(value, version, build):
+    expected = {'natural', 'manual-paused', 'suspend-resume', 'failed-fallback'}
+    cases = value.get('cases', [])
+    if value.get('ok') is not True or value.get('nativeExecuted') is not True or value.get('playerCount') != 1 or value.get('version') != version or value.get('build') != int(build):
+        raise ValueError('Native single-player queue identity was not validated')
+    if value.get('sourceCommit') != os.environ['GITHUB_SHA'] or str(value.get('workflowRun')) != os.environ['GITHUB_RUN_ID']:
+        raise ValueError('Native queue evidence must come from this source and workflow run')
+    if len(cases) != len(expected) or {item.get('case') for item in cases} != expected:
+        raise ValueError('Native queue cases are incomplete or duplicated')
+    for item in cases:
+        before, after = item.get('nativeHandleBefore'), item.get('nativeHandleAfter')
+        if item.get('ok') is not True or item.get('samePlayer') is not True or not before or str(before) in {'0', '0x0'} or before != after:
+            raise ValueError('Native queue must retain one actual player across every case')
 
 
 def publish_channel(tag, version, build):
@@ -187,8 +208,8 @@ def main():
     version, build = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(encoding='utf-8'), re.MULTILINE).group(1).split('+')
     if not re.fullmatch(r'\d+\.\d+\.\d+', version):
         raise ValueError('Only Windows stable releases are allowed')
-    if version != '0.1.39' or build != '64':
-        raise ValueError('This workflow only publishes Windows 0.1.39+64')
+    if version != '0.1.42' or build != '67':
+        raise ValueError('This workflow only publishes Windows 0.1.42+67')
     tag = f'windows-v{version}-{build}'
     package = output / f'HongguoTV-{version}-windows-x64.zip'
     if sys.argv[1] == 'stage':
@@ -203,6 +224,7 @@ def main():
         signature = read_json('Windows-signature.json')
         transactions = read_json('Windows-update-transaction.json')
         validate_single_instance(read_json('Windows-single-instance-native.json'))
+        validate_playback_queue(read_json('Windows-playback-queue.json'), version, build)
         cases = transactions.get('cases', [])
         expected_cases = {'success', 'crash', 'hang', 'busy', 'tamper', 'version', 'semantic', 'architecture', 'unowned', 'junction', 'second-instance', 'cross-directory-client', 'cancel-before-ready', 'cancel-after-ready', 'no-handoff', 'stop-unconfirmed', 'real-client-startup-ack', 'real-client-cleanup-retry'}
         if transactions.get('ok') is not True or transactions.get('build') != int(build) or transactions.get('version') != version or len(cases) != len(expected_cases) or {item.get('case') for item in cases} != expected_cases or not all(item.get('ok') is True for item in cases):
@@ -252,7 +274,7 @@ def main():
         write_json('Android-isolation.json', {'before': android, 'androidParserUnchanged': True,
                                               'parserSha256': hashlib.sha256(old.encode()).hexdigest()})
         subprocess.run([sys.executable, 'scripts/finish_task.py', '--message',
-                        '完成 Windows 0.1.39 x64 下一季定向搜索、官方分组核验、缓存和相邻季优化的新构建及自动化验证；实体设备仍未验收'], check=True)
+                        '完成 Windows 0.1.42 x64 单播放器队列与安全预取、搜索输入及TV布局的新构建和自动化验证；实体设备音画连续性仍未验收'], check=True)
         subprocess.run([sys.executable, 'scripts/sync_source.py', '--check'], check=True)
         source = max(root.parent.glob('真果·鉴-*.zip'), key=lambda file: file.stat().st_mtime_ns)
         source_package = output / f'HongguoTV-{version}-source.zip'
@@ -269,18 +291,18 @@ def main():
             'formatAndAnalysisPassed': True, 'pythonTestsPassed': True,
             'flutterDefaultAndAllSourceTestsPassed': True, 'goRaceDefaultAndAllSourcesPassed': True,
             'windowsCompileAndPackageValidationPassed': True, 'nativeUpdateTransactionsPassed': True,
-            'nativeSingleInstancePassed': True,
+            'nativeSingleInstancePassed': True, 'nativeSinglePlayerQueuePassed': True,
             'nativeTrayAndMiniWindowPassed': True, 'unsigned': True,
             'sourceArchiveSha256': hashlib.file_digest(source_package.open('rb'), 'sha256').hexdigest(),
             'notTested': ['real-provider playback on physical Windows hardware', 'long-running episode/season transitions',
                           'public-release-to-running-previous-client replacement', 'consumer Windows 10/11 GPU/CPU compatibility',
-                          'audio device output']})
+                          'audio device output', 'physical audio/display continuity', 'actual Android IME latency', 'macOS queue playback']})
         notes = release_description(version)
         notes += f'\n源码提交：https://github.com/{repository}/commit/{commit}\n\nCI：{ci}\n\n校验：SHA256SUMS.txt。\n\n{pending_publication_note}\n'
         notes_file = Path(os.environ['RUNNER_TEMP']) / 'windows-release-notes.md'
         notes_file.write_text(notes, encoding='utf-8')
         assets = [package, source_package] + [output / name for name in
-                 ['Windows-validation.json', 'Windows-smoke.json', 'Windows-signature.json', 'Windows-update-transaction.json', 'Windows-single-instance-native.json', 'Source-and-checks.json']]
+                 ['Windows-validation.json', 'Windows-smoke.json', 'Windows-signature.json', 'Windows-update-transaction.json', 'Windows-single-instance-native.json', 'Windows-playback-queue.json', 'Source-and-checks.json']]
         subprocess.run(['gh', 'release', 'create', tag, *map(str, assets), '--target', commit,
                         '--title', f'红果TV Windows {version} · x64 未签名正式版',
                         '--notes-file', str(notes_file), '--draft', '--latest=false'], check=True)

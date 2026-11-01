@@ -2,7 +2,7 @@ name: Android stable release
 
 on:
   push:
-    branches: [fix/hongguo-playback-release-0.1.22-47, release/windows-android-0.1.22-47, release/windows-android-0.1.23-48, release/windows-android-0.1.39-64, candidate/hongguo-retry-single-instance-0.1.23-48]
+    branches: [fix/hongguo-playback-release-0.1.22-47, release/windows-android-0.1.22-47, release/windows-android-0.1.23-48, release/windows-android-0.1.42-67, candidate/hongguo-retry-single-instance-0.1.23-48]
   workflow_dispatch:
     inputs:
       publish_release:
@@ -118,7 +118,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
       - uses: actions/setup-go@v5
         with:
           go-version-file: native/go.mod
@@ -138,6 +138,33 @@ jobs:
         run: |
           echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/28.2.13676358" >> "$GITHUB_ENV"
           test -x "$ANDROID_SDK_ROOT/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+      - run: flutter pub get --enforce-lockfile
+      - name: Run native single-player queue and complete plugin JVM regressions
+        working-directory: android
+        run: gradle :video_player_android:testDebugUnitTest
+      - name: Verify native queue case coverage and record exact source
+        run: python3 scripts/verify_android_player_tests.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-player-junit-${{ steps.package_identity.outputs.version }}
+          path: |
+            build/video_player_android/test-results/testDebugUnitTest/
+            build/video_player_android/reports/tests/testDebugUnitTest/
+            dist/android/Android-player-tests.json
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Stop the Java 21 test daemon before APK compilation
+        working-directory: android
+        run: gradle --stop
+      - name: Restore Java 17 for the existing signed APK build
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
       - name: Configure Android signing
         id: signing
         run: |
@@ -162,15 +189,15 @@ jobs:
           retention-days: 14
   release:
     needs: [checks, android]
-    if: github.ref == 'refs/heads/release/windows-android-0.1.39-64' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_release))
+    if: github.ref == 'refs/heads/release/windows-android-0.1.42-67' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_release))
     runs-on: ubuntu-latest
     timeout-minutes: 35
     permissions:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
-      EXPECTED_UPDATE_TAG: app-v0.1.39-64
-      EXPECTED_WINDOWS_TAG: windows-v0.1.39-64
+      EXPECTED_UPDATE_TAG: app-v0.1.42-67
+      EXPECTED_WINDOWS_TAG: windows-v0.1.42-67
       CHECK_LIVE_UPDATE: 'true'
       CHECK_UPDATE_DOWNLOAD: 'true'
     steps:
@@ -225,7 +252,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: android-0.1.39-release-evidence
+          name: android-0.1.42-release-evidence
           path: |
             dist/android/*
             dist/update-check/*-update-check.json

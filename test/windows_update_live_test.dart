@@ -59,6 +59,7 @@ void main() {
         '0.1.23': 48,
         '0.1.24': 49,
         '0.1.38': 63,
+        '0.1.39': 64,
       }.entries) {
         final upgrade = AppRelease.parseWindows(
           metadata,
