@@ -14,16 +14,16 @@ root = Path(__file__).resolve().parents[1]
 output = root / 'dist/android'
 repository = 'qq294716498/HongguoTV-Phone-TV-NoAds'
 certificate = '55c3c3395a00e56e99b8bfd580b14c99618da74db19692a2e42606eb05c47ba9'
-windows_tag = 'windows-v0.1.43-68'
-windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48', 'windows-v0.1.24-49', 'windows-v0.1.25-50', 'windows-v0.1.29-54', 'windows-v0.1.30-55', 'windows-v0.1.31-56', 'windows-v0.1.32-57', 'windows-v0.1.34-59', 'windows-v0.1.38-63', 'windows-v0.1.39-64', windows_tag)
-previous_android_tag = 'app-v0.1.39-64'
-previous_android_commit = '963ae470a6e36cb6186673c6757c6c4d28c753c7'
+windows_tag = 'windows-v0.1.45-70'
+windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48', 'windows-v0.1.24-49', 'windows-v0.1.25-50', 'windows-v0.1.29-54', 'windows-v0.1.30-55', 'windows-v0.1.31-56', 'windows-v0.1.32-57', 'windows-v0.1.34-59', 'windows-v0.1.38-63', 'windows-v0.1.39-64', 'windows-v0.1.43-68', windows_tag)
+previous_android_tag = 'app-v0.1.43-68'
+previous_android_commit = '54c17cb7048acbb4c05f8d7075d01d7c8ce88ece'
 pending_publication_note = '公开发布核验进行中：尚未完成三 ABI 公网下载、签名复核及 Android / Windows 升级通道隔离检查。'
 verified_publication_note = '公开发布核验已完成：三 ABI 公网下载、SHA-256、正式证书与版本复核通过；Android Latest 和 Windows 升级通道隔离、旧版本资产保持检查通过。'
 windows_verified_publication_note = '公开发布核验已完成：Windows 公网 ZIP 下载与 SHA-256、正式升级通道和 API 限流回退检查通过；Android Latest 隔离及旧版本资产保持检查通过。'
 offsets = {'arm64-v8a': 2000, 'armeabi-v7a': 1000, 'x86_64': 4000}
-release_branch = 'release/windows-android-0.1.43-68'
-approved_source = '4850f297edba222d69eda1ef74565f904e5d060e'
+release_branch = 'release/windows-android-0.1.45-70'
+approved_source = '9efaebcf3b3ea28b94bb7fb510a6a423615da277'
 release_only_paths = frozenset({
     'README.md', '.github/workflows/android-stable.yml',
     '.github/workflows/windows-preview.yml',
@@ -34,6 +34,7 @@ release_only_paths = frozenset({
     'scripts/test_windows_single_instance_native.py',
     'scripts/tests/windows_single_instance_harness.cpp',
     'integration_test/windows_playback_queue_test.dart',
+    'integration_test/windows_app_autoplay_chain_test.dart',
     'scripts/verify_android_player_tests.py', 'scripts/test_verify_android_player_tests.py',
 })
 
@@ -56,6 +57,10 @@ def github(*arguments):
 def release_description(version):
     return (
         f'红果TV Android {version} · 手机 / Android TV\n\n'
+        '- 修复自动续播后后续集只播一秒就连续跳集的问题：按媒体代次和控制器身份过滤旧异步进度，忽略未知时长窗口的伪位置；迟到的重复 ready 不再回写当前时钟、暂停或真实完成状态。\n'
+        '- 自动切集同时校验当前完成状态和片尾位置，位置回退本身不再触发下一集；等待原生媒体身份确认，未确认则恢复当前集，旧事件按身份和代次隔离。\n'
+        '- 下一集预加载和自动连播开关按实际选择保存并生效；默认仍开启，关闭自动连播时保留按需缓存而不挂入原生自动队列，不通过关闭默认续播掩盖故障。\n'
+        '- “已追剧”左上角标改为灰白底深灰字，“已有下季”保留强调色；有效紧接下一季仍优先，追剧页不重复显示已追剧。\n'
         '- 多季浏览页增加顶部本系列标题或季号搜索与横向季封面，保留当前季、选集和观看进度；我的追剧卡片移除重复“已追剧”字样，其他页面改用左上角紧凑斜角标；已有有效紧接下一季时优先显示“已有下季”，不叠加“已追剧”，避免遮挡封面底部季数。\n'
         '- 优化 APK 搜索输入：避免每键重建目录、过滤和排序，保留输入法组合状态；联想仅取消已发请求，迟到结果、快速输入、清空、提交和返回按当前查询生效。\n'
         '- TV 排行榜改为随宽度和字体调整的多列多行卡片；电视“我的追剧”顶区紧凑化，保留可读文字、遥控焦点和返回位置。正常切集加载不再自动弹出底部恢复按钮。\n'
@@ -73,7 +78,7 @@ def release(tag):
 
 def finalize_release_notes(tag):
     published = release(tag)
-    if tag != 'app-v0.1.43-68' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
+    if tag != 'app-v0.1.45-70' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
         raise ValueError('Only the current verified Android stable release notes may be finalized')
     body = published['body']
     if body.count(pending_publication_note) != 1:
@@ -95,7 +100,7 @@ def snapshot(value):
 def validated_windows_snapshots(commit):
     published = {name: release(name) for name in windows_tags}
     candidate = published[windows_tag]
-    required = {'Windows-update-check.json', 'Windows-update-channel.json', 'Windows-update-transaction.json', 'Windows-single-instance-native.json', 'Windows-playback-queue.json', 'Android-isolation.json', 'SHA256SUMS.txt'}
+    required = {'Windows-update-check.json', 'Windows-update-channel.json', 'Windows-update-transaction.json', 'Windows-single-instance-native.json', 'Windows-playback-queue.json', 'Windows-app-autoplay-chain.json', 'Android-isolation.json', 'SHA256SUMS.txt'}
     if candidate['draft'] or candidate['prerelease'] or candidate['target_commitish'] != commit or not required.issubset({asset['name'] for asset in candidate['assets']}) or windows_verified_publication_note not in candidate.get('body', ''):
         raise ValueError('Published Windows baseline is not finalized or has a different source')
     return {name: snapshot(value) for name, value in published.items()}
@@ -103,7 +108,7 @@ def validated_windows_snapshots(commit):
 
 def wait_for_windows(commit, timeout=1200):
     deadline = time.monotonic() + timeout
-    required = {'Windows-update-check.json', 'Windows-update-channel.json', 'Windows-update-transaction.json', 'Windows-single-instance-native.json', 'Windows-playback-queue.json', 'Android-isolation.json', 'SHA256SUMS.txt'}
+    required = {'Windows-update-check.json', 'Windows-update-channel.json', 'Windows-update-transaction.json', 'Windows-single-instance-native.json', 'Windows-playback-queue.json', 'Windows-app-autoplay-chain.json', 'Android-isolation.json', 'SHA256SUMS.txt'}
     while time.monotonic() < deadline:
         result = subprocess.run(['gh', 'api', f'repos/{repository}/releases/tags/{windows_tag}'], capture_output=True, text=True)
         if result.returncode == 0:
@@ -151,7 +156,7 @@ def validate_android_player_report(report, version, build, commit):
     expected_run = f'https://github.com/{repository}/actions/runs/{os.environ["GITHUB_RUN_ID"]}'
     if report.get('ok') is not True or report.get('version') != version or report.get('build') != build or report.get('sourceCommit') != commit or report.get('workflowRun') != expected_run:
         raise ValueError('Android native player report identity does not match this release')
-    if report.get('testCount', 0) < 155 or report.get('suiteCount', 0) < 20 or any(report.get(key) != 0 for key in ['failures', 'errors', 'skipped']):
+    if report.get('testCount', 0) < 156 or report.get('suiteCount', 0) < 20 or any(report.get(key) != 0 for key in ['failures', 'errors', 'skipped']):
         raise ValueError('Android native player regression gate did not pass in full')
     if report.get('realDevicePlaybackVerified') is not False:
         raise ValueError('JVM player tests cannot claim physical device verification')
@@ -165,8 +170,8 @@ def main():
     os.chdir(root)
     version, raw_build = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(), re.M).group(1).split('+')
     build = int(raw_build)
-    if version != '0.1.43' or build != 68:
-        raise ValueError('This workflow only publishes Android 0.1.43+68')
+    if version != '0.1.45' or build != 70:
+        raise ValueError('This workflow only publishes Android 0.1.45+70')
     validate_release_source(os.environ['GITHUB_SHA'])
     tag = f'app-v{version}-{build}'
     phase = sys.argv[1]
@@ -192,7 +197,7 @@ def main():
                 raise ValueError('A newer or reserved Android build already exists')
         validate_android_player_report(read('Android-player-tests.json'), version, build, os.environ['GITHUB_SHA'])
         write('Release-before.json', {'android': snapshot(latest), 'windows': validated_windows_snapshots(os.environ['GITHUB_SHA'])})
-        subprocess.run([sys.executable, 'scripts/finish_task.py', '--message', 'Android 0.1.43 多季顶部搜索与徽标、搜索输入、TV多行布局及单播放器队列安全预取；三ABI既有正式签名和原生队列自动化通过，实体设备仍未验收'], check=True)
+        subprocess.run([sys.executable, 'scripts/finish_task.py', '--message', 'Android 0.1.45 连续自动切集时钟与媒体代次修复、真实播放开关及灰白角标；三ABI既有正式签名和五集原生队列自动化通过，实体设备仍未验收'], check=True)
         subprocess.run([sys.executable, 'scripts/sync_source.py', '--check'], check=True)
         source = max(root.parent.glob('真果·鉴-*.zip'), key=lambda p: p.stat().st_mtime_ns)
         source_package = output / f'HongguoTV-{version}-source.zip'
@@ -205,6 +210,7 @@ def main():
               'sourceArchiveSha256': digest(source_package), 'expectedCertificate': certificate,
               'formatAnalysisPythonFlutterAndGoRacePassed': True, 'allThreeSignedApksValidated': True,
               'androidPlayerJvmTestsPassed': True, 'androidPlayerJvmReport': 'Android-player-tests.json',
+              'androidFiveEpisodeQueueJvmRequiredCaseVerified': True,
               'realPhoneOrTvPerformanceMeasured': False, 'realDevicePlaybackVerified': False})
         notes = release_description(version)
         notes += f'\n源码：https://github.com/{repository}/commit/{head}\n\nCI：https://github.com/{repository}/actions/runs/{os.environ["GITHUB_RUN_ID"]}\n\n手机 / TV 继续共用 com.hongguo.tv、既有正式证书和 Android 8.0 最低版本。真实手机 / TV 覆盖安装、流畅度、解码和长时间连播仍未实测。\n\n{pending_publication_note}\n'

@@ -21,12 +21,12 @@ class AndroidPlayerReportTests(unittest.TestCase):
             ET.ElementTree(suite).write(self.results / f'TEST-{name}.xml')
 
     def summarize(self):
-        return summarize(self.results, '0.1.43', 68, self.commit, self.run)
+        return summarize(self.results, '0.1.45', 70, self.commit, self.run)
 
     def test_complete_passed_reports_keep_exact_identity_and_queue_cases(self):
         report = self.summarize()
         self.assertTrue(report['ok'])
-        self.assertEqual(report['testCount'], 155)
+        self.assertEqual(report['testCount'], 156)
         self.assertEqual(report['suiteCount'], 20)
         self.assertEqual(report['sourceCommit'], self.commit)
         self.assertEqual(report['workflowRun'], self.run)
@@ -37,6 +37,18 @@ class AndroidPlayerReportTests(unittest.TestCase):
         queue = self.results / 'TEST-io.flutter.plugins.videoplayer.PlaybackQueueTest.xml'
         queue.unlink()
         with self.assertRaises(ValueError):
+            self.summarize()
+
+    def test_five_episode_chain_is_required_even_with_complete_total_count(self):
+        path = self.results / 'TEST-io.flutter.plugins.videoplayer.PreparedPlaybackIntegrationTest.xml'
+        tree = ET.parse(path)
+        suite = tree.getroot()
+        case = next(case for case in suite.findall('testcase')
+                    if case.attrib['name'] == 'preparedQueueKeepsFiveEpisodesBeyondTwoSecondsBeforeEachNaturalHandoff')
+        suite.remove(case)
+        ET.SubElement(suite, 'testcase', name='syntheticExtraPassingCase', classname=suite.attrib['name'])
+        tree.write(path)
+        with self.assertRaisesRegex(ValueError, 'Required single-player queue regression is missing'):
             self.summarize()
 
     def test_failure_error_and_skip_attributes_block(self):
@@ -77,7 +89,7 @@ class AndroidPlayerReportTests(unittest.TestCase):
     def test_wrong_identity_or_non_github_run_blocks(self):
         for commit, run in [('unknown', self.run), (self.commit, 'https://example.com/runs/123')]:
             with self.subTest(commit=commit, run=run), self.assertRaises(ValueError):
-                summarize(self.results, '0.1.43', 68, commit, run)
+                summarize(self.results, '0.1.45', 70, commit, run)
 
 
 if __name__ == '__main__':

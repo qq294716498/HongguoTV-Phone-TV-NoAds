@@ -20,6 +20,7 @@ required_cases = {
     'io.flutter.plugins.videoplayer.PreparedPlaybackIntegrationTest': {
         'realManagerTransfersLoadedPeriodAndRemovingPreloadKeepsPlaybackAlive',
         'preparedQueueNaturallyAdvancesOnePlayerWithoutAnIntermediateEndOrSecondRenderer',
+        'preparedQueueKeepsFiveEpisodesBeyondTwoSecondsBeforeEachNaturalHandoff',
         'queuePauseDropsOnlyCandidateAndManualAdvanceRetainsPause',
     },
 }
@@ -47,7 +48,7 @@ def summarize(results, version, build, commit, workflow_run):
         if any(case.find(tag) is not None for case in cases for tag in ['failure', 'error', 'skipped']):
             raise ValueError('Android player testcase did not pass')
         suites[name] = names
-    if len(suites) < 20 or sum(map(len, suites.values())) < 155:
+    if len(suites) < 20 or sum(map(len, suites.values())) < 156:
         raise ValueError('Complete Android player regression reports are missing')
     for name, expected in required_cases.items():
         if not expected.issubset(suites.get(name, [])):
