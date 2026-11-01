@@ -210,6 +210,107 @@ void main() {
   });
 
   test(
+    'four consecutive items wait for native activation and ignore retired events',
+    () async {
+      final (driver, transport, platform, events) = create();
+      const plans = [
+        current,
+        PlaybackPlan(
+          url: 'file:///episode-b.mp4',
+          local: true,
+          mediaType: 'mp4',
+        ),
+        PlaybackPlan(
+          url: 'file:///episode-c.mp4',
+          local: true,
+          mediaType: 'mp4',
+        ),
+        PlaybackPlan(
+          url: 'file:///episode-d.mp4',
+          local: true,
+          mediaType: 'mp4',
+        ),
+      ];
+      final retiredIds = <int>[];
+      for (var generation = 1; generation < plans.length; generation++) {
+        final currentId = transport.queue.single.entryId;
+        final beforeEvents = events.length;
+        expect(
+          await stage(
+            driver,
+            before: plans[generation - 1],
+            after: plans[generation],
+            identity: 'episode-${generation + 1}',
+            generation: generation,
+          ),
+          isTrue,
+        );
+        final nextId = transport.queue.last.entryId;
+        expect(transport.queue, hasLength(2));
+        expect(
+          transport.queue.singleWhere((item) => item.current).entryId,
+          currentId,
+        );
+        expect(events, hasLength(beforeEvents));
+        expect(transport.selected, isEmpty);
+        expect(platform.opened, isEmpty);
+        for (final id in {...retiredIds, currentId}) {
+          transport.controller.add(
+            MediaKitQueueNativeEvent(MediaKitQueueNativeEventKind.started, id),
+          );
+          transport.loaded(id);
+          transport.failed(id);
+        }
+        await settle();
+        expect(events, hasLength(beforeEvents));
+        expect(
+          transport.queue.singleWhere((item) => item.current).entryId,
+          currentId,
+        );
+
+        transport.start(nextId);
+        expect(events, hasLength(beforeEvents + 1));
+        expect(events.last.kind, PlaybackQueueEventKind.activated);
+        expect(events.last.identity, 'episode-${generation + 1}');
+        expect(events.last.generation, generation);
+        transport.loaded(nextId);
+        transport.loaded(nextId);
+        await settle();
+        expect(events, hasLength(beforeEvents + 2));
+        expect(events.last.kind, PlaybackQueueEventKind.ready);
+        expect(events.last.identity, 'episode-${generation + 1}');
+        expect(events.last.generation, generation);
+        expect(transport.queue.single.entryId, nextId);
+        expect(
+          transport.queue.single.uri,
+          Media.normalizeURI(plans[generation].url),
+        );
+        expect(transport.selected, isEmpty);
+        expect(platform.opened, isEmpty);
+        retiredIds.add(currentId);
+      }
+      final completedEvents = List<PlaybackQueueEvent>.of(events);
+      for (final id in retiredIds) {
+        transport.loaded(id);
+        transport.failed(id);
+      }
+      await settle();
+      expect(events, completedEvents);
+      expect(events.map((event) => event.kind), [
+        PlaybackQueueEventKind.activated,
+        PlaybackQueueEventKind.ready,
+        PlaybackQueueEventKind.activated,
+        PlaybackQueueEventKind.ready,
+        PlaybackQueueEventKind.activated,
+        PlaybackQueueEventKind.ready,
+      ]);
+      expect(transport.added, hasLength(3));
+      expect(platform.opened, isEmpty);
+      expect(platform.disposed, isFalse);
+    },
+  );
+
+  test(
     'native loaded event is required even after advance command succeeds',
     () async {
       final (driver, transport, _, events) = create();

@@ -324,4 +324,115 @@ public class PreparedPlaybackIntegrationTest {
     assertEquals(0, counts.active.get());
   }
 
+  @Test
+  public void preparedQueueKeepsFiveEpisodesBeyondTwoSecondsBeforeEachNaturalHandoff()
+      throws Exception {
+    Context context = ApplicationProvider.getApplicationContext();
+    EnabledRenderers counts = new EnabledRenderers();
+    RenderersFactory renderers = (handler, video, audio, text, metadata) ->
+        new Renderer[] {new CountingRenderer(counts)};
+    PreparedPlayerProvider provider = new PreparedPlayerProvider(context,
+        new FakeVideoAsset("http://127.0.0.1/unused"), new VideoPlayerOptions(), renderers);
+    ExoPlayer player = provider.get();
+    PlaybackQueue queue = new PlaybackQueue(player, provider.preparedNext, () -> {});
+    java.util.List<java.util.Map<String, Object>> events = new java.util.ArrayList<>();
+    AtomicInteger intermediateEnds = new AtomicInteger();
+    queue.listen(new io.flutter.plugin.common.EventChannel.EventSink() {
+      @Override public void success(Object value) {
+        events.add(new java.util.HashMap<>((java.util.Map<String, Object>) value));
+      }
+      @Override public void error(String code, String message, Object details) { fail(message); }
+      @Override public void endOfStream() {}
+    });
+    player.addListener(new Player.Listener() {
+      @Override public void onPlaybackStateChanged(int state) {
+        if (state == Player.STATE_ENDED) intermediateEnds.incrementAndGet();
+      }
+    });
+    String[] ids = {"chain-A", "chain-B", "chain-C", "chain-D", "chain-E"};
+    FakeMediaSource[] sources = new FakeMediaSource[ids.length];
+    for (int i = 0; i < ids.length; i++) sources[i] = source(ids[i]);
+    try {
+      player.setMediaSource(sources[0]);
+      player.prepare();
+      await(() -> player.getPlaybackState() == Player.STATE_READY);
+      player.play();
+      for (int i = 0; i < ids.length - 1; i++) {
+        final int currentIndex = i;
+        final int nextIndex = i + 1;
+        final String identity = "chain-session-" + nextIndex;
+        PreparedMediaRequest request = new PreparedMediaRequest(identity,
+            "http://127.0.0.1/unused/" + ids[nextIndex], null, "mp4");
+        Reply reply = new Reply();
+        provider.preparedNext.prepare(request, sources[nextIndex], nextIndex, reply);
+        await(() -> reply.value != null || reply.error != null);
+        assertNull(reply.error);
+        PreparedNext.Selection selected = provider.preparedNext.take(request);
+        assertNotNull(selected);
+        assertTrue(selected.ready);
+        assertTrue(queue.stage(request, selected.source, 100 + nextIndex, nextIndex, selected));
+        assertEquals(2, player.getMediaItemCount());
+        assertEquals(1, sources[nextIndex].getCreatedMediaPeriods().size());
+        long deadline = System.nanoTime() + 10_000_000_000L;
+        while (player.getCurrentPosition() < 2000
+            && ids[currentIndex].equals(player.getCurrentMediaItem().mediaId)
+            && player.getPlayerError() == null) {
+          if (System.nanoTime() >= deadline) fail("Current episode did not progress beyond two seconds");
+          ShadowLooper.idleMainLooper(20, java.util.concurrent.TimeUnit.MILLISECONDS);
+          Thread.sleep(1);
+        }
+        assertEquals(ids[currentIndex], player.getCurrentMediaItem().mediaId);
+        assertEquals(5000L, player.getDuration());
+        assertTrue(player.getCurrentPosition() >= 2000);
+        assertTrue(player.getCurrentPosition() < 3000);
+        assertEquals(currentIndex, events.stream()
+            .filter(event -> "activated".equals(event.get("kind"))).count());
+        assertEquals(0, intermediateEnds.get());
+        assertEquals(1, counts.active.get());
+        assertEquals(1, counts.peak.get());
+        assertNull(player.getSecondaryRenderer(0));
+        player.seekTo(4500);
+        player.createMessage((type, payload) -> {}).send().blockUntilDelivered(5000);
+        deadline = System.nanoTime() + 10_000_000_000L;
+        while (!ids[nextIndex].equals(player.getCurrentMediaItem().mediaId)
+            || player.getPlaybackState() != Player.STATE_READY
+            || !identity.equals(queue.snapshot().get("identity"))
+            || !"ready".equals(queue.snapshot().get("kind"))) {
+          if (System.nanoTime() >= deadline) fail("Natural handoff did not select " + ids[nextIndex]);
+          ShadowLooper.idleMainLooper(20, java.util.concurrent.TimeUnit.MILLISECONDS);
+          Thread.sleep(1);
+        }
+        assertSame(player, provider.get());
+        assertEquals(1, player.getMediaItemCount());
+        assertEquals(100L + nextIndex, queue.snapshot().get("generation"));
+        assertEquals(nextIndex, events.stream()
+            .filter(event -> "activated".equals(event.get("kind"))).count());
+        assertNull(player.getPlayerError());
+      }
+      long deadline = System.nanoTime() + 10_000_000_000L;
+      while (player.getCurrentPosition() < 2000) {
+        if (System.nanoTime() >= deadline) fail("Fifth episode did not remain active beyond two seconds");
+        ShadowLooper.idleMainLooper(20, java.util.concurrent.TimeUnit.MILLISECONDS);
+        Thread.sleep(1);
+      }
+      assertEquals(ids[4], player.getCurrentMediaItem().mediaId);
+      assertEquals(4, events.stream().filter(event -> "activated".equals(event.get("kind"))).count());
+      assertEquals(0, events.stream().filter(event -> "failed".equals(event.get("kind"))).count());
+      assertEquals(0, intermediateEnds.get());
+      assertEquals(1, counts.peak.get());
+      assertNull(player.getSecondaryRenderer(0));
+      System.out.println("QUEUE_FIVE_EPISODE_METRICS " + new org.json.JSONObject(java.util.Map.of(
+          "synthetic", true, "episodes", ids.length, "naturalHandoffs", 4,
+          "earlyPlaybackChecks", ids.length, "minimumEarlyPositionMs", 2000,
+          "playerInstances", 1, "peakActiveRenderers", counts.peak.get(),
+          "intermediateEnds", intermediateEnds.get(), "finalMediaId", player.getCurrentMediaItem().mediaId)));
+    } finally {
+      queue.dispose();
+      player.release();
+      provider.preparedNext.dispose();
+    }
+    assertEquals(0, counts.active.get());
+    for (FakeMediaSource source : sources) source.assertReleased();
+  }
+
 }

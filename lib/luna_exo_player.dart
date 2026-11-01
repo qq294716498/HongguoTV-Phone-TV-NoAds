@@ -137,6 +137,62 @@ class _QueuedAndroidMedia {
   final Media media;
   final String mediaType;
   bool activated = false;
+  bool ready = false;
+}
+
+class _MediaPositionController extends VideoPlayerController {
+  _MediaPositionController.file(
+    super.file, {
+    required this.generation,
+    required this.active,
+    required super.viewType,
+    required super.videoPlayerOptions,
+  }) : super.file();
+
+  _MediaPositionController.networkUrl(
+    super.uri, {
+    required this.generation,
+    required this.active,
+    required super.viewType,
+    required super.videoPlayerOptions,
+    super.formatHint,
+    super.httpHeaders,
+  }) : super.networkUrl();
+
+  final int Function() generation;
+  final bool Function(VideoPlayerController) active;
+  int _seekRevision = 0;
+  int _pendingSeeks = 0;
+
+  @override
+  Future<void> seekTo(Duration position) async {
+    _seekRevision++;
+    _pendingSeeks++;
+    try {
+      await super.seekTo(position);
+    } finally {
+      _pendingSeeks--;
+      _seekRevision++;
+    }
+  }
+
+  @override
+  Future<Duration?> get position async {
+    if (!active(this) || _pendingSeeks > 0 || value.duration <= Duration.zero) {
+      return null;
+    }
+    final ticket = generation();
+    final seekTicket = _seekRevision;
+    final result = await super.position;
+    if (!active(this) ||
+        ticket != generation() ||
+        seekTicket != _seekRevision ||
+        _pendingSeeks > 0 ||
+        value.duration <= Duration.zero) {
+      return null;
+    }
+    return result;
+  }
 }
 
 /// 采用和 LunaTV-Mobile 完全相同架构的 ExoPlayer (AndroidX Media3) 播放器封装，
@@ -238,6 +294,9 @@ class LunaExoPlayer implements Player {
   Future<int> get handle => Future<int>.value(0);
 
   VideoPlayerController? get controller => _controller;
+
+  bool _positionControllerActive(VideoPlayerController controller) =>
+      !_disposed && !_transitioning && identical(_controller, controller);
 
   bool get canTransition {
     final c = _controller;
@@ -594,6 +653,8 @@ class LunaExoPlayer implements Player {
       return;
     }
     if (kind == 'ready' && _queueCurrent == identity) {
+      final firstReady = !media.ready;
+      media.ready = true;
       final duration = Duration(
         milliseconds: (values['durationMs'] as num?)?.toInt() ?? 0,
       );
@@ -606,16 +667,22 @@ class LunaExoPlayer implements Player {
       final width = (values['width'] as num?)?.toDouble() ?? 0;
       final height = (values['height'] as num?)?.toDouble() ?? 0;
       controller.value = controller.value.copyWith(
-        position: position,
-        duration: duration,
+        position: firstReady ? position : controller.value.position,
+        duration: duration > Duration.zero
+            ? duration
+            : controller.value.duration,
         buffered: [DurationRange(Duration.zero, buffered)],
         size: width > 0 && height > 0
             ? Size(width, height)
             : controller.value.size,
         isInitialized: true,
-        isCompleted: false,
-        isPlaying: values['playing'] == true,
-        isBuffering: values['buffering'] == true,
+        isCompleted: firstReady ? false : controller.value.isCompleted,
+        isPlaying: firstReady
+            ? values['playing'] == true
+            : controller.value.isPlaying,
+        isBuffering: firstReady
+            ? values['buffering'] == true
+            : controller.value.isBuffering,
         errorDescription: null,
       );
       final size = controller.value.size;
@@ -1219,14 +1286,18 @@ class LunaExoPlayer implements Player {
           ? uri.toFilePath()
           : url;
       DiaryService.add('[ExoPlayer] 本地文件播放: $filePath');
-      c = VideoPlayerController.file(
+      c = _MediaPositionController.file(
         File(filePath),
+        generation: () => _openGeneration,
+        active: _positionControllerActive,
         viewType: viewType,
         videoPlayerOptions: options,
       );
     } else {
-      c = VideoPlayerController.networkUrl(
+      c = _MediaPositionController.networkUrl(
         uri!,
+        generation: () => _openGeneration,
+        active: _positionControllerActive,
         viewType: viewType,
         formatHint: formatHint,
         httpHeaders: headers,
@@ -1269,8 +1340,10 @@ class LunaExoPlayer implements Player {
           retryHeaders['Accept'] =
               'application/vnd.apple.mpegurl,application/x-mpegURL,*/*';
         }
-        c = VideoPlayerController.networkUrl(
+        c = _MediaPositionController.networkUrl(
           uri,
+          generation: () => _openGeneration,
+          active: _positionControllerActive,
           viewType: viewType,
           formatHint: alternateFormat,
           httpHeaders: retryHeaders,

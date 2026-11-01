@@ -297,11 +297,11 @@ class _PlayerScreenState extends State<PlayerScreen>
     final preferences = widget.store.playbackPreferences;
     _speed = preferences.speed;
     _requestedQuality = preferences.quality;
-    _autoAdvance = true;
+    _autoAdvance = preferences.autoAdvance;
     _danmakuEnabled = preferences.danmaku;
     _danmakuSpeed = preferences.danmakuSpeed;
     _danmakuOpacity = preferences.danmakuOpacity;
-    _preloadEnabled = true;
+    _preloadEnabled = preferences.preload;
     _loader = PlaybackLoader(widget.repository);
     _preloader = PlaybackPreloader(
       widget.repository,
@@ -457,6 +457,13 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
     _subscriptions.add(
       _player.stream.completed.listen((completed) {
+        if (!completed ||
+            !_player.state.completed ||
+            _closed ||
+            !_playIntent ||
+            _danmaku.seeking) {
+          return;
+        }
         final queued = _queuedEpisode;
         if (completed &&
             queued != null &&
@@ -464,6 +471,11 @@ class _PlayerScreenState extends State<PlayerScreen>
             queued.armed &&
             !queued.activated) {
           final state = _player.state;
+          if (state.duration <= Duration.zero ||
+              state.position < state.duration - const Duration(seconds: 2)) {
+            if (!_loading && _acceptErrors) _queueRecovery();
+            return;
+          }
           if (state.completed &&
               state.duration == queued.previousDuration &&
               state.position > queued.previousPosition) {
@@ -502,21 +514,22 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
     _subscriptions.add(
       _player.stream.position.listen((position) {
+        if (position != _player.state.position) return;
         final queued = _queuedEpisode;
         if (queued != null && queued.valid) {
           if (queued.frozen &&
               position <= const Duration(milliseconds: 500) &&
               !_player.state.completed) {
-            queued.finish(queued.positionReset, true);
+            _observeQueuedPositionReset(queued);
           }
           if (!queued.activated && !queued.frozen) {
-            if (position + const Duration(milliseconds: 500) <
-                queued.previousPosition) {
+            if (queued.previousDuration > Duration.zero &&
+                queued.previousPosition >=
+                    queued.previousDuration - const Duration(seconds: 2) &&
+                position + const Duration(milliseconds: 500) <
+                    queued.previousPosition) {
               queued.frozen = true;
-              queued.finish(queued.positionReset, true);
-              if (_autoAdvance && _foreground && _playIntent && !_panelOpen) {
-                _autoAdvanceQueued(queued);
-              }
+              _observeQueuedPositionReset(queued);
             } else if (position > Duration.zero) {
               queued.previousPosition = position;
               if (queued.previousDuration <= Duration.zero &&
@@ -1201,6 +1214,38 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
+  void _observeQueuedPositionReset(_QueuedEpisode queued) {
+    if (queued.positionReset.isCompleted) return;
+    queued.finish(queued.positionReset, true);
+    if (queued.activated) return;
+    unawaited(() async {
+      final selected = await queued.selected.future.timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => false,
+      );
+      if (selected ||
+          _closed ||
+          !queued.valid ||
+          queued.activated ||
+          !identical(_queuedEpisode, queued) ||
+          !_foreground ||
+          !_playIntent ||
+          _panelOpen ||
+          widget.store.locked ||
+          widget.store.profileEpoch != _profileEpoch) {
+        return;
+      }
+      queued.fallbackClaimed = true;
+      _acceptErrors = false;
+      DiaryService.add('[Queue] position reset without native identity');
+      try {
+        await _restartUnknownQueue(queued);
+      } catch (error) {
+        DiaryService.add('[Queue] current episode restore failed: $error');
+      }
+    }());
+  }
+
   Future<void> _releaseQueuePrevious(_QueuedEpisode queued) async {
     if (queued.previousReleased) return;
     queued.previousReleased = true;
@@ -1231,6 +1276,7 @@ class _PlayerScreenState extends State<PlayerScreen>
           !_playIntent ||
           _panelOpen ||
           _plan == null ||
+          !_autoAdvance ||
           _preferences.enhancement.mode != VideoEnhancementMode.off ||
           (!plan.local && !plan.preloadComplete) ||
           plan.decryptionKey.isNotEmpty ||
@@ -1403,6 +1449,8 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Future<void> _restartUnknownQueue(_QueuedEpisode queued) async {
     final generation = _generation;
+    final seekSequence = _seekSequence;
+    final candidate = _queuedEpisode;
     await _saveProgress(
       flush: true,
       snapshotDetail: queued.previousDetail,
@@ -1412,6 +1460,12 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
     if (_closed ||
         generation != _generation ||
+        seekSequence != _seekSequence ||
+        !identical(candidate, _queuedEpisode) ||
+        !_foreground ||
+        !_playIntent ||
+        _panelOpen ||
+        widget.store.locked ||
         widget.store.profileEpoch != _profileEpoch) {
       return;
     }
@@ -1772,25 +1826,29 @@ class _PlayerScreenState extends State<PlayerScreen>
         queued.valid &&
         !queued.activated &&
         !queued.frozen &&
+        queued.previousDuration > Duration.zero &&
+        queued.previousPosition >=
+            queued.previousDuration - const Duration(seconds: 2) &&
         state.position + const Duration(milliseconds: 500) <
             queued.previousPosition) {
       _freezeQueuedProgress(queued);
-      queued.finish(queued.positionReset, true);
-      if (_autoAdvance && _foreground && _playIntent && !_panelOpen) {
-        _autoAdvanceQueued(queued);
-      }
+      _observeQueuedPositionReset(queued);
     }
     if (queued != null &&
         queued.valid &&
         queued.frozen &&
-        queued.advancing != null) {
+        _foreground &&
+        _playIntent &&
+        !_panelOpen) {
       return;
     }
     if (state.completed && queued?.armed == true && _playIntent) return;
     final duration = state.duration.inMilliseconds;
     final position = state.position.inMilliseconds;
+    final buffered = state.buffer.inMilliseconds;
+    final tailTolerance = duration < 5000 ? duration ~/ 20 : 250;
     final fullyBuffered =
-        duration > 0 && state.buffer.inMilliseconds >= duration;
+        duration > 0 && buffered > 0 && buffered >= duration - tailTolerance;
     final ahead = state.buffer.inMilliseconds - position;
     if (!_foreground ||
         !_playIntent ||
@@ -3087,10 +3145,10 @@ class _PlayerScreenState extends State<PlayerScreen>
       throw StateError('当前用户已变更');
     }
     _interactions.cancel();
-    final nextPreferences = preferences.copyWith(
-      autoAdvance: true,
-      preload: true,
-    );
+    final nextPreferences = preferences;
+    final queuePolicyChanged =
+        nextPreferences.autoAdvance != _autoAdvance ||
+        nextPreferences.preload != _preloadEnabled;
     final outputChanged =
         _player is LunaExoPlayer &&
         ((_television &&
@@ -3110,12 +3168,16 @@ class _PlayerScreenState extends State<PlayerScreen>
     setState(() {
       _speed = nextPreferences.speed;
       _requestedQuality = nextPreferences.quality;
-      _autoAdvance = true;
+      _autoAdvance = nextPreferences.autoAdvance;
       _danmakuEnabled = nextPreferences.danmaku;
       _danmakuSpeed = nextPreferences.danmakuSpeed;
       _danmakuOpacity = nextPreferences.danmakuOpacity;
-      _preloadEnabled = true;
+      _preloadEnabled = nextPreferences.preload;
     });
+    if (queuePolicyChanged) {
+      _preloadPauseWanted = true;
+      await _preloader.setSuspended(true);
+    }
     _danmaku.setEnabled(_danmakuEnabled);
     _syncDanmaku();
     if (qualityChanged) _preloader.clear();
@@ -3303,18 +3365,12 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Future<void> _seekTo(Duration target, {bool resumeAfterSeek = false}) async {
     if (_closed || _loading || _error != null) return;
-    final seekingGeneration = _generation;
-    _requestPreloadSuspension(true);
-    try {
-      await _preloader.setSuspended(true);
-    } catch (_) {}
-    if (_closed || _loading || seekingGeneration != _generation) return;
+    final ticket = ++_seekSequence;
+    final generation = _generation;
     _cancelSeasonAdvance();
     _completedSeasonKey = null;
     _handoffOwned = false;
     widget.handoff?.fail('接收端已调整播放位置');
-    final ticket = ++_seekSequence;
-    final generation = _generation;
     final intentSequence = _seasonSequence;
     final resume = resumeAfterSeek && !_player.state.playing;
     _danmaku.beginSeek();
@@ -3322,13 +3378,27 @@ class _PlayerScreenState extends State<PlayerScreen>
     _enhancement.ignorePerformance();
     var succeeded = false;
     try {
+      _requestPreloadSuspension(true);
+      try {
+        await _preloader.setSuspended(true);
+      } catch (_) {}
+      if (_closed ||
+          _loading ||
+          generation != _generation ||
+          ticket != _seekSequence) {
+        return;
+      }
       await _player.seek(target);
       succeeded = true;
     } catch (_) {
       _notice('跳转失败，请重试');
     } finally {
-      if (!_closed && ticket == _seekSequence && generation == _generation) {
-        _danmaku.endSeek(succeeded ? target : _player.state.position);
+      if (!_closed && ticket == _seekSequence) {
+        _danmaku.endSeek(
+          succeeded && generation == _generation
+              ? target
+              : _player.state.position,
+        );
         _syncWatchReminders();
       }
     }
@@ -3505,11 +3575,11 @@ class _PlayerScreenState extends State<PlayerScreen>
           tvTextureOutput: selection.tvTextureOutput,
           tvDecoderMode: selection.tvDecoderMode,
           quality: selection.quality,
-          autoAdvance: true,
+          autoAdvance: selection.autoAdvance,
           danmaku: selection.danmaku,
           danmakuSpeed: selection.danmakuSpeed,
           danmakuOpacity: selection.danmakuOpacity,
-          preload: true,
+          preload: selection.preload,
           enhancement: selection.enhancement,
         ),
       );
