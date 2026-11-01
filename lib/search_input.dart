@@ -28,6 +28,12 @@ class SearchInput extends StatefulWidget {
 
 class _SearchInputState extends State<SearchInput> {
   final _focus = FocusNode();
+  final _optionsController = TextEditingController();
+  final _hasText = ValueNotifier<bool>(false);
+  late TextEditingValue _lastValue;
+  bool _submitting = false;
+  int? _activeRequest;
+  VoidCallback? _cancelActiveRequest;
   Timer? _timer;
   Completer<Iterable<String>>? _pending;
   int _generation = 0;
@@ -36,7 +42,13 @@ class _SearchInputState extends State<SearchInput> {
 
   void _cancel() {
     _timer?.cancel();
-    widget.onCancel?.call();
+    _timer = null;
+    if (_activeRequest != null) {
+      _activeRequest = null;
+      final cancel = _cancelActiveRequest;
+      _cancelActiveRequest = null;
+      cancel?.call();
+    }
     _generation++;
     if (_pending != null && !_pending!.isCompleted) {
       _pending!.complete(const []);
@@ -44,14 +56,73 @@ class _SearchInputState extends State<SearchInput> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    _lastValue = widget.controller.value;
+    _hasText.value = _lastValue.text.isNotEmpty;
+    widget.controller.addListener(_controllerChanged);
+    _focus.addListener(_focusChanged);
+  }
+
+  void _syncOptions() {
+    final value = widget.controller.value;
+    final text =
+        !_submitting &&
+            _focus.hasFocus &&
+            widget.suggestions != null &&
+            value.composing.isCollapsed
+        ? value.text
+        : '';
+    if (_optionsController.text != text) {
+      _optionsController.value = TextEditingValue(
+        text: text,
+        selection: TextSelection.collapsed(offset: text.length),
+      );
+    }
+  }
+
+  void _controllerChanged() {
+    final previous = _lastValue;
+    final value = widget.controller.value;
+    _lastValue = value;
+    _hasText.value = value.text.isNotEmpty;
+    _syncOptions();
+    if (!_submitting &&
+        !previous.composing.isCollapsed &&
+        value.composing.isCollapsed &&
+        previous.text == value.text) {
+      widget.onChanged?.call(value.text);
+    }
+  }
+
+  void _focusChanged() {
+    if (!_focus.hasFocus) _cancel();
+    _syncOptions();
+  }
+
+  @override
   void didUpdateWidget(SearchInput oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.suggestions == null) _cancel();
+    if (widget.controller != oldWidget.controller ||
+        widget.suggestions != oldWidget.suggestions) {
+      _cancel();
+      _cache.clear();
+      oldWidget.controller.removeListener(_controllerChanged);
+      _lastValue = widget.controller.value;
+      _hasText.value = _lastValue.text.isNotEmpty;
+      widget.controller.addListener(_controllerChanged);
+      _optionsController.clear();
+      _syncOptions();
+    }
   }
 
   @override
   void dispose() {
+    widget.controller.removeListener(_controllerChanged);
+    _focus.removeListener(_focusChanged);
     _cancel();
+    _optionsController.dispose();
+    _hasText.dispose();
     _focus.dispose();
     super.dispose();
   }
@@ -71,7 +142,14 @@ class _SearchInputState extends State<SearchInput> {
     _pending = pending;
     _timer = Timer(const Duration(milliseconds: 300), () async {
       try {
-        final result = (await widget.suggestions!(
+        final suggestions = widget.suggestions;
+        if (suggestions == null || !mounted || generation != _generation) {
+          if (!pending.isCompleted) pending.complete(const []);
+          return;
+        }
+        _activeRequest = generation;
+        _cancelActiveRequest = widget.onCancel;
+        final result = (await suggestions(
           query,
         )).where((s) => s.trim().isNotEmpty).toSet().take(10).toList();
         if (generation == _generation && mounted) {
@@ -79,7 +157,14 @@ class _SearchInputState extends State<SearchInput> {
           _cache[query] = result;
           if (!pending.isCompleted) pending.complete(result);
         }
-      } catch (_) {}
+      } catch (_) {
+        if (!pending.isCompleted) pending.complete(const []);
+      } finally {
+        if (_activeRequest == generation) {
+          _activeRequest = null;
+          _cancelActiveRequest = null;
+        }
+      }
       if (!pending.isCompleted) pending.complete(const []);
     });
     return pending.future;
@@ -87,10 +172,16 @@ class _SearchInputState extends State<SearchInput> {
 
   void _submit(String value) {
     _cancel();
-    widget.controller.value = TextEditingValue(
-      text: value,
-      selection: TextSelection.collapsed(offset: value.length),
-    );
+    _submitting = true;
+    try {
+      widget.controller.value = TextEditingValue(
+        text: value,
+        selection: TextSelection.collapsed(offset: value.length),
+      );
+      _syncOptions();
+    } finally {
+      _submitting = false;
+    }
     _focus.unfocus();
     widget.onSearch(value.trim());
   }
@@ -127,7 +218,7 @@ class _SearchInputState extends State<SearchInput> {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) => RawAutocomplete<String>(
-      textEditingController: widget.controller,
+      textEditingController: _optionsController,
       focusNode: _focus,
       optionsBuilder: _options,
       onSelected: (value) {
@@ -136,13 +227,12 @@ class _SearchInputState extends State<SearchInput> {
       },
       fieldViewBuilder: (context, controller, focus, submitted) =>
           TelevisionSearchField(
-            controller: controller,
+            controller: widget.controller,
             focusNode: focus,
             autofocus: widget.autofocus,
             textInputAction: TextInputAction.search,
             onChanged: (value) {
               widget.onChanged?.call(value);
-              setState(() {});
             },
             onSubmitted: (value) {
               _selected = false;
@@ -152,26 +242,28 @@ class _SearchInputState extends State<SearchInput> {
             decoration: InputDecoration(
               hintText: widget.hint,
               prefixIcon: const Icon(Icons.search_rounded),
-              suffixIcon: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (controller.text.isNotEmpty)
+              suffixIcon: ValueListenableBuilder<bool>(
+                valueListenable: _hasText,
+                builder: (context, hasText, _) => Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (hasText)
+                      IconButton(
+                        tooltip: '清空搜索',
+                        icon: const Icon(Icons.close_rounded),
+                        onPressed: () {
+                          _cancel();
+                          widget.controller.clear();
+                          widget.onChanged?.call('');
+                        },
+                      ),
                     IconButton(
-                      tooltip: '清空搜索',
-                      icon: const Icon(Icons.close_rounded),
-                      onPressed: () {
-                        _cancel();
-                        controller.clear();
-                        widget.onChanged?.call('');
-                        setState(() {});
-                      },
+                      tooltip: '搜索',
+                      icon: const Icon(Icons.arrow_forward_rounded),
+                      onPressed: () => _submit(widget.controller.text),
                     ),
-                  IconButton(
-                    tooltip: '搜索',
-                    icon: const Icon(Icons.arrow_forward_rounded),
-                    onPressed: () => _submit(controller.text),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

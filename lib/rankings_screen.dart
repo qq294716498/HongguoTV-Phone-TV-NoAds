@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import 'app_layout.dart';
@@ -378,46 +380,60 @@ class _RankingsScreenState extends State<RankingsScreen> {
                           : () => _load(force: true),
                     )
                   : television
-                  ? RemoteGrid(
-                      key: ValueKey('ranking-${_board!.id}'),
-                      controller: _scroll,
-                      itemKeys: [
-                        for (final item in items)
-                          '${item.rank}-${item.drama.id}',
-                      ],
-                      columns: 1,
-                      itemExtent:
-                          (MediaQuery.textScalerOf(context).scale(17) * 2.4 +
-                                  MediaQuery.textScalerOf(context).scale(13) *
-                                      1.4 +
-                                  24)
-                              .clamp(88.0, 160.0),
-                      spacing: 8,
-                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                      autofocus: true,
-                      footer: Center(
-                        child: _more
-                            ? const Padding(
-                                padding: EdgeInsets.all(16),
-                                child: CircularProgressIndicator(),
-                              )
-                            : _hasMore
-                            ? RemoteButton(
-                                label: '加载更多',
-                                onPressed: () => _load(more: true),
-                              )
-                            : const Padding(
-                                padding: EdgeInsets.all(16),
-                                child: Text('已显示全部榜单'),
-                              ),
-                      ),
-                      itemBuilder: (context, index, node, onFocus) =>
-                          _rankingTile(
-                            items[index],
-                            television: true,
-                            node: node,
-                            onFocus: onFocus,
+                  ? LayoutBuilder(
+                      builder: (context, constraints) {
+                        final scaler = MediaQuery.textScalerOf(context);
+                        final minimumWidth =
+                            260 + math.max(0, scaler.scale(17) - 17) * 10;
+                        final columns = math.max(
+                          1,
+                          ((constraints.maxWidth - 32 + 12) /
+                                  (minimumWidth + 12))
+                              .floor(),
+                        );
+                        final titleHeight =
+                            (scaler.scale(17) * 1.3).ceilToDouble() * 2;
+                        final metadataHeight =
+                            (scaler.scale(14) * 1.3).ceilToDouble() * 2;
+                        return RemoteGrid(
+                          key: ValueKey('ranking-${_board!.id}'),
+                          controller: _scroll,
+                          itemKeys: [
+                            for (final item in items)
+                              '${item.rank}-${item.drama.id}',
+                          ],
+                          columns: columns,
+                          itemExtent:
+                              math.max(108, titleHeight + 6 + metadataHeight) +
+                              26,
+                          spacing: 12,
+                          padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                          autofocus: true,
+                          footer: Center(
+                            child: _more
+                                ? const Padding(
+                                    padding: EdgeInsets.all(16),
+                                    child: CircularProgressIndicator(),
+                                  )
+                                : _hasMore
+                                ? RemoteButton(
+                                    label: '加载更多',
+                                    onPressed: () => _load(more: true),
+                                  )
+                                : const Padding(
+                                    padding: EdgeInsets.all(16),
+                                    child: Text('已显示全部榜单'),
+                                  ),
                           ),
+                          itemBuilder: (context, index, node, onFocus) =>
+                              _rankingTile(
+                                items[index],
+                                television: true,
+                                node: node,
+                                onFocus: onFocus,
+                              ),
+                        );
+                      },
                     )
                   : _grid
                   ? LayoutBuilder(
@@ -545,7 +561,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
       child: Row(
         children: [
           SizedBox(
-            width: television ? 30 : 36,
+            width: television ? MediaQuery.textScalerOf(context).scale(30) : 36,
             child: Text(
               '${item.rank}',
               style: TextStyle(
@@ -558,12 +574,13 @@ class _RankingsScreenState extends State<RankingsScreen> {
             ),
           ),
           SizedBox(
-            width: television ? 46 : 72,
-            height: television ? 68 : 108,
+            width: television ? 64 : 72,
+            height: television ? 96 : 108,
             child: DramaCover(
               drama: item.drama,
               repository: widget.repository,
               radius: 8,
+              showMetadata: !television,
             ),
           ),
           SizedBox(width: television ? 12 : 14),
@@ -579,43 +596,38 @@ class _RankingsScreenState extends State<RankingsScreen> {
                   style: television
                       ? const TextStyle(
                           fontSize: 17,
+                          height: 1.3,
                           fontWeight: FontWeight.w600,
                         )
                       : Theme.of(context).textTheme.titleMedium,
                 ),
-                if (television)
-                  Row(
-                    children: [
-                      if (item.drama.category.isNotEmpty)
-                        Flexible(
-                          child: Text(
-                            item.drama.category,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: colors.onSurfaceVariant,
-                            ),
-                          ),
-                        ),
-                      if (item.drama.category.isNotEmpty &&
-                          item.metric.isNotEmpty)
-                        const SizedBox(width: 12),
-                      if (item.metric.isNotEmpty)
-                        Flexible(
-                          child: Text(
-                            item.metric,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: colors.primary,
-                            ),
-                          ),
-                        ),
-                    ],
-                  )
-                else ...[
+                if (television) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    [
+                      if (item.drama.vip) 'VIP',
+                      if (item.drama.episodes > 0) '共 ${item.drama.episodes} 集',
+                      if (item.drama.category.isNotEmpty) item.drama.category,
+                    ].join(' · '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 14,
+                      height: 1.3,
+                      color: colors.onSurfaceVariant,
+                    ),
+                  ),
+                  Text(
+                    item.metric,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 14,
+                      height: 1.3,
+                      color: colors.primary,
+                    ),
+                  ),
+                ] else ...[
                   if (item.drama.category.isNotEmpty)
                     Text(
                       item.drama.category,
@@ -634,7 +646,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
               ],
             ),
           ),
-          const Icon(Icons.chevron_right_rounded),
+          if (!television) const Icon(Icons.chevron_right_rounded),
         ],
       ),
     );

@@ -116,7 +116,7 @@ void main() {
   });
 
   testWidgets(
-    'TV ranking arrows scroll beyond built rows, OK opens the focused drama, back restores it',
+    'TV ranking grid arrows scroll beyond built rows, OK opens the focused drama, back restores it',
     (tester) async {
       size(tester);
       SharedPreferences.setMockInitialValues({});
@@ -146,10 +146,17 @@ void main() {
       final fourth = tester.getRect(
         find.byKey(const ValueKey('rank-4-hongguo:tv-rank-4')),
       );
-      expect(first.height, lessThan(100));
+      expect(first.height, inInclusiveRange(118, 160));
+      final third = tester.getRect(
+        find.byKey(const ValueKey('rank-3-hongguo:tv-rank-3')),
+      );
+      expect(first.top, third.top);
+      expect(fourth.top, greaterThan(first.bottom));
       expect(fourth.bottom, lessThanOrEqualTo(540));
       await capture(tester, 'tv-rankings');
-      for (var index = 0; index < 23; index++) {
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      for (var index = 0; index < 7; index++) {
         await press(tester, LogicalKeyboardKey.arrowDown);
       }
       expect(
@@ -164,10 +171,15 @@ void main() {
         FocusManager.instance.primaryFocus?.debugLabel,
         'remote-24-hongguo:tv-rank-24',
       );
-      await press(tester, LogicalKeyboardKey.arrowUp);
+      await press(tester, LogicalKeyboardKey.arrowLeft);
       expect(
         FocusManager.instance.primaryFocus?.debugLabel,
         'remote-23-hongguo:tv-rank-23',
+      );
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'remote-20-hongguo:tv-rank-20',
       );
       expect(tester.takeException(), isNull);
     },
