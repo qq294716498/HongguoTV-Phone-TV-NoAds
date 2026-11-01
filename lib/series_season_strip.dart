@@ -51,7 +51,7 @@ class SeriesSeasonStripState extends State<SeriesSeasonStrip> {
     super.initState();
     _initialFocusPending = widget.autofocus;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _showSelection(requestFocus: widget.autofocus);
+      if (mounted) _showSelection(requestFocus: false);
     });
   }
 

@@ -648,6 +648,62 @@ void main() {
     );
   }
 
+  testWidgets(
+    'TV local results returning after an empty filter preserve active editing',
+    (tester) async {
+      viewport(tester, const Size(960, 540));
+      final repository = CoverSeriesRepository(seasons: 40);
+      final store = await local();
+      await mount(tester, repository, store, television: true);
+      final traffic = repository.traffic;
+      await tester.tap(input());
+      await tester.pumpAndSettle();
+      final editorFocus = FocusManager.instance.primaryFocus;
+      expect(tester.widget<TextField>(input()).readOnly, false);
+      await type(tester, '999');
+      expect(find.text('本系列中未找到匹配的季'), findsOneWidget);
+      expect(FocusManager.instance.primaryFocus, same(editorFocus));
+      await tester.enterText(input(), '9');
+      final committed = tester.widget<TextField>(input()).controller!.value;
+      await tester.pump(const Duration(milliseconds: 180));
+      await tester.pumpAndSettle();
+      expect(card(9), findsOneWidget);
+      expect(
+        FocusManager.instance.primaryFocus,
+        same(editorFocus),
+        reason: 'a rebuilt season strip must not steal the active editor',
+      );
+      expect(tester.widget<TextField>(input()).readOnly, false);
+      expect(tester.widget<TextField>(input()).controller!.value, committed);
+      const composing = TextEditingValue(
+        text: '第九季',
+        selection: TextSelection.collapsed(offset: 3),
+        composing: TextRange(start: 0, end: 3),
+      );
+      tester.testTextInput.updateEditingValue(composing);
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(tester.widget<TextField>(input()).controller!.value, composing);
+      expect(tester.widget<TextField>(input()).readOnly, false);
+      expect(FocusManager.instance.primaryFocus, same(editorFocus));
+      expect(card(9), findsOneWidget);
+      expect(details(1), findsOneWidget);
+      tester.testTextInput.updateEditingValue(
+        composing.copyWith(composing: TextRange.empty),
+      );
+      await tester.pump(const Duration(milliseconds: 180));
+      expect(FocusManager.instance.primaryFocus, same(editorFocus));
+      expect(tester.widget<TextField>(input()).readOnly, false);
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pumpAndSettle();
+      expect(remoteFocused(tester, card(9)), true);
+      expect(tester.widget<RemoteTarget>(card(9)).selected, false);
+      expect(details(1), findsOneWidget);
+      expect(tester.widget<EpisodeBrowser>(details(1)).currentNumber, 2);
+      expectNoRemoteTraffic(repository, traffic);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('TV back finishes editing before leaving the series page', (
     tester,
   ) async {
