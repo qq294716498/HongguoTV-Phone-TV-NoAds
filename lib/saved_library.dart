@@ -167,7 +167,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
         : widget.store.seriesWatch(drama);
     final target = watched?.drama ?? drama;
     final followed = widget.store.followedSeries(drama) != null;
-    final hasNextSeason = !widget.history && widget.store.hasNextSeason(drama);
+    final hasNextSeason = followed && widget.store.hasNextSeason(drama);
     final badge = hasNextSeason
         ? '已有下季'
         : followed && widget.history
@@ -207,7 +207,6 @@ class _SavedLibraryState extends State<SavedLibrary> {
         onPressed: () => _actions(drama),
       ),
       badge: badge,
-      badgeRibbon: hasNextSeason,
       subtitle: watched == null
           ? SourceSite.byId(drama.source).name
           : '${season == null ? '' : '第 ${season.season} ${season.unit} · '}第 ${watched.episode} 集 · ${formatPosition(watched.position)}',
@@ -254,9 +253,6 @@ class _SavedLibraryState extends State<SavedLibrary> {
       }
       return true;
     }).toList();
-    final reserveInfoBadge =
-        widget.history &&
-        items.any((drama) => widget.store.followedSeries(drama) != null);
     final itemIds = widget.history
         ? items.map((drama) => drama.id).toSet()
         : const <String>{};
@@ -452,12 +448,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
                         itemKeys: items.map((item) => item.id).toList(),
                         columns: columns,
                         itemExtent:
-                            DramaTile.extentFor(
-                              context,
-                              tileWidth - 14,
-                              reserveInfoBadge: reserveInfoBadge,
-                            ) +
-                            14,
+                            DramaTile.extentFor(context, tileWidth - 14) + 14,
                         itemBuilder: (_, index, node, onFocus) => _tile(
                           items[index],
                           focusNode: node,
@@ -482,7 +473,6 @@ class _SavedLibraryState extends State<SavedLibrary> {
                   gridDelegate: dramaGridDelegate(
                     context,
                     constraints.maxWidth - 2 * padding,
-                    reserveInfoBadge: reserveInfoBadge,
                   ),
                   delegate: SliverChildBuilderDelegate(
                     (_, index) => _tile(items[index]),

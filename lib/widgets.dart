@@ -104,11 +104,13 @@ class DramaCover extends StatelessWidget {
     required this.repository,
     this.radius = 14,
     this.showMetadata = true,
+    this.vipTopInset = 8,
   });
   final Drama drama;
   final AppRepository repository;
   final double radius;
   final bool showMetadata;
+  final double vipTopInset;
   static bool imagesDisabled = const bool.fromEnvironment(
     'DISABLE_REMOTE_IMAGES',
   );
@@ -173,7 +175,7 @@ class DramaCover extends StatelessWidget {
           if (showMetadata && drama.vip)
             Positioned(
               left: 8,
-              top: 8,
+              top: vipTopInset,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                 decoration: BoxDecoration(
@@ -344,7 +346,7 @@ class DramaTile extends StatelessWidget {
     this.onFocus,
     this.actions,
     this.badge,
-    this.badgeRibbon = false,
+    this.badgeRibbon = true,
     this.rank,
     this.selected,
     this.onMore,
@@ -376,21 +378,24 @@ class DramaTile extends StatelessWidget {
       ).scale(AppLayout.isTelevision(context) ? 14 : 12) *
       1.3;
 
-  static double extentFor(
-    BuildContext context,
-    double width, {
-    bool reserveInfoBadge = false,
-  }) =>
-      (width * 1.5 +
-              13 +
-              titleHeight(context) +
-              subtitleHeight(context) +
-              (reserveInfoBadge ? 4 + subtitleHeight(context) : 0))
+  static double extentFor(BuildContext context, double width) =>
+      (width * 1.5 + 13 + titleHeight(context) + subtitleHeight(context))
           .ceilToDouble();
 
   @override
   Widget build(BuildContext context) {
     final television = AppLayout.isTelevision(context);
+    final ribbon = badge != null && badge!.isNotEmpty && badgeRibbon;
+    final title = Text(
+      drama.title,
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        fontWeight: FontWeight.w600,
+        height: 1.3,
+        fontSize: television ? 17 : 14,
+      ),
+    );
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -399,8 +404,12 @@ class DramaTile extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              DramaCover(drama: drama, repository: repository),
-              if (rank != null)
+              DramaCover(
+                drama: drama,
+                repository: repository,
+                vipTopInset: ribbon ? 62 : 8,
+              ),
+              if (rank != null && !ribbon)
                 Positioned(
                   left: 0,
                   top: 0,
@@ -434,10 +443,10 @@ class DramaTile extends StatelessWidget {
                     ),
                   ),
                 ),
-              if (badge != null && badge!.isNotEmpty && badgeRibbon)
+              if (ribbon)
                 Positioned.fill(
                   child: IgnorePointer(
-                    key: const ValueKey('next-season-ribbon'),
+                    key: const ValueKey('drama-status-ribbon'),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(14),
                       child: Banner(
@@ -487,16 +496,40 @@ class DramaTile extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 2),
           child: SizedBox(
             height: titleHeight(context),
-            child: Text(
-              drama.title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                height: 1.3,
-                fontSize: television ? 17 : 14,
-              ),
-            ),
+            child: rank != null && ribbon
+                ? Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        key: const ValueKey('drama-info-rank'),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: rank! <= 3
+                              ? Theme.of(context).colorScheme.primary
+                              : Colors.black.withValues(alpha: .72),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          '$rank',
+                          maxLines: 1,
+                          style: TextStyle(
+                            color: rank! <= 3
+                                ? Theme.of(context).colorScheme.onPrimary
+                                : Colors.white,
+                            fontSize: television ? 13 : 11,
+                            height: 1.1,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(child: title),
+                    ],
+                  )
+                : title,
           ),
         ),
         const SizedBox(height: 4),
@@ -516,27 +549,6 @@ class DramaTile extends StatelessWidget {
             ),
           ),
         ),
-        if (badge != null && badge!.isNotEmpty && !badgeRibbon) ...[
-          const SizedBox(height: 4),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2),
-            child: SizedBox(
-              height: subtitleHeight(context),
-              child: Text(
-                badge!,
-                key: const ValueKey('drama-info-badge'),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: television ? 14 : 12,
-                  height: 1.3,
-                  fontWeight: FontWeight.w700,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-              ),
-            ),
-          ),
-        ],
       ],
     );
     if (television) {
@@ -630,11 +642,7 @@ class StatusPanel extends StatelessWidget {
   );
 }
 
-SliverGridDelegate dramaGridDelegate(
-  BuildContext context,
-  double width, {
-  bool reserveInfoBadge = false,
-}) {
+SliverGridDelegate dramaGridDelegate(BuildContext context, double width) {
   final columns = width < 600 ? 3 : ((width + 18) / 178).floor().clamp(3, 12);
   final spacing = width < 600 ? 10.0 : 18.0;
   final tileWidth = (width - (columns - 1) * spacing) / columns;
@@ -642,11 +650,7 @@ SliverGridDelegate dramaGridDelegate(
     crossAxisCount: columns,
     mainAxisSpacing: 22,
     crossAxisSpacing: spacing,
-    mainAxisExtent: DramaTile.extentFor(
-      context,
-      tileWidth,
-      reserveInfoBadge: reserveInfoBadge,
-    ),
+    mainAxisExtent: DramaTile.extentFor(context, tileWidth),
   );
 }
 
