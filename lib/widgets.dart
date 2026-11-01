@@ -376,8 +376,16 @@ class DramaTile extends StatelessWidget {
       ).scale(AppLayout.isTelevision(context) ? 14 : 12) *
       1.3;
 
-  static double extentFor(BuildContext context, double width) =>
-      (width * 1.5 + 13 + titleHeight(context) + subtitleHeight(context))
+  static double extentFor(
+    BuildContext context,
+    double width, {
+    bool reserveInfoBadge = false,
+  }) =>
+      (width * 1.5 +
+              13 +
+              titleHeight(context) +
+              subtitleHeight(context) +
+              (reserveInfoBadge ? 4 + subtitleHeight(context) : 0))
           .ceilToDouble();
 
   @override
@@ -450,33 +458,6 @@ class DramaTile extends StatelessWidget {
                       ),
                     ),
                   ),
-                )
-              else if (badge != null && badge!.isNotEmpty)
-                Positioned(
-                  left: 6,
-                  right: 6,
-                  bottom: 6,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: .72),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 4,
-                      ),
-                      child: Text(
-                        badge!,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  ),
                 ),
               if (actions != null && selected == null)
                 Positioned(top: 2, right: 2, child: actions!),
@@ -535,6 +516,27 @@ class DramaTile extends StatelessWidget {
             ),
           ),
         ),
+        if (badge != null && badge!.isNotEmpty && !badgeRibbon) ...[
+          const SizedBox(height: 4),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            child: SizedBox(
+              height: subtitleHeight(context),
+              child: Text(
+                badge!,
+                key: const ValueKey('drama-info-badge'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: television ? 14 : 12,
+                  height: 1.3,
+                  fontWeight: FontWeight.w700,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+            ),
+          ),
+        ],
       ],
     );
     if (television) {
@@ -628,7 +630,11 @@ class StatusPanel extends StatelessWidget {
   );
 }
 
-SliverGridDelegate dramaGridDelegate(BuildContext context, double width) {
+SliverGridDelegate dramaGridDelegate(
+  BuildContext context,
+  double width, {
+  bool reserveInfoBadge = false,
+}) {
   final columns = width < 600 ? 3 : ((width + 18) / 178).floor().clamp(3, 12);
   final spacing = width < 600 ? 10.0 : 18.0;
   final tileWidth = (width - (columns - 1) * spacing) / columns;
@@ -636,7 +642,11 @@ SliverGridDelegate dramaGridDelegate(BuildContext context, double width) {
     crossAxisCount: columns,
     mainAxisSpacing: 22,
     crossAxisSpacing: spacing,
-    mainAxisExtent: DramaTile.extentFor(context, tileWidth),
+    mainAxisExtent: DramaTile.extentFor(
+      context,
+      tileWidth,
+      reserveInfoBadge: reserveInfoBadge,
+    ),
   );
 }
 

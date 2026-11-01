@@ -621,7 +621,13 @@ void main() {
         } else {
           await tester.tap(find.byTooltip('跳转集数'));
           await tester.pumpAndSettle();
-          await tester.enterText(find.byType(TextField), '100');
+          await tester.enterText(
+            find.descendant(
+              of: find.byType(AlertDialog),
+              matching: find.byType(TextField),
+            ),
+            '100',
+          );
           await tester.tap(find.text('定位'));
           await tester.pumpAndSettle();
           final hundred = find.byKey(const ValueKey('all-season-episode-100'));
@@ -653,7 +659,13 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('跳转集数'));
       await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextField), '51');
+      await tester.enterText(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byType(TextField),
+        ),
+        '51',
+      );
       await tester.tap(find.text('定位'));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('all-season-episode-51')));
@@ -740,8 +752,8 @@ void main() {
       television: true,
       onResult: (value) => selected = value,
     );
-    final label = find.text('第 1 季 · 2 集');
-    Focus.of(tester.element(label)).requestFocus();
+    final season = find.byKey(ValueKey('all-season-${firstSeason.id}'));
+    tester.widget<RemoteTarget>(season).focusNode!.requestFocus();
     await tester.pump();
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.sendKeyEvent(LogicalKeyboardKey.select);

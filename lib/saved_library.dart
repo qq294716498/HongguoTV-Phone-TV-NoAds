@@ -170,7 +170,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
     final hasNextSeason = !widget.history && widget.store.hasNextSeason(drama);
     final badge = hasNextSeason
         ? '已有下季'
-        : followed
+        : followed && widget.history
         ? '已追剧'
         : null;
     final season = watched == null ? null : hongguoSeriesInfo(watched.drama);
@@ -254,6 +254,9 @@ class _SavedLibraryState extends State<SavedLibrary> {
       }
       return true;
     }).toList();
+    final reserveInfoBadge =
+        widget.history &&
+        items.any((drama) => widget.store.followedSeries(drama) != null);
     final itemIds = widget.history
         ? items.map((drama) => drama.id).toSet()
         : const <String>{};
@@ -449,7 +452,12 @@ class _SavedLibraryState extends State<SavedLibrary> {
                         itemKeys: items.map((item) => item.id).toList(),
                         columns: columns,
                         itemExtent:
-                            DramaTile.extentFor(context, tileWidth - 14) + 14,
+                            DramaTile.extentFor(
+                              context,
+                              tileWidth - 14,
+                              reserveInfoBadge: reserveInfoBadge,
+                            ) +
+                            14,
                         itemBuilder: (_, index, node, onFocus) => _tile(
                           items[index],
                           focusNode: node,
@@ -474,6 +482,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
                   gridDelegate: dramaGridDelegate(
                     context,
                     constraints.maxWidth - 2 * padding,
+                    reserveInfoBadge: reserveInfoBadge,
                   ),
                   delegate: SliverChildBuilderDelegate(
                     (_, index) => _tile(items[index]),

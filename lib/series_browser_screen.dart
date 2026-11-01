@@ -9,6 +9,10 @@ import 'episode_browser.dart';
 import 'local_store.dart';
 import 'models.dart';
 import 'series_catalog.dart';
+import 'hongguo_series.dart';
+import 'search_input.dart';
+import 'series_season_strip.dart';
+import 'television_navigation.dart';
 import 'widgets.dart';
 
 class SeriesEpisodeSelection {
@@ -46,6 +50,10 @@ class _SeriesBrowserScreenState extends State<SeriesBrowserScreen> {
   bool _loadingDetail = false;
   int _detailSequence = 0;
   bool _choosing = false;
+  final _search = TextEditingController();
+  final _seasonStrip = GlobalKey<SeriesSeasonStripState>();
+  Timer? _searchDelay;
+  String _filter = '';
 
   bool get _allowed =>
       mounted &&
@@ -195,60 +203,168 @@ class _SeriesBrowserScreenState extends State<SeriesBrowserScreen> {
     widget.store.removeListener(_storeChanged);
     _catalog.removeListener(_catalogChanged);
     _catalog.dispose();
+    _searchDelay?.cancel();
+    _search.dispose();
     _detailSequence++;
     super.dispose();
   }
 
-  Widget _seasonList() {
+  void _searchChanged(String value) {
+    _searchDelay?.cancel();
+    if (!_search.value.composing.isCollapsed) return;
+    final next = value.trim().toLowerCase();
+    if (next == _filter) return;
+    if (next.isEmpty) {
+      setState(() => _filter = '');
+    } else {
+      _searchDelay = Timer(const Duration(milliseconds: 180), () {
+        if (_allowed &&
+            _search.value.composing.isCollapsed &&
+            _search.text.trim().toLowerCase() == next) {
+          setState(() => _filter = next);
+        }
+      });
+    }
+  }
+
+  void _submitFilter(String value) {
+    _searchDelay?.cancel();
+    if (!_allowed) return;
+    setState(() => _filter = value.trim().toLowerCase());
+    if (AppLayout.isTelevision(context)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _seasonStrip.currentState?.focusSelection();
+      });
+    }
+  }
+
+  bool _matches(HongguoSeriesEntry entry) {
+    if (_filter.isEmpty) return true;
+    final compact = _filter.replaceAll(RegExp(r'\s+'), '');
+    final number = RegExp(
+      r'^(?:第)?([0-9零〇一二两兩三四五六七八九十百]+)([季部])?$',
+    ).firstMatch(compact);
+    if (number != null) {
+      final unit = number[2] ?? entry.unit;
+      final parsed = hongguoSeriesInfo(
+        Drama(
+          id: entry.drama.id,
+          source: entry.drama.source,
+          title: '本系列 第${number[1]}$unit',
+        ),
+      );
+      return parsed?.season == entry.season && parsed?.unit == entry.unit;
+    }
+    final query = hongguoSeriesInfo(
+      Drama(id: entry.drama.id, source: entry.drama.source, title: _filter),
+    );
+    if (query != null) {
+      final info = hongguoSeriesInfo(entry.drama, unit: entry.unit);
+      return query.key == info?.key &&
+          query.season == entry.season &&
+          query.unit == entry.unit;
+    }
+    return entry.drama.title.toLowerCase().contains(_filter) ||
+        entry.label.replaceAll(' ', '').contains(compact);
+  }
+
+  void _back() {
+    if (TelevisionNavigation.dismissInput(context)) return;
+    Navigator.of(context).maybePop();
+  }
+
+  Widget _refresh() => IconButton(
+    key: const ValueKey('all-seasons-refresh'),
+    tooltip: '刷新全季',
+    onPressed: !_allowed || _catalog.loading
+        ? null
+        : () => _loadCatalog(refresh: true),
+    icon: const Icon(Icons.refresh_rounded),
+  );
+
+  Widget _seasonList({required bool narrowHeader}) {
     final entries = _catalog.entries;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            _catalog.loading ? '正在查找各季…' : '已找到 ${entries.length} 季',
-            style: Theme.of(context).textTheme.titleSmall,
-          ),
-          const SizedBox(height: 8),
-          ConstrainedBox(
-            constraints: BoxConstraints(
-              maxHeight: MediaQuery.sizeOf(context).height * .22,
-            ),
-            child: SingleChildScrollView(
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final entry in entries)
-                    ChoiceChip(
-                      key: ValueKey('all-season-${entry.drama.id}'),
-                      autofocus:
-                          AppLayout.isTelevision(context) &&
-                          entry.drama.id == widget.anchor.id,
-                      label: Text(
-                        '${entry.label}${entry.drama.episodes > 0 ? ' · ${entry.drama.episodes} 集' : ''}',
-                      ),
-                      tooltip: entry.drama.title,
-                      selected: entry.drama.id == _selected.id,
-                      onSelected: (_) {
-                        if (_selected.id != entry.drama.id ||
-                            _detailError != null) {
-                          unawaited(_selectSeason(entry.drama));
-                        }
-                      },
-                    ),
-                ],
+    final visible = entries.where(_matches).toList();
+    final television = AppLayout.isTelevision(context);
+    final scaler = MediaQuery.textScalerOf(context);
+    final labelSize = television ? 17.0 : 15.0;
+    final stripHeight =
+        96 +
+        (scaler.scale(labelSize) * 1.3).ceilToDouble() +
+        (scaler.scale(13) * 1.3).ceilToDouble() +
+        22;
+    final selected = entries
+        .where((entry) => entry.drama.id == _selected.id)
+        .firstOrNull;
+    final hidden = visible.every((entry) => entry.drama.id != _selected.id);
+    return Column(
+      key: const ValueKey('all-seasons-panel'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 8, 2),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  _catalog.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
               ),
+              const SizedBox(width: 8),
+              Text(
+                _filter.isEmpty
+                    ? '${entries.length} 季'
+                    : '${visible.length}/${entries.length} 季',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              if (narrowHeader) _refresh(),
+            ],
+          ),
+        ),
+        if (hidden && selected != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              '当前选集：${selected.label}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
-          if (_catalog.loading)
-            const Padding(
-              padding: EdgeInsets.only(top: 8),
-              child: LinearProgressIndicator(minHeight: 2),
+        if (visible.isEmpty)
+          SizedBox(
+            height: stripHeight,
+            child: const Center(child: Text('本系列中未找到匹配的季')),
+          )
+        else
+          SizedBox(
+            height: stripHeight,
+            child: SeriesSeasonStrip(
+              key: _seasonStrip,
+              entries: visible,
+              selectedId: _selected.id,
+              repository: widget.repository,
+              autofocus: television,
+              onSelected: (drama) {
+                if (_selected.id != drama.id || _detailError != null) {
+                  unawaited(_selectSeason(drama));
+                }
+              },
             ),
-          if (_catalog.error.isNotEmpty || _catalog.hasMore)
-            Row(
+          ),
+        if (_catalog.loading)
+          const Padding(
+            padding: EdgeInsets.only(top: 4),
+            child: LinearProgressIndicator(minHeight: 2),
+          ),
+        if (_catalog.error.isNotEmpty || _catalog.hasMore)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
               children: [
                 Expanded(
                   child: Text(
@@ -257,6 +373,8 @@ class _SeriesBrowserScreenState extends State<SeriesBrowserScreen> {
                         : _catalog.loading
                         ? '正在查找更多季'
                         : '还有搜索结果，继续查找可补全各季',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ),
@@ -269,16 +387,19 @@ class _SeriesBrowserScreenState extends State<SeriesBrowserScreen> {
                 ),
               ],
             ),
-          if (!_catalog.loading &&
-              !_catalog.hasMore &&
-              _catalog.error.isEmpty &&
-              entries.length == 1)
-            const Padding(
-              padding: EdgeInsets.only(top: 6),
-              child: Text('暂未找到其他季，可以刷新后重试'),
+          ),
+        if (!_catalog.loading &&
+            !_catalog.hasMore &&
+            _catalog.error.isEmpty &&
+            entries.length == 1)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 2, 16, 4),
+            child: Text(
+              '暂未找到其他季，可以刷新后重试',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
-        ],
-      ),
+          ),
+      ],
     );
   }
 
@@ -338,40 +459,82 @@ class _SeriesBrowserScreenState extends State<SeriesBrowserScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => CallbackShortcuts(
-    bindings: {
-      const SingleActivator(LogicalKeyboardKey.escape): () =>
-          Navigator.of(context).maybePop(),
-      const SingleActivator(LogicalKeyboardKey.goBack): () =>
-          Navigator.of(context).maybePop(),
-    },
-    child: Scaffold(
-      appBar: AppBar(
-        title: const Text('查看全季'),
-        actions: [
-          IconButton(
-            key: const ValueKey('all-seasons-refresh'),
-            tooltip: '刷新全季',
-            onPressed: !_allowed || _catalog.loading
-                ? null
-                : () => _loadCatalog(refresh: true),
-            icon: const Icon(Icons.refresh_rounded),
-          ),
-        ],
-      ),
-      body: !_allowed
-          ? const StatusPanel(title: '当前用户无权访问', message: '请返回后重新选择。')
-          : SafeArea(
-              top: false,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _seasonList(),
-                  const Divider(height: 1),
-                  Expanded(child: _episodes()),
-                ],
-              ),
+  Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    final scaler = MediaQuery.textScalerOf(context);
+    final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+    final narrow = width < 600;
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.escape): _back,
+        const SingleActivator(LogicalKeyboardKey.goBack): _back,
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          titleSpacing: 8,
+          leadingWidth: 48,
+          toolbarHeight: (scaler.scale(20) + 32).clamp(56.0, 72.0),
+          title: Semantics(
+            label: '查看全季',
+            child: SearchInput(
+              key: const ValueKey('all-seasons-search'),
+              controller: _search,
+              hint: '搜索本系列标题或季号',
+              onChanged: _searchChanged,
+              onSearch: _submitFilter,
             ),
-    ),
-  );
+          ),
+          actions: [if (!narrow) _refresh()],
+        ),
+        body: !_allowed
+            ? const StatusPanel(title: '当前用户无权访问', message: '请返回后重新选择。')
+            : SafeArea(
+                top: false,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final availableHeight = constraints.maxHeight + keyboard;
+                    final split =
+                        constraints.maxWidth >= 700 &&
+                        (availableHeight < 400 ||
+                            availableHeight < 520 && scaler.scale(17) > 22);
+                    final content = split
+                        ? Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              SizedBox(
+                                width: (constraints.maxWidth * .35).clamp(
+                                  250.0,
+                                  380.0,
+                                ),
+                                child: SingleChildScrollView(
+                                  child: _seasonList(narrowHeader: narrow),
+                                ),
+                              ),
+                              const VerticalDivider(width: 1),
+                              Expanded(child: _episodes()),
+                            ],
+                          )
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _seasonList(narrowHeader: narrow),
+                              const Divider(height: 1),
+                              Expanded(child: _episodes()),
+                            ],
+                          );
+                    final minimum = 384 + scaler.scale(17) * 4;
+                    final height =
+                        keyboard > 0 && constraints.maxHeight < minimum
+                        ? minimum
+                        : constraints.maxHeight;
+                    return SingleChildScrollView(
+                      primary: false,
+                      child: SizedBox(height: height, child: content),
+                    );
+                  },
+                ),
+              ),
+      ),
+    );
+  }
 }

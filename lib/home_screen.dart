@@ -1595,6 +1595,11 @@ class _HomeScreenState extends State<HomeScreen> {
                                   gridDelegate: dramaGridDelegate(
                                     context,
                                     constraints.maxWidth - 2 * padding,
+                                    reserveInfoBadge: items.any(
+                                      (drama) =>
+                                          widget.store.followedSeries(drama) !=
+                                          null,
+                                    ),
                                   ),
                                   delegate: SliverChildBuilderDelegate(
                                     (_, index) => _catalogTile(items[index]),
@@ -1731,7 +1736,15 @@ class _HomeScreenState extends State<HomeScreen> {
       key: ValueKey('tv-grid-$key'),
       itemKeys: items.map((item) => item.id).toList(),
       columns: columns,
-      itemExtent: DramaTile.extentFor(context, tileWidth - 14) + 14,
+      itemExtent:
+          DramaTile.extentFor(
+            context,
+            tileWidth - 14,
+            reserveInfoBadge: items.any(
+              (drama) => widget.store.followedSeries(drama) != null,
+            ),
+          ) +
+          14,
       controller: controller,
       footer: footer,
       padding: const EdgeInsets.fromLTRB(18, 2, 18, 18),
