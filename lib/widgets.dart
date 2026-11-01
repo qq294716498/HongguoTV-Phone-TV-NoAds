@@ -386,6 +386,7 @@ class DramaTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final television = AppLayout.isTelevision(context);
     final ribbon = badge != null && badge!.isNotEmpty && badgeRibbon;
+    final subduedRibbon = badge == '已追剧';
     final title = Text(
       drama.title,
       maxLines: 2,
@@ -453,9 +454,13 @@ class DramaTile extends StatelessWidget {
                         message: badge!,
                         location: BannerLocation.topStart,
                         layoutDirection: TextDirection.ltr,
-                        color: const Color(0xFFBF245B),
+                        color: subduedRibbon
+                            ? const Color(0xFFE0E0E0)
+                            : const Color(0xFFBF245B),
                         textStyle: TextStyle(
-                          color: Colors.white,
+                          color: subduedRibbon
+                              ? const Color(0xFF555555)
+                              : Colors.white,
                           fontFamily: Theme.of(
                             context,
                           ).textTheme.labelSmall?.fontFamily,
