@@ -21,7 +21,7 @@ class AndroidPlayerReportTests(unittest.TestCase):
             ET.ElementTree(suite).write(self.results / f'TEST-{name}.xml')
 
     def summarize(self):
-        return summarize(self.results, '0.1.42', 67, self.commit, self.run)
+        return summarize(self.results, '0.1.43', 68, self.commit, self.run)
 
     def test_complete_passed_reports_keep_exact_identity_and_queue_cases(self):
         report = self.summarize()
@@ -77,7 +77,7 @@ class AndroidPlayerReportTests(unittest.TestCase):
     def test_wrong_identity_or_non_github_run_blocks(self):
         for commit, run in [('unknown', self.run), (self.commit, 'https://example.com/runs/123')]:
             with self.subTest(commit=commit, run=run), self.assertRaises(ValueError):
-                summarize(self.results, '0.1.42', 67, commit, run)
+                summarize(self.results, '0.1.43', 68, commit, run)
 
 
 if __name__ == '__main__':

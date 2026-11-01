@@ -12,8 +12,8 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[1]
 output = root / 'dist/windows'
 repository = 'qq294716498/HongguoTV-Phone-TV-NoAds'
-release_branch = 'release/windows-android-0.1.42-67'
-approved_source = 'e4dc42891766f8931248245fee6c982472e9338e'
+release_branch = 'release/windows-android-0.1.43-68'
+approved_source = '4c4677df16a8ef1efa009c129c850d23d126ed38'
 previous_windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48', 'windows-v0.1.24-49', 'windows-v0.1.25-50', 'windows-v0.1.29-54', 'windows-v0.1.30-55', 'windows-v0.1.31-56', 'windows-v0.1.32-57', 'windows-v0.1.34-59', 'windows-v0.1.38-63', 'windows-v0.1.39-64')
 previous_android_tag = 'app-v0.1.39-64'
 previous_android_commit = '963ae470a6e36cb6186673c6757c6c4d28c753c7'
@@ -51,6 +51,8 @@ def github(*arguments):
 def release_description(version):
     return (
         f'红果TV Windows {version} · x64\n\n'
+        '- “查看全季”顶部增加本系列标题／季号搜索，支持阿拉伯数字、中文季号及完整季名，仅筛选已核验的当前系列；保留输入法组合状态，清空恢复全部季，不改变当前选季、播放及观看记录。\n'
+        '- 全季列表改为可横向滚动的封面卡，显示季号、集数和当前选择，电视支持遥控左右选季、向下选集；我的追剧卡片移除多余“已追剧”，其他页面将状态移至封面外的信息行，保留 VIP、进度和已有下季提示。\n'
         '- 单播放器队列提前准备经过核验的下一集媒体，按原生实际切项事件交接集数、标题、弹幕和观看记录；不创建第二播放器或预热第二个解码器。格式或能力不满足时沿用普通缓存播放回退；慢网、编码变化仍可能停顿，不承诺物理音画零间隙。\n'
         '- 当前集缓冲不足、暂停、打开菜单或转入后台时，优先当前播放，暂停下一集远端预取并保留缓存会话及已收片段；恢复时校验候选代次，避免旧任务重挂或覆盖新选择。\n'
         '- 搜索输入保留输入法组合文字和光标，减少每键目录过滤与排序，修复同文本组合提交的候选显示、旧结果迟到和草稿误触发分页；实际设备输入延迟仍待验收。\n'
@@ -65,7 +67,7 @@ def release_description(version):
 
 def finalize_release_notes(tag):
     published = json.loads(github('api', f'repos/{repository}/releases/tags/{tag}'))
-    if tag != 'windows-v0.1.42-67' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
+    if tag != 'windows-v0.1.43-68' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
         raise ValueError('Only the current verified Windows stable release notes may be finalized')
     body = published['body']
     if body.count(pending_publication_note) != 1:
@@ -208,8 +210,8 @@ def main():
     version, build = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(encoding='utf-8'), re.MULTILINE).group(1).split('+')
     if not re.fullmatch(r'\d+\.\d+\.\d+', version):
         raise ValueError('Only Windows stable releases are allowed')
-    if version != '0.1.42' or build != '67':
-        raise ValueError('This workflow only publishes Windows 0.1.42+67')
+    if version != '0.1.43' or build != '68':
+        raise ValueError('This workflow only publishes Windows 0.1.43+68')
     tag = f'windows-v{version}-{build}'
     package = output / f'HongguoTV-{version}-windows-x64.zip'
     if sys.argv[1] == 'stage':
@@ -274,7 +276,7 @@ def main():
         write_json('Android-isolation.json', {'before': android, 'androidParserUnchanged': True,
                                               'parserSha256': hashlib.sha256(old.encode()).hexdigest()})
         subprocess.run([sys.executable, 'scripts/finish_task.py', '--message',
-                        '完成 Windows 0.1.42 x64 单播放器队列与安全预取、搜索输入及TV布局的新构建和自动化验证；实体设备音画连续性仍未验收'], check=True)
+                        '完成 Windows 0.1.43 x64 本系列顶部搜索与季封面、追剧提示、单播放器队列及累积UI修复的新构建和自动化验证；实体设备音画连续性仍未验收'], check=True)
         subprocess.run([sys.executable, 'scripts/sync_source.py', '--check'], check=True)
         source = max(root.parent.glob('真果·鉴-*.zip'), key=lambda file: file.stat().st_mtime_ns)
         source_package = output / f'HongguoTV-{version}-source.zip'

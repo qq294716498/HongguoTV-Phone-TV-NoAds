@@ -14,7 +14,7 @@ root = Path(__file__).resolve().parents[1]
 output = root / 'dist/android'
 repository = 'qq294716498/HongguoTV-Phone-TV-NoAds'
 certificate = '55c3c3395a00e56e99b8bfd580b14c99618da74db19692a2e42606eb05c47ba9'
-windows_tag = 'windows-v0.1.42-67'
+windows_tag = 'windows-v0.1.43-68'
 windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48', 'windows-v0.1.24-49', 'windows-v0.1.25-50', 'windows-v0.1.29-54', 'windows-v0.1.30-55', 'windows-v0.1.31-56', 'windows-v0.1.32-57', 'windows-v0.1.34-59', 'windows-v0.1.38-63', 'windows-v0.1.39-64', windows_tag)
 previous_android_tag = 'app-v0.1.39-64'
 previous_android_commit = '963ae470a6e36cb6186673c6757c6c4d28c753c7'
@@ -22,8 +22,8 @@ pending_publication_note = '公开发布核验进行中：尚未完成三 ABI �
 verified_publication_note = '公开发布核验已完成：三 ABI 公网下载、SHA-256、正式证书与版本复核通过；Android Latest 和 Windows 升级通道隔离、旧版本资产保持检查通过。'
 windows_verified_publication_note = '公开发布核验已完成：Windows 公网 ZIP 下载与 SHA-256、正式升级通道和 API 限流回退检查通过；Android Latest 隔离及旧版本资产保持检查通过。'
 offsets = {'arm64-v8a': 2000, 'armeabi-v7a': 1000, 'x86_64': 4000}
-release_branch = 'release/windows-android-0.1.42-67'
-approved_source = 'e4dc42891766f8931248245fee6c982472e9338e'
+release_branch = 'release/windows-android-0.1.43-68'
+approved_source = '4c4677df16a8ef1efa009c129c850d23d126ed38'
 release_only_paths = frozenset({
     'README.md', '.github/workflows/android-stable.yml',
     '.github/workflows/windows-preview.yml',
@@ -56,6 +56,7 @@ def github(*arguments):
 def release_description(version):
     return (
         f'红果TV Android {version} · 手机 / Android TV\n\n'
+        '- 多季浏览页增加顶部本系列标题或季号搜索与横向季封面，保留当前季、选集和观看进度；我的追剧卡片移除重复“已追剧”字样，其他页面将该状态移至封面外信息区；保留“已有下季”角标，避免遮挡封面。\n'
         '- 优化 APK 搜索输入：避免每键重建目录、过滤和排序，保留输入法组合状态；联想仅取消已发请求，迟到结果、快速输入、清空、提交和返回按当前查询生效。\n'
         '- TV 排行榜改为随宽度和字体调整的多列多行卡片；电视“我的追剧”顶区紧凑化，保留可读文字、遥控焦点和返回位置。正常切集加载不再自动弹出底部恢复按钮。\n'
         '- 使用唯一播放器队列提前准备已核验的下一集缓存；原生实际切项后同步集数、标题、弹幕和观看记录。当前缓冲不足、暂停或后台时安全暂停下一集预取并保留缓存，失败回退普通播放，不创建第二播放器。\n'
@@ -72,7 +73,7 @@ def release(tag):
 
 def finalize_release_notes(tag):
     published = release(tag)
-    if tag != 'app-v0.1.42-67' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
+    if tag != 'app-v0.1.43-68' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
         raise ValueError('Only the current verified Android stable release notes may be finalized')
     body = published['body']
     if body.count(pending_publication_note) != 1:
@@ -164,8 +165,8 @@ def main():
     os.chdir(root)
     version, raw_build = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(), re.M).group(1).split('+')
     build = int(raw_build)
-    if version != '0.1.42' or build != 67:
-        raise ValueError('This workflow only publishes Android 0.1.42+67')
+    if version != '0.1.43' or build != 68:
+        raise ValueError('This workflow only publishes Android 0.1.43+68')
     validate_release_source(os.environ['GITHUB_SHA'])
     tag = f'app-v{version}-{build}'
     phase = sys.argv[1]
@@ -191,7 +192,7 @@ def main():
                 raise ValueError('A newer or reserved Android build already exists')
         validate_android_player_report(read('Android-player-tests.json'), version, build, os.environ['GITHUB_SHA'])
         write('Release-before.json', {'android': snapshot(latest), 'windows': validated_windows_snapshots(os.environ['GITHUB_SHA'])})
-        subprocess.run([sys.executable, 'scripts/finish_task.py', '--message', 'Android 0.1.42 搜索输入、TV多行布局与单播放器队列安全预取；三ABI既有正式签名和原生队列自动化通过，实体设备仍未验收'], check=True)
+        subprocess.run([sys.executable, 'scripts/finish_task.py', '--message', 'Android 0.1.43 多季顶部搜索与徽标、搜索输入、TV多行布局及单播放器队列安全预取；三ABI既有正式签名和原生队列自动化通过，实体设备仍未验收'], check=True)
         subprocess.run([sys.executable, 'scripts/sync_source.py', '--check'], check=True)
         source = max(root.parent.glob('真果·鉴-*.zip'), key=lambda p: p.stat().st_mtime_ns)
         source_package = output / f'HongguoTV-{version}-source.zip'
