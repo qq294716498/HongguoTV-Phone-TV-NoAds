@@ -13,7 +13,7 @@ root = Path(__file__).resolve().parents[1]
 output = root / 'dist/windows'
 repository = 'qq294716498/HongguoTV-Phone-TV-NoAds'
 release_branch = 'release/windows-android-0.1.43-68'
-approved_source = '4c4677df16a8ef1efa009c129c850d23d126ed38'
+approved_source = '4850f297edba222d69eda1ef74565f904e5d060e'
 previous_windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48', 'windows-v0.1.24-49', 'windows-v0.1.25-50', 'windows-v0.1.29-54', 'windows-v0.1.30-55', 'windows-v0.1.31-56', 'windows-v0.1.32-57', 'windows-v0.1.34-59', 'windows-v0.1.38-63', 'windows-v0.1.39-64')
 previous_android_tag = 'app-v0.1.39-64'
 previous_android_commit = '963ae470a6e36cb6186673c6757c6c4d28c753c7'
@@ -52,7 +52,7 @@ def release_description(version):
     return (
         f'红果TV Windows {version} · x64\n\n'
         '- “查看全季”顶部增加本系列标题／季号搜索，支持阿拉伯数字、中文季号及完整季名，仅筛选已核验的当前系列；保留输入法组合状态，清空恢复全部季，不改变当前选季、播放及观看记录。\n'
-        '- 全季列表改为可横向滚动的封面卡，显示季号、集数和当前选择，电视支持遥控左右选季、向下选集；我的追剧卡片移除多余“已追剧”，其他页面将状态移至封面外的信息行，保留 VIP、进度和已有下季提示。\n'
+        '- 全季列表改为可横向滚动的封面卡，显示季号、集数和当前选择，电视支持遥控左右选季、向下选集；我的追剧卡片移除多余“已追剧”，其他页面改用左上角紧凑斜角标；已有有效紧接下一季时优先显示“已有下季”，不叠加“已追剧”，保留 VIP、进度和封面底部季数。\n'
         '- 单播放器队列提前准备经过核验的下一集媒体，按原生实际切项事件交接集数、标题、弹幕和观看记录；不创建第二播放器或预热第二个解码器。格式或能力不满足时沿用普通缓存播放回退；慢网、编码变化仍可能停顿，不承诺物理音画零间隙。\n'
         '- 当前集缓冲不足、暂停、打开菜单或转入后台时，优先当前播放，暂停下一集远端预取并保留缓存会话及已收片段；恢复时校验候选代次，避免旧任务重挂或覆盖新选择。\n'
         '- 搜索输入保留输入法组合文字和光标，减少每键目录过滤与排序，修复同文本组合提交的候选显示、旧结果迟到和草稿误触发分页；实际设备输入延迟仍待验收。\n'

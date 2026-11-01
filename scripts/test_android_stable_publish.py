@@ -20,7 +20,7 @@ class AndroidStablePublishTests(unittest.TestCase):
         self.assertNotIn('EXE', notes)
         self.assertNotIn('长剧名续季搜索', notes)
         self.assertNotIn('弹幕提速', notes)
-        for expected in ['顶部本系列标题或季号搜索', '横向季封面', '我的追剧卡片移除', '已追剧', '封面外信息区', '已有下季', '避免遮挡封面', '搜索输入', '输入法组合', 'TV 排行榜', '唯一播放器队列', '安全暂停', '不保证', '官方分组', '紧接的下一季', '命中立即显示', '无结果缓存十分钟', '保留观看进度和追剧记录']:
+        for expected in ['顶部本系列标题或季号搜索', '横向季封面', '我的追剧卡片移除', '已追剧', '左上角紧凑斜角标', '有效紧接下一季', '不叠加', '已有下季', '避免遮挡封面', '搜索输入', '输入法组合', 'TV 排行榜', '唯一播放器队列', '安全暂停', '不保证', '官方分组', '紧接的下一季', '命中立即显示', '无结果缓存十分钟', '保留观看进度和追剧记录']:
             self.assertIn(expected, notes)
 
     def test_release_uses_published_039_baseline_and_preserves_all_windows_releases(self):

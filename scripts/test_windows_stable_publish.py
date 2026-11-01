@@ -19,7 +19,7 @@ class WindowsReleaseNotesTests(unittest.TestCase):
             self.assertIn(expected, notes)
         self.assertNotIn('长剧名续季搜索', notes)
         self.assertNotIn('弹幕提速', notes)
-        for expected in ['查看全季', '本系列标题／季号搜索', '阿拉伯数字', '中文季号', '封面卡', '封面外', '已有下季提示']:
+        for expected in ['查看全季', '本系列标题／季号搜索', '阿拉伯数字', '中文季号', '封面卡', '左上角紧凑斜角标', '有效紧接下一季', '不叠加', '已有下季']:
             self.assertIn(expected, notes)
         for expected in ['单播放器队列', '不创建第二播放器', '安全回滚', '不承诺物理音画零间隙', '保留缓存会话', '输入法组合文字', '多列多行', '底部恢复按钮']:
             self.assertIn(expected, notes)

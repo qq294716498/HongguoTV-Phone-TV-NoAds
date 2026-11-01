@@ -23,7 +23,7 @@ verified_publication_note = '公开发布核验已完成：三 ABI 公网下载�
 windows_verified_publication_note = '公开发布核验已完成：Windows 公网 ZIP 下载与 SHA-256、正式升级通道和 API 限流回退检查通过；Android Latest 隔离及旧版本资产保持检查通过。'
 offsets = {'arm64-v8a': 2000, 'armeabi-v7a': 1000, 'x86_64': 4000}
 release_branch = 'release/windows-android-0.1.43-68'
-approved_source = '4c4677df16a8ef1efa009c129c850d23d126ed38'
+approved_source = '4850f297edba222d69eda1ef74565f904e5d060e'
 release_only_paths = frozenset({
     'README.md', '.github/workflows/android-stable.yml',
     '.github/workflows/windows-preview.yml',
@@ -56,7 +56,7 @@ def github(*arguments):
 def release_description(version):
     return (
         f'红果TV Android {version} · 手机 / Android TV\n\n'
-        '- 多季浏览页增加顶部本系列标题或季号搜索与横向季封面，保留当前季、选集和观看进度；我的追剧卡片移除重复“已追剧”字样，其他页面将该状态移至封面外信息区；保留“已有下季”角标，避免遮挡封面。\n'
+        '- 多季浏览页增加顶部本系列标题或季号搜索与横向季封面，保留当前季、选集和观看进度；我的追剧卡片移除重复“已追剧”字样，其他页面改用左上角紧凑斜角标；已有有效紧接下一季时优先显示“已有下季”，不叠加“已追剧”，避免遮挡封面底部季数。\n'
         '- 优化 APK 搜索输入：避免每键重建目录、过滤和排序，保留输入法组合状态；联想仅取消已发请求，迟到结果、快速输入、清空、提交和返回按当前查询生效。\n'
         '- TV 排行榜改为随宽度和字体调整的多列多行卡片；电视“我的追剧”顶区紧凑化，保留可读文字、遥控焦点和返回位置。正常切集加载不再自动弹出底部恢复按钮。\n'
         '- 使用唯一播放器队列提前准备已核验的下一集缓存；原生实际切项后同步集数、标题、弹幕和观看记录。当前缓冲不足、暂停或后台时安全暂停下一集预取并保留缓存，失败回退普通播放，不创建第二播放器。\n'
