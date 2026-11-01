@@ -54,13 +54,13 @@ jobs:
         timeout-minutes: 5
         run: |
           if ! command -v ffmpeg >/dev/null; then
-            for source in /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+            for source in /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources /etc/apt/apt-mirrors.txt; do
               if [ -f "$source" ]; then
                 sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' "$source"
               fi
             done
             sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update
-            sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 install -y ffmpeg
+            sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 install -y --no-install-recommends ffmpeg
           fi
       - run: flutter test --no-pub --dart-define=DISABLE_REMOTE_IMAGES=true --concurrency=2
       - run: flutter test --no-pub --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true --concurrency=2
