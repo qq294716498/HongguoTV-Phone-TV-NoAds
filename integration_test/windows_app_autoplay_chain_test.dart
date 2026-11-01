@@ -6,6 +6,7 @@ import 'package:duanju_app/app_layout.dart';
 import 'package:duanju_app/media_kit_playback_queue.dart';
 import 'package:duanju_app/media_pipeline.dart';
 import 'package:duanju_app/models.dart';
+import 'package:duanju_app/playback_queue_contract.dart';
 import 'package:duanju_app/player_controls.dart';
 import 'package:duanju_app/player_screen.dart';
 import 'package:flutter/material.dart';
@@ -43,6 +44,7 @@ class _ChainPlayer extends Player {
   @override
   Future<void> open(Playable playable, {bool play = true}) async {
     openCalls++;
+    await (platform! as NativePlayer).setProperty('ao', 'null');
     await super.open(playable, play: play);
   }
 
@@ -60,6 +62,72 @@ class _ChainPlayer extends Player {
       disposalFinished = true;
     }
   }
+}
+
+class _TraceQueueDriver implements PlaybackQueueDriver {
+  _TraceQueueDriver(this.delegate, this.record);
+
+  final PlaybackQueueDriver delegate;
+  final void Function(String, Map<String, Object?>) record;
+
+  @override
+  Stream<PlaybackQueueEvent> get events => delegate.events;
+
+  Future<T> _observe<T>(
+    String operation,
+    Map<String, Object?> fields,
+    Future<T> Function() action,
+  ) async {
+    record(operation, {...fields, 'phase': 'before'});
+    try {
+      final result = await action();
+      record(operation, {
+        ...fields,
+        'phase': 'after',
+        if (result is bool) 'result': result,
+      });
+      return result;
+    } catch (error) {
+      record(operation, {...fields, 'phase': 'error', 'error': '$error'});
+      rethrow;
+    }
+  }
+
+  @override
+  Future<bool> stage({
+    required PlaybackPlan current,
+    required PlaybackPlan next,
+    required String identity,
+    required int generation,
+  }) => _observe(
+    'stage',
+    {'identity': identity, 'generation': generation},
+    () => delegate.stage(
+      current: current,
+      next: next,
+      identity: identity,
+      generation: generation,
+    ),
+  );
+
+  @override
+  Future<bool> advance({required String identity, required bool play}) =>
+      _observe('advance', {
+        'identity': identity,
+        'play': play,
+      }, () => delegate.advance(identity: identity, play: play));
+
+  @override
+  Future<void> suspend(bool paused) =>
+      _observe('suspend', {'paused': paused}, () => delegate.suspend(paused));
+
+  @override
+  Future<void> clear({String? identity}) => _observe('clear', {
+    'identity': identity,
+  }, () => delegate.clear(identity: identity));
+
+  @override
+  Future<void> dispose() => _observe('dispose', {}, delegate.dispose);
 }
 
 class _ChainRepository extends FixtureRepository {
@@ -130,6 +198,8 @@ void main() {
       final handoffs = <Map<String, Object?>>[];
       final queueEvents = <Map<String, Object?>>[];
       final nativeEvents = <Map<String, Object?>>[];
+      final stateEvents = <Map<String, Object?>>[];
+      final driverOperations = <Map<String, Object?>>[];
       final history = <Map<String, Object?>>[];
       final playbackErrors = <String>[];
       final requests = <Map<String, Object?>>[];
@@ -152,6 +222,11 @@ void main() {
         'handoffs': handoffs,
         'queueEvents': queueEvents,
         'nativeEvents': nativeEvents,
+        'stateEvents': stateEvents,
+        'stateEventsDropped': 0,
+        'driverOperations': driverOperations,
+        'driverOperationsDropped': 0,
+        'fixtureAudioOutput': 'null',
         'history': history,
         'playbackErrors': playbackErrors,
         'requests': requests,
@@ -168,6 +243,47 @@ void main() {
       var expectedHandle = 0;
       var initialStops = 0;
       Object? failure;
+
+      Map<String, Object?> stateSnapshot() {
+        final active = player;
+        final state = active?.state;
+        return {
+          'elapsedMs': watch.elapsedMilliseconds,
+          'positionMs': state?.position.inMilliseconds,
+          'durationMs': state?.duration.inMilliseconds,
+          'bufferMs': state?.buffer.inMilliseconds,
+          'playing': state?.playing,
+          'buffering': state?.buffering,
+          'completed': state?.completed,
+          'openCalls': active?.openCalls ?? 0,
+          'nativeHandle': expectedHandle,
+        };
+      }
+
+      void boundedRecord(
+        List<Map<String, Object?>> destination,
+        String droppedKey,
+        Map<String, Object?> row,
+      ) {
+        if (destination.length == 512) {
+          destination.removeAt(0);
+          report[droppedKey] = (report[droppedKey] as int) + 1;
+        }
+        destination.add(row);
+      }
+
+      void recordState(String kind, [Object? payload]) => boundedRecord(
+        stateEvents,
+        'stateEventsDropped',
+        {...stateSnapshot(), 'eventKind': kind, 'payload': payload},
+      );
+
+      void recordDriver(String operation, Map<String, Object?> fields) =>
+          boundedRecord(driverOperations, 'driverOperationsDropped', {
+            ...stateSnapshot(),
+            'operation': operation,
+            ...fields,
+          });
 
       void require(bool value, String message) {
         if (!value) fail(message);
@@ -345,14 +461,38 @@ void main() {
                   final created = _ChainPlayer();
                   player = created;
                   subscriptions.add(
-                    created.stream.error.listen(playbackErrors.add),
+                    created.stream.error.listen((error) {
+                      playbackErrors.add(error);
+                      recordState('error', error);
+                    }),
                   );
+                  subscriptions.addAll([
+                    created.stream.position.listen(
+                      (value) => recordState('position', value.inMilliseconds),
+                    ),
+                    created.stream.duration.listen(
+                      (value) => recordState('duration', value.inMilliseconds),
+                    ),
+                    created.stream.buffer.listen(
+                      (value) => recordState('buffer', value.inMilliseconds),
+                    ),
+                    created.stream.playing.listen(
+                      (value) => recordState('playing', value),
+                    ),
+                    created.stream.buffering.listen(
+                      (value) => recordState('buffering', value),
+                    ),
+                    created.stream.completed.listen(
+                      (value) => recordState('completed', value),
+                    ),
+                  ]);
                   return created;
                 },
                 queueDriverFactory: (owner) {
                   final transport = NativeMediaKitQueueTransport(owner);
                   subscriptions.add(
                     transport.events.listen((event) {
+                      recordState('native.${event.kind.name}', event.entryId);
                       nativeEvents.add({
                         'elapsedMs': watch.elapsedMilliseconds,
                         'kind': event.kind.name,
@@ -366,6 +506,7 @@ void main() {
                   );
                   subscriptions.add(
                     driver.events.listen((event) {
+                      recordState('queue.${event.kind.name}', event.identity);
                       queueEvents.add({
                         'elapsedMs': watch.elapsedMilliseconds,
                         'identity': event.identity,
@@ -376,7 +517,7 @@ void main() {
                       });
                     }),
                   );
-                  return driver;
+                  return _TraceQueueDriver(driver, recordDriver);
                 },
               ),
             ),
@@ -387,6 +528,7 @@ void main() {
         final native = active.platform! as NativePlayer;
         expectedHandle = await active.handle;
         report['nativeHandle'] = expectedHandle;
+        recordState('nativeHandleReady', expectedHandle);
         require(expectedHandle > 0, 'Native handle is missing');
 
         Future<double> nativePosition() async =>
@@ -563,6 +705,8 @@ void main() {
             'video-params/h',
             'frame-drop-count',
             'decoder-frame-drop-count',
+            'ao',
+            'current-ao',
           ])
             key: await native.getProperty(key),
         };

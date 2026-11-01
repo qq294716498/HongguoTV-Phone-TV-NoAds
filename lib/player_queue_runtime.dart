@@ -35,6 +35,7 @@ class _QueuedEpisode {
   final int previousIndex;
   Duration previousPosition;
   Duration previousDuration;
+  Duration previousBufferedEnd = Duration.zero;
   PlaybackPlan? previousPlan;
   PlaybackPreloadLease? lease;
   final selected = Completer<bool>();

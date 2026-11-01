@@ -1303,6 +1303,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         _player.state.position,
         _player.state.duration,
       );
+      queued.previousBufferedEnd = _player.state.buffer;
       _queuedEpisode = queued;
       final staged = await _queueDriver!.stage(
         current: _plan!,
@@ -1849,6 +1850,29 @@ class _PlayerScreenState extends State<PlayerScreen>
     final tailTolerance = duration < 5000 ? duration ~/ 20 : 250;
     final fullyBuffered =
         duration > 0 && buffered > 0 && buffered >= duration - tailTolerance;
+    if (queued != null &&
+        queued.valid &&
+        duration == queued.previousDuration.inMilliseconds &&
+        buffered > queued.previousBufferedEnd.inMilliseconds) {
+      queued.previousBufferedEnd = state.buffer;
+    }
+    if (queued != null &&
+        queued.valid &&
+        queued.armed &&
+        _autoAdvance &&
+        _foreground &&
+        _playIntent &&
+        !_panelOpen &&
+        !_danmaku.seeking &&
+        duration > 0 &&
+        position >= duration - tailTolerance &&
+        position <= duration + tailTolerance &&
+        (fullyBuffered ||
+            buffered == 0 &&
+                queued.previousBufferedEnd.inMilliseconds >=
+                    duration - tailTolerance)) {
+      return;
+    }
     final ahead = state.buffer.inMilliseconds - position;
     if (!_foreground ||
         !_playIntent ||

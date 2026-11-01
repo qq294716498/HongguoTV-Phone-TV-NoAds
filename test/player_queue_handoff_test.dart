@@ -1543,6 +1543,195 @@ void main() {
   for (final television in [false, true]) {
     final device = television ? 'TV' : 'phone';
     testWidgets(
+      '$device native EOF stop before completion keeps the prepared next',
+      (tester) async {
+        final harness = await _mount(tester, television: television);
+        try {
+          final second = await _arm(tester, harness);
+          harness.platform.progress(
+            const Duration(milliseconds: 119800),
+            buffer: const Duration(seconds: 120),
+          );
+          await _pump(tester);
+          await harness.platform.pause();
+          expect(harness.platform.state.playing, false);
+          expect(harness.platform.state.completed, false);
+          await _pump(tester);
+          expect(harness.driver.cleared, isNot(contains(second.identity)));
+          expect(
+            harness.repository.released,
+            isNot(contains(second.next.session)),
+          );
+          harness.platform.finishEpisode();
+          await tester.pump(const Duration(milliseconds: 50));
+          harness.driver.activate(second);
+          harness.driver.event(second, PlaybackQueueEventKind.ready);
+          await _pump(tester);
+          await tester.pump(const Duration(seconds: 1));
+          await _pump(tester);
+          expect(harness.title(tester), contains('第 2 集'));
+          expect(harness.platform.opened, hasLength(1));
+          expect(harness.driver.advances, isEmpty);
+          expect(harness.repository.requestedEpisodes, [1]);
+          expect(harness.store.history.single.episode, 1);
+          expect(harness.store.history.single.position, 120);
+          expect(harness.store.history.single.duration, 120);
+        } finally {
+          await _dispose(tester, harness);
+        }
+      },
+    );
+  }
+
+  for (final television in [false, true]) {
+    final device = television ? 'TV' : 'phone';
+    testWidgets('$device native EOF buffer reset keeps the proven full next', (
+      tester,
+    ) async {
+      final harness = await _mount(tester, television: television);
+      try {
+        final second = await _arm(tester, harness);
+        harness.platform.progress(
+          const Duration(milliseconds: 119800),
+          buffer: const Duration(seconds: 120),
+        );
+        await _pump(tester);
+        harness.platform.buffered(Duration.zero);
+        expect(harness.platform.state.playing, true);
+        expect(harness.platform.state.completed, false);
+        expect(harness.platform.state.buffering, false);
+        await _pump(tester);
+        expect(harness.driver.cleared, isNot(contains(second.identity)));
+        expect(
+          harness.repository.released,
+          isNot(contains(second.next.session)),
+        );
+        harness.platform.finishEpisode();
+        await tester.pump(const Duration(milliseconds: 50));
+        harness.driver.activate(second);
+        harness.driver.event(second, PlaybackQueueEventKind.ready);
+        await _pump(tester);
+        await tester.pump(const Duration(seconds: 1));
+        await _pump(tester);
+        expect(harness.title(tester), contains('第 2 集'));
+        expect(harness.platform.opened, hasLength(1));
+        expect(harness.driver.advances, isEmpty);
+        expect(harness.repository.requestedEpisodes, [1]);
+        expect(harness.store.history.single.episode, 1);
+        expect(harness.store.history.single.position, 120);
+        expect(harness.store.history.single.duration, 120);
+      } finally {
+        await _dispose(tester, harness);
+      }
+    });
+  }
+
+  for (final television in [false, true]) {
+    final device = television ? 'TV' : 'phone';
+    testWidgets(
+      '$device native EOF buffering before completion keeps the prepared next',
+      (tester) async {
+        final harness = await _mount(tester, television: television);
+        try {
+          final second = await _arm(tester, harness);
+          harness.platform.progress(
+            const Duration(milliseconds: 119800),
+            buffer: const Duration(seconds: 120),
+          );
+          await _pump(tester);
+          harness.platform.progress(
+            const Duration(milliseconds: 119800),
+            buffer: const Duration(seconds: 120),
+            buffering: true,
+          );
+          expect(harness.platform.state.playing, true);
+          expect(harness.platform.state.completed, false);
+          expect(harness.platform.state.buffering, true);
+          await _pump(tester);
+          expect(harness.driver.cleared, isNot(contains(second.identity)));
+          expect(
+            harness.repository.released,
+            isNot(contains(second.next.session)),
+          );
+          harness.platform.finishEpisode();
+          await tester.pump(const Duration(milliseconds: 50));
+          harness.driver.activate(second);
+          harness.driver.event(second, PlaybackQueueEventKind.ready);
+          await _pump(tester);
+          await tester.pump(const Duration(seconds: 1));
+          await _pump(tester);
+          expect(harness.title(tester), contains('第 2 集'));
+          expect(harness.platform.opened, hasLength(1));
+          expect(harness.driver.advances, isEmpty);
+          expect(harness.repository.requestedEpisodes, [1]);
+          expect(harness.store.history.single.episode, 1);
+          expect(harness.store.history.single.position, 120);
+          expect(harness.store.history.single.duration, 120);
+        } finally {
+          await _dispose(tester, harness);
+        }
+      },
+    );
+  }
+
+  for (final interruption in ['pause', 'buffer', 'background', 'menu']) {
+    testWidgets('TV prepared tail still suspends for $interruption', (
+      tester,
+    ) async {
+      final harness = await _mount(tester);
+      Future<void>? menuOpening;
+      try {
+        final second = await _arm(tester, harness);
+        harness.platform.progress(
+          Duration(milliseconds: interruption == 'buffer' ? 118500 : 119800),
+          buffer: const Duration(seconds: 120),
+        );
+        await _pump(tester);
+        if (interruption == 'pause') {
+          harness.togglePlayback(tester);
+        } else if (interruption == 'buffer') {
+          harness.platform.progress(
+            const Duration(milliseconds: 118600),
+            buffer: const Duration(milliseconds: 118700),
+          );
+        } else if (interruption == 'background') {
+          tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.inactive,
+          );
+        } else {
+          menuOpening = harness.controls(tester).onSettings();
+          unawaited(menuOpening);
+        }
+        await _pump(tester);
+        expect(harness.driver.cleared, contains(second.identity));
+        expect(
+          harness.repository.released,
+          isNot(contains(second.next.session)),
+        );
+        expect(harness.platform.opened, hasLength(1));
+        expect(harness.driver.advances, isEmpty);
+        if (menuOpening != null) {
+          final menu = find.byType(TelevisionSettingsDialog);
+          expect(menu, findsOneWidget);
+          Navigator.of(tester.element(menu)).pop();
+          await _pump(tester);
+          await menuOpening;
+        }
+      } finally {
+        if (interruption == 'background') {
+          tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.resumed,
+          );
+          await _pump(tester);
+        }
+        await _dispose(tester, harness);
+      }
+    });
+  }
+
+  for (final television in [false, true]) {
+    final device = television ? 'TV' : 'phone';
+    testWidgets(
       '$device rounded buffered tail keeps the prepared native next',
       (tester) async {
         final harness = await _mount(tester, television: television);
