@@ -4,6 +4,7 @@ import 'dart:collection';
 import 'package:duanju_app/core_bridge.dart';
 import 'package:duanju_app/diary_service.dart';
 import 'package:duanju_app/lan_controller.dart';
+import 'package:duanju_app/local_snapshot.dart';
 import 'package:duanju_app/local_store.dart';
 import 'package:duanju_app/models.dart';
 import 'package:flutter/widgets.dart';
@@ -16,6 +17,7 @@ class MemoryLanRepository extends FixtureRepository {
   MemoryLanRepository(this.id);
   final String id;
   final commands = <String>[];
+  final requestPaths = <String>[];
   final events = Queue<Map<String, dynamic>>();
   final pendingRequests = <String, Completer<Map<String, dynamic>>>{};
   final replies = <String, Completer<Map<String, dynamic>>>{};
@@ -27,6 +29,8 @@ class MemoryLanRepository extends FixtureRepository {
   bool holdSummary = false;
   bool legacySyncRequests = false;
   bool legacySyncResponses = false;
+  bool legacyProgressRequests = false;
+  bool legacyProgressResponses = false;
   String? holdPath;
   String? holdResponsePath;
   final responsePaths = <String, String>{};
@@ -101,6 +105,7 @@ class MemoryLanRepository extends FixtureRepository {
         poll = Completer<Map<String, dynamic>>();
         return poll!.future;
       case 'request':
+        requestPaths.add(payload['path'] as String);
         final request = payload['requestId'] as String;
         final pending = Completer<Map<String, dynamic>>();
         pendingRequests[request] = pending;
@@ -116,7 +121,13 @@ class MemoryLanRepository extends FixtureRepository {
             'pin': pin,
             'host': '127.0.0.1',
             'payload': {...Map<String, dynamic>.from(payload['payload'] as Map)}
-              ..removeWhere((key, _) => legacySyncRequests && key == 'schema'),
+              ..removeWhere(
+                (key, _) =>
+                    legacySyncRequests && key == 'schema' ||
+                    legacyProgressRequests &&
+                        payload['path'] == 'sync/summary' &&
+                        key == 'progressPriority',
+              ),
           });
         }
         if (holdSummary && payload['path'] == 'sync/summary' ||
@@ -140,7 +151,11 @@ class MemoryLanRepository extends FixtureRepository {
           } else {
             pending.complete(
               Map<String, dynamic>.from(payload['payload'] as Map)..removeWhere(
-                (key, _) => legacySyncResponses && key == 'schema',
+                (key, _) =>
+                    legacySyncResponses && key == 'schema' ||
+                    legacyProgressResponses &&
+                        path == 'sync/summary' &&
+                        key == 'progressPriority',
               ),
             );
           }
@@ -202,14 +217,19 @@ void main() {
     title: '跨设备合成 第三季',
     episodes: 14,
   );
-  WatchEntry progress(Drama drama, int episode, double position, int minute) =>
-      WatchEntry(
-        drama: drama,
-        episode: episode,
-        position: position,
-        duration: 120,
-        updatedAt: DateTime.utc(2026, 10, 17, 12, minute),
-      );
+  WatchEntry progress(
+    Drama drama,
+    int episode,
+    double position,
+    int minute, {
+    double duration = 120,
+  }) => WatchEntry(
+    drama: drama,
+    episode: episode,
+    position: position,
+    duration: duration,
+    updatedAt: DateTime.utc(2026, 10, 17, 12, minute),
+  );
   Future<void> baseline(LanController left, LanController right) async {
     await left.store.toggleSeriesFavorite(season1);
     await right.store.toggleSeriesFavorite(season1);
@@ -232,6 +252,72 @@ void main() {
     expect(record.watch!.duration, 120);
     expect(store.seriesWatch(season1)!.drama.id, drama.id);
     expect(store.watched(drama.id)!.position, position);
+  }
+
+  void expectWholeProgress(LocalStore store, WatchEntry expected) {
+    expect(store.favorites.map((d) => d.id), [season1.id]);
+    final record = store.lanDocument.records[season1.id]!;
+    expect(record.progress.conflict, false);
+    expect(record.watch!.toJson(), expected.toJson());
+    expect(store.seriesWatch(season1)!.toJson(), expected.toJson());
+    expect(store.watched(expected.drama.id)!.toJson(), expected.toJson());
+  }
+
+  Future<void> synchronizeMode(
+    String mode,
+    LanController left,
+    LanController right,
+  ) async {
+    if (mode == 'merge') {
+      await left.synchronize();
+    } else if (mode == 'automatic') {
+      await left.setAutoSync(true);
+      await right.setAutoSync(true);
+      left.connection!.autoSync = true;
+      right.connection!.autoSync = true;
+      left.flush();
+      for (
+        var i = 0;
+        i < 100 &&
+            (left.syncing ||
+                right.syncing ||
+                left.store.lanDocument.hashFor({'hongguo'}) !=
+                    right.store.lanDocument.hashFor({'hongguo'}));
+        i++
+      ) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      await left.setAutoSync(false);
+      await right.setAutoSync(false);
+    } else {
+      final owner = mode == 'push' ? right : left;
+      final preview = await owner.preview(
+        mode == 'push' ? LanSyncMode.push : LanSyncMode.pull,
+      );
+      await owner.applyPreview(preview);
+    }
+  }
+
+  Future<void> expectConvergedProgress(
+    LanController left,
+    LanController right,
+    WatchEntry expected,
+  ) async {
+    expectWholeProgress(left.store, expected);
+    expectWholeProgress(right.store, expected);
+    final hash = left.store.lanDocument.hashFor({'hongguo'});
+    expect(right.store.lanDocument.hashFor({'hongguo'}), hash);
+    await right.synchronize();
+    await left.synchronize();
+    expect(left.store.lanDocument.hashFor({'hongguo'}), hash);
+    expect(right.store.lanDocument.hashFor({'hongguo'}), hash);
+    for (final controller in [left, right]) {
+      expectWholeProgress(controller.store, expected);
+      final restarted = LocalStore(controller.store.preferences);
+      addTearDown(restarted.dispose);
+      expectWholeProgress(restarted, expected);
+      expect(restarted.lanDocument.hashFor({'hongguo'}), hash);
+    }
   }
 
   for (final mode in ['merge', 'push', 'pull', 'automatic']) {
@@ -275,48 +361,127 @@ void main() {
     );
   }
 
-  test(
-    'rewatching season one replaces the later season instead of maximizing season or episode',
-    () async {
-      final (left, right, _, _) = await pair();
-      await baseline(left, right);
-      await left.store.saveWatch(progress(season3, 12, 70, 3));
-      await left.synchronize();
-      await right.store.saveWatch(progress(season1, 1, 3, 5));
-      await right.synchronize();
-      expectProgress(left.store, season1, 1, 3);
-      expect(left.store.history.any((w) => w.drama.id == season3.id), true);
-    },
-  );
+  for (final mode in ['merge', 'push', 'pull', 'automatic']) {
+    test(
+      '$mode keeps local lower-season rewatch usable until synchronization restores the higher season',
+      () async {
+        final (left, right, _, _) = await pair();
+        await baseline(left, right);
+        final higher = progress(season3, 12, 70, 3);
+        final rewatch = progress(season1, 1, 3, 5);
+        await left.store.saveWatch(higher);
+        await left.synchronize();
+        await right.store.saveWatch(rewatch);
+        expectWholeProgress(right.store, rewatch);
+        await synchronizeMode(mode, left, right);
+        await expectConvergedProgress(left, right, higher);
+        expect(left.store.history.any((w) => w.drama.id == season3.id), true);
+        expect(right.store.watched(season1.id)!.toJson(), rewatch.toJson());
+      },
+    );
+
+    test(
+      '$mode resolves offline season three episode one above newer season two episode ninety-nine as one whole record',
+      () async {
+        final (left, right, _, _) = await pair();
+        await baseline(left, right);
+        final higher = progress(season3, 1, 37, 3, duration: 143);
+        final lower = progress(season2, 99, 61, 4, duration: 199);
+        await left.store.saveWatch(higher);
+        await right.store.saveWatch(lower);
+        await synchronizeMode(mode, left, right);
+        await expectConvergedProgress(left, right, higher);
+      },
+    );
+
+    test(
+      '$mode keeps the older higher episode within the same season as one whole record',
+      () async {
+        final (left, right, _, _) = await pair();
+        await baseline(left, right);
+        final higher = progress(season3, 9, 31, 3, duration: 137);
+        final lower = progress(season3, 2, 91, 4, duration: 191);
+        await left.store.saveWatch(higher);
+        await right.store.saveWatch(lower);
+        await synchronizeMode(mode, left, right);
+        await expectConvergedProgress(left, right, higher);
+      },
+    );
+
+    test(
+      '$mode keeps the newer timestamp for the same season and episode even after a backward seek',
+      () async {
+        final (left, right, _, _) = await pair();
+        await baseline(left, right);
+        final earlier = progress(season3, 9, 91, 3, duration: 191);
+        final seeked = progress(season3, 9, 12, 4, duration: 137);
+        await left.store.saveWatch(earlier);
+        await right.store.saveWatch(seeked);
+        expectWholeProgress(right.store, seeked);
+        await synchronizeMode(mode, left, right);
+        await expectConvergedProgress(left, right, seeked);
+      },
+    );
+  }
 
   test(
-    'offline cross-season conflict selection retains the entire chosen progress value',
+    'upgraded receiver rejects an older synchronization plan before either device saves lower progress',
     () async {
       final (left, right, _, _) = await pair();
       await baseline(left, right);
-      await left.store.saveWatch(progress(season3, 7, 37, 3));
-      await right.store.saveWatch(progress(season2, 9, 61, 4));
+      final higher = progress(season3, 12, 70, 3);
+      final rewatch = progress(season1, 1, 3, 5);
+      await left.store.saveWatch(higher);
       await left.synchronize();
-      final conflict = left.store.lanDocument.records[season1.id]!;
-      expect(conflict.progress.conflict, true);
-      final choice = conflict.progress.values.firstWhere(
-        (v) => lanMap(lanMap(v.value)['drama'])['id'] == season3.id,
+      await left.store.saveWatch(rewatch);
+      expectWholeProgress(left.store, rewatch);
+      expectWholeProgress(right.store, higher);
+      final preview = await left.preview(LanSyncMode.merge);
+      final local = left.store.lanDocument.records;
+      final remote = right.store.lanDocument.records;
+      final result = {
+        for (final id in {...local.keys, ...remote.keys})
+          id: local[id] == null
+              ? remote[id]!
+              : remote[id] == null
+              ? local[id]!
+              : local[id]!.merge(remote[id]!),
+      };
+      expect(result[season1.id]!.watch!.toJson(), rewatch.toJson());
+      final oldPreview = LanPreview(
+        operation: preview.operation,
+        mode: preview.mode,
+        connection: preview.connection,
+        epoch: preview.epoch,
+        sources: preview.sources,
+        localBase: preview.localBase,
+        remoteBase: preview.remoteBase,
+        result: result,
+        localChanges: result.values
+            .where((record) => local[record.id]?.hash != record.hash)
+            .toList(),
+        remoteChanges: result.values
+            .where((record) => remote[record.id]?.hash != record.hash)
+            .toList(),
+        localCount: LanChangeCount.between(local, result),
+        remoteCount: LanChangeCount.between(remote, result),
+        skipped: preview.skipped,
       );
-      await left.store.resolveLanConflict(
-        season1.id,
-        'progress',
-        choice,
-        conflict.hash,
+      expect(oldPreview.remoteChanges, hasLength(1));
+      final beforeLeft = left.store.lanDocument.hashFor(preview.sources);
+      final beforeRight = right.store.lanDocument.hashFor(preview.sources);
+      await expectLater(
+        left.applyPreview(oldPreview),
+        throwsA(predicate((error) => error.toString().contains('同步规则较旧'))),
       );
+      expect(left.store.lanDocument.hashFor(preview.sources), beforeLeft);
+      expect(right.store.lanDocument.hashFor(preview.sources), beforeRight);
+      expect(left.store.lanReceipt(oldPreview.operation), isNull);
+      expect(right.store.lanReceipt(oldPreview.operation), isNull);
+      expectWholeProgress(left.store, rewatch);
+      expectWholeProgress(right.store, higher);
       await left.synchronize();
-      expectProgress(right.store, season3, 7, 37);
-      expect(
-        right.store.lanDocument.records[season1.id]!.watch!.updatedAt,
-        progress(season3, 7, 37, 3).updatedAt,
-      );
-      final restarted = LocalStore(right.store.preferences);
-      addTearDown(restarted.dispose);
-      expectProgress(restarted, season3, 7, 37);
+      await expectConvergedProgress(left, right, higher);
     },
   );
 
@@ -436,6 +601,60 @@ void main() {
       expect(left.store.lanDocument.hashFor({'hongguo'}), beforeLeft);
       expect(right.store.lanDocument.hashFor({'hongguo'}), beforeRight);
     });
+  }
+
+  for (final direction in ['request', 'response']) {
+    test(
+      'missing progress priority $direction rejects a zero-remote-change legacy plan before either device saves',
+      () async {
+        final (left, right, a, b) = await pair();
+        await baseline(left, right);
+        final higher = progress(season3, 7, 37, 3);
+        final rewatch = progress(season1, 1, 3, 5);
+        await left.store.saveWatch(higher);
+        await left.synchronize();
+        await right.store.saveWatch(rewatch);
+        final local = left.store.lanDocument.records[season1.id]!;
+        final remote = right.store.lanDocument.records[season1.id]!;
+        final legacyMerged = local.merge(remote);
+        expect(legacyMerged.watch!.toJson(), rewatch.toJson());
+        expect(legacyMerged.hash, remote.hash);
+        final beforeLeft = left.store.lanDocument.hashFor({'hongguo'});
+        final beforeRight = right.store.lanDocument.hashFor({'hongguo'});
+        final beforeLeftReceipts = LocalSnapshot(
+          left.store.preferences,
+        ).getString('lanReceipts');
+        final beforeRightReceipts = LocalSnapshot(
+          right.store.preferences,
+        ).getString('lanReceipts');
+        a.requestPaths.clear();
+        b.requestPaths.clear();
+        a.legacyProgressRequests = direction == 'request';
+        b.legacyProgressResponses = direction == 'response';
+        await expectLater(
+          left.synchronize(),
+          throwsA(
+            predicate(
+              (error) => error.toString().contains(lanSyncUpgradeMessage),
+            ),
+          ),
+        );
+        expect(a.requestPaths, ['sync/summary']);
+        expect(b.requestPaths, isEmpty);
+        expect(left.store.lanDocument.hashFor({'hongguo'}), beforeLeft);
+        expect(right.store.lanDocument.hashFor({'hongguo'}), beforeRight);
+        expect(
+          LocalSnapshot(left.store.preferences).getString('lanReceipts'),
+          beforeLeftReceipts,
+        );
+        expect(
+          LocalSnapshot(right.store.preferences).getString('lanReceipts'),
+          beforeRightReceipts,
+        );
+        expectWholeProgress(left.store, higher);
+        expectWholeProgress(right.store, rewatch);
+      },
+    );
   }
 
   test(

@@ -9,7 +9,8 @@ import 'hongguo_series.dart';
 import 'models.dart';
 
 const lanSyncSchema = 2;
-const lanSyncUpgradeMessage = '跨季续播同步需要两端升级到新版，原记录未修改';
+const lanProgressPriority = 1;
+const lanSyncUpgradeMessage = '最高季、最高集同步需要两端升级到新版，原记录未修改';
 
 bool lanSameSeries(Drama anchor, Drama target) {
   if (anchor.source != target.source) return false;
@@ -486,6 +487,112 @@ class LanRecord {
     'known': known,
     'read': read,
   };
+}
+
+int? _lanCompareProgress(Drama anchor, Object a, Object b) {
+  WatchEntry watch(Object value) => WatchEntry.fromJson({
+    ...lanMap(value),
+    'drama': lanMap(value)['drama'] ?? anchor.toJson(),
+  });
+  final left = watch(a), right = watch(b);
+  if (left.drama.id != right.drama.id) {
+    if (!lanSameSeries(left.drama, right.drama) ||
+        !hongguoSameSeries(left.drama, right.drama) ||
+        left.drama.seriesGroupId.isNotEmpty &&
+            right.drama.seriesGroupId.isNotEmpty &&
+            left.drama.seriesGroupId != right.drama.seriesGroupId) {
+      return null;
+    }
+    final explicitLeft = hongguoSeriesInfo(left.drama);
+    final explicitRight = hongguoSeriesInfo(right.drama);
+    final unit = explicitLeft?.unit ?? explicitRight?.unit;
+    final l = explicitLeft ?? hongguoSeriesInfo(left.drama, unit: unit);
+    final r = explicitRight ?? hongguoSeriesInfo(right.drama, unit: unit);
+    if (l == null ||
+        r == null ||
+        l.unit != r.unit ||
+        (!l.explicit || !r.explicit) && l.key != r.key ||
+        l.season == r.season) {
+      return null;
+    }
+    return l.season.compareTo(r.season);
+  }
+  var order = left.episode.compareTo(right.episode);
+  if (order != 0) return order;
+  order = left.updatedAt.compareTo(right.updatedAt);
+  if (order != 0) return order;
+  order = left.position.compareTo(right.position);
+  return order != 0 ? order : lanJSON(a).compareTo(lanJSON(b));
+}
+
+LanRecord lanResolveProgress(
+  LanRecord record,
+  Iterable<LanRecord> candidates,
+  LanDocument writer,
+) {
+  if (!record.followed ||
+      record.progress.values.any((candidate) => candidate.value == null)) {
+    return record;
+  }
+  final cleared = {
+    for (final candidate in record.progress.values)
+      ...List<String>.from(lanMap(candidate.value)['cleared'] as List? ?? []),
+  };
+  if (cleared.length > 1000) return record;
+  final values =
+      [
+            ...record.progress.values,
+            for (final candidate in candidates)
+              if (candidate.id == record.id) ...candidate.progress.values,
+          ]
+          .where((candidate) {
+            if (candidate.value == null) return false;
+            final target = lanMap(candidate.value)['drama'];
+            final id = target == null ? record.id : lanMap(target)['id'];
+            return !cleared.contains(id);
+          })
+          .map((candidate) => candidate.value!)
+          .toList();
+  for (var i = 0; i < values.length; i++) {
+    for (var j = i + 1; j < values.length; j++) {
+      if (_lanCompareProgress(record.drama, values[i], values[j]) == null) {
+        return record;
+      }
+    }
+  }
+  Object? preferred;
+  for (final candidate in values) {
+    if (preferred == null) {
+      preferred = candidate;
+      continue;
+    }
+    final order = _lanCompareProgress(record.drama, candidate, preferred)!;
+    if (order > 0) preferred = candidate;
+  }
+  if (preferred != null) {
+    final selected = Map<String, dynamic>.of(lanMap(preferred))
+      ..remove('cleared');
+    if (cleared.isNotEmpty) {
+      selected['cleared'] = cleared.toList()..sort();
+      selected['drama'] ??= lanCompactDrama(record.drama).toJson();
+    }
+    preferred = selected;
+  }
+  if (preferred == null ||
+      !record.progress.conflict &&
+          lanJSON(record.progress.value) == lanJSON(preferred)) {
+    return record;
+  }
+  try {
+    LanRecord.fromJson(
+      record
+          .withField('progress', writer.copy().edit(record.progress, preferred))
+          .toJson(),
+    );
+  } on FormatException {
+    return record;
+  }
+  return record.withField('progress', writer.edit(record.progress, preferred));
 }
 
 class LanDocument {

@@ -298,7 +298,7 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
                         key: const ValueKey('lan-auto-sync'),
                         title: const Text('自动同步'),
                         subtitle: const Text(
-                          '同步追剧、观看状态和这些剧目的续播进度；未加入追剧的观看历史不参与',
+                          '同步追剧、观看状态和续播进度；进度保留最高季、同季最高集，未追剧的历史不参与',
                         ),
                         value: link.autoSync,
                         onChanged: controlsEnabled
@@ -858,6 +858,12 @@ class _LanManualState extends State<_LanManual> {
                             const SizedBox(height: 12),
                             Text(name + ' · ' + preview.connection.user),
                             Text(preview.remoteCount.label),
+                            const Padding(
+                              padding: EdgeInsets.only(top: 12),
+                              child: Text(
+                                '续播进度优先保留最高季、同季最高集；同季同集采用最近记录。主动清空仍会同步。',
+                              ),
+                            ),
                             if (preview.skipped > 0)
                               Padding(
                                 padding: const EdgeInsets.only(top: 12),

@@ -152,12 +152,14 @@ extension LanSynchronization on LanController {
     while (true) {
       _checkSync(ticket, remote);
       final summary = await _request('sync/summary', {
+        'progressPriority': lanProgressPriority,
         'sources': sources.toList(),
         'offset': offset,
         if (remoteBase.isNotEmpty) 'base': remoteBase,
       }, owner: 'sync');
       _checkSync(ticket, remote);
-      if (summary['schema'] != lanSyncSchema)
+      if (summary['schema'] != lanSyncSchema ||
+          summary['progressPriority'] != lanProgressPriority)
         throw StateError(lanSyncUpgradeMessage);
       final base = lanText(summary['base'], 64);
       if (remoteBase.isNotEmpty && remoteBase != base) {
@@ -246,7 +248,10 @@ extension LanSynchronization on LanController {
               : max(record.read ?? 0, authority?.read ?? 0),
         );
       }
-      result[id] = record;
+      result[id] = lanResolveProgress(record, [
+        if (a != null) a,
+        if (b != null) b,
+      ], writer);
     }
     if (result.length > LanDocument.limit ||
         result.values.where((record) => record.followed).length > 20000) {
@@ -426,6 +431,8 @@ extension LanSynchronization on LanController {
       throw StateError(lanSyncUpgradeMessage);
     final document = store.lanDocument;
     if (path == 'sync/summary') {
+      if (body['progressPriority'] != lanProgressPriority)
+        throw StateError(lanSyncUpgradeMessage);
       final sources = _receiveScope(body, remote);
       final base = document.hashFor(sources);
       if (body['base'] != null && body['base'] != base)
@@ -441,6 +448,7 @@ extension LanSynchronization on LanController {
       final end = min(offset + 128, records.length);
       return {
         'schema': lanSyncSchema,
+        'progressPriority': lanProgressPriority,
         'base': base,
         'items': {
           for (final record in records.sublist(offset, end))
@@ -586,6 +594,16 @@ extension LanSynchronization on LanController {
             if (lanJSON(field.value.merge(incoming).toJson()) !=
                 lanJSON(incoming.toJson())) {
               throw StateError('同步版本未包含本机的最新修改，请重新合并');
+            }
+          }
+          if (!record.progress.conflict) {
+            final prioritized = lanResolveProgress(record, [
+              old,
+              record,
+            ], next.copy());
+            if (lanJSON(prioritized.progress.toJson()) !=
+                lanJSON(record.progress.toJson())) {
+              throw StateError('对方同步规则较旧，请升级对方或从本机发起同步');
             }
           }
         }
