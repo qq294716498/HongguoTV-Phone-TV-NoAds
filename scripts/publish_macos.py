@@ -29,6 +29,7 @@ release_only_paths = frozenset({
     'scripts/publish_windows_stable.py', 'scripts/test_windows_stable_publish.py',
     'scripts/reuse_windows_package.py', 'scripts/test_reuse_windows_package.py',
     'test/app_update_live_test.dart', 'test/windows_update_live_test.dart',
+    'test/windows_update_cleanup_test.dart',
     'integration_test/windows_playback_queue_test.dart',
     'integration_test/windows_app_autoplay_chain_test.dart',
     'integration_test/macos_app_autoplay_chain_test.dart',

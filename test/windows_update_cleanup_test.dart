@@ -162,6 +162,7 @@ void main() {
   late CleanupFixture fixture;
   setUp(() async {
     temporary = await Directory.systemTemp.createTemp('update-cleanup-');
+    temporary = Directory(await temporary.resolveSymbolicLinks());
     fixture = CleanupFixture(temporary);
   });
   tearDown(() async => temporary.delete(recursive: true));
