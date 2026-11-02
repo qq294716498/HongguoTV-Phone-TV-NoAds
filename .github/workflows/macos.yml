@@ -17,6 +17,8 @@ jobs:
     timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-go@v5
         with:
           go-version-file: native/go.mod
@@ -27,10 +29,21 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get --enforce-lockfile
-      - run: flutter analyze --no-pub --no-fatal-infos lib test integration_test test_driver
-      - run: flutter test --no-pub --dart-define=DISABLE_REMOTE_IMAGES=true --concurrency=2
+      - run: python3 -m unittest discover -s scripts -p 'test_*.py'
+      - run: dart format --output=none --set-exit-if-changed lib test integration_test test_driver
+      - name: Analyze the complete application
+        run: |
+          set -o pipefail
+          mkdir -p dist/macos
+          flutter analyze --no-pub --no-fatal-infos lib test integration_test test_driver 2>&1 | tee dist/macos/analysis.log
+      - name: Run complete Flutter regressions with machine evidence
+        run: |
+          set -o pipefail
+          flutter test --no-pub --dart-define=DISABLE_REMOTE_IMAGES=true --concurrency=2 --machine | tee dist/macos/flutter-tests.jsonl
       - run: go test -race ./...
         working-directory: native
+      - name: Bind actual checks to this build
+        run: python3 scripts/verify_macos_checks.py --tests dist/macos/flutter-tests.jsonl --analysis dist/macos/analysis.log
       - name: Prepare FFmpeg macOS frameworks
         run: |
           plugin=$(python3 -c "import json,urllib.parse; print(urllib.parse.urlparse(next(p['rootUri'] for p in json.load(open('.dart_tool/package_config.json'))['packages'] if p['name']=='ffmpeg_kit_flutter_new_min_gpl')).path)")
@@ -74,6 +87,8 @@ jobs:
               assert data['ok'] and data['nativeCore'] and data['mediaKitPlayback'] and data['remux'] and data['encryptedPlayback'] and data['fullscreen']
               runs.append(data)
           summary = dict(runs[-1], hostArchitecture=platform.machine(), repeatedLaunches=len(runs), runs=runs)
+          import os
+          summary.update(platform='macos', sourceCommit=os.environ['GITHUB_SHA'], workflowRun=os.environ['GITHUB_RUN_ID'], allSources=False)
           (root / 'macOS-smoke.json').write_text(json.dumps(summary, indent=2))
           PY
       - uses: actions/upload-artifact@v4
@@ -81,4 +96,40 @@ jobs:
         with:
           name: macos-smoke-${{ matrix.runner }}
           path: package/macOS-smoke.json
+          if-no-files-found: warn
+
+  playback:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: native/go.mod
+          cache-dependency-path: native/go.sum
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - name: Prepare FFmpeg macOS frameworks
+        run: |
+          plugin=$(python3 -c "import json,urllib.parse; print(urllib.parse.urlparse(next(p['rootUri'] for p in json.load(open('.dart_tool/package_config.json'))['packages'] if p['name']=='ffmpeg_kit_flutter_new_min_gpl')).path)")
+          cd "$plugin/macos"
+          bash ../scripts/setup_macos.sh
+      - run: python3 scripts/build_native.py --platform darwin
+      - name: Verify four actual PlayerScreen episodes and three native handoffs
+        run: flutter test -d macos integration_test/macos_app_autoplay_chain_test.dart --no-pub --dart-define=DISABLE_REMOTE_IMAGES=true --reporter=expanded
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-autoplay-${{ matrix.runner }}
+          path: dist/macos/macOS-app-autoplay-chain.json
           if-no-files-found: warn

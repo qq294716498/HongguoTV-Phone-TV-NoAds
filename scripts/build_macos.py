@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 import plistlib
 import subprocess
 from pathlib import Path
@@ -8,7 +9,7 @@ root = Path(__file__).resolve().parents[1]
 version_line = next(line for line in (root / 'pubspec.yaml').read_text().splitlines() if line.startswith('version:'))
 version, build = version_line.split(':', 1)[1].strip().split('+')
 subprocess.run(['python3', 'scripts/build_native.py', '--platform', 'darwin'], cwd=root, check=True)
-subprocess.run(['flutter', 'build', 'macos', '--release'], cwd=root, check=True)
+subprocess.run(['flutter', 'build', 'macos', '--release', '--dart-define=ALL_SOURCES=false'], cwd=root, check=True)
 app = root / 'build/macos/Build/Products/Release/HongguoTV.app'
 core = app / 'Contents/Frameworks/libduanju_core.dylib'
 core.write_bytes((root / 'native/build/darwin/libduanju_core.dylib').read_bytes())
@@ -56,6 +57,8 @@ digest = hashlib.sha256(package.read_bytes()).hexdigest()
 (output / 'SHA256SUMS.txt').write_text(digest + '  ' + package.name + '\n')
 (output / 'macOS-validation.json').write_text(json.dumps({
     'ok': True, 'version': version, 'build': int(build), 'architectures': architectures,
+    'sourceCommit': os.environ.get('GITHUB_SHA') or subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip(),
+    'workflowRun': os.environ.get('GITHUB_RUN_ID', ''), 'allSources': False,
     'renderer': 'Skia Metal', 'signature': 'ad-hoc', 'notarized': False, 'minimumMacOS': '13.0',
     'nativeMinimumVersions': minimum_versions,
     'package': package.name, 'sha256': digest, 'bytes': package.stat().st_size,
