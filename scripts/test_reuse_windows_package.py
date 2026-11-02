@@ -2,7 +2,9 @@ import copy
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 from unittest import mock
@@ -121,6 +123,52 @@ class RecoveryGateTests(unittest.TestCase):
         with mock.patch.dict(reuse.os.environ, {'GITHUB_SHA': 'other'}), \
                 mock.patch.object(reuse, 'git', return_value=self.current), self.assertRaises(ValueError):
             reuse.validate_source(Path('.'))
+
+    def test_only_the_byte_identical_pinned_crlf_script_bypasses_git_filter_false_dirty(self):
+        original = subprocess.check_output(['git', 'show', 'HEAD:' + reuse.unchanged_crlf_script],
+                                           cwd=Path(__file__).resolve().parents[1])
+        self.assertEqual(hashlib.sha256(original).hexdigest(), reuse.unchanged_crlf_sha256)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            def command(*arguments, input=None):
+                return subprocess.check_output(['git', *arguments], cwd=root, input=input).decode().rstrip('\r\n')
+            command('init', '--quiet')
+            command('config', 'core.autocrlf', 'true')
+            command('config', 'core.filemode', 'false')
+            (root / '.gitattributes').write_bytes(b'*.ps1 text eol=crlf\n')
+            script = root / reuse.unchanged_crlf_script
+            script.parent.mkdir()
+            script.write_bytes(original)
+            command('add', '.gitattributes')
+            blob = command('hash-object', '-w', '--stdin', input=original)
+            command('update-index', '--add', '--cacheinfo', '100644,' + blob + ',' + reuse.unchanged_crlf_script)
+            command('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
+                    '-c', 'commit.gpgsign=false', 'commit', '--quiet', '-m', 'Pinned CRLF fixture')
+            def status():
+                return command('status', '--porcelain=v1', '-z', '--untracked-files=no')
+            self.assertEqual(status(), ' M ' + reuse.unchanged_crlf_script + '\0')
+            self.assertEqual(script.read_bytes(), original)
+            reuse.validate_tracked_source(root, status())
+            script.write_bytes(original.replace(b'\r\n', b'\n'))
+            with self.assertRaises(ValueError):
+                reuse.validate_tracked_source(root, status())
+            script.write_bytes(original + b'Write-Host changed\r\n')
+            with self.assertRaisesRegex(ValueError, 'scripts/build_windows.ps1'):
+                reuse.validate_tracked_source(root, status())
+            script.write_bytes(original)
+            command('add', reuse.unchanged_crlf_script)
+            with self.assertRaises(ValueError):
+                reuse.validate_tracked_source(root, status())
+            command('update-index', '--cacheinfo', '100644,' + blob + ',' + reuse.unchanged_crlf_script)
+            if os.name != 'nt':
+                command('config', 'core.filemode', 'true')
+                script.chmod(0o755)
+                with self.assertRaises(ValueError):
+                    reuse.validate_tracked_source(root, status())
+                script.chmod(0o644)
+            (root / '.gitattributes').write_bytes(b'*.ps1 text eol=crlf\n*.txt text\n')
+            with self.assertRaises(ValueError):
+                reuse.validate_tracked_source(root, status())
 
     def test_old_reader_lock_evidence_must_fail_at_controlled_publication_wait_not_setup(self):
         reuse.validate_reader_lock(self.red(), self.provenance)

@@ -19,6 +19,8 @@ approved_outer_sha256 = '9da5358d5fd90ec3721ada07679a708230761281dae2e35e235a96a
 approved_outer_bytes = 100967879
 approved_sha256 = '4f443c29fe4d4b22178c76b8ad97b3f9d6002f48ead28865600db2fee33a8026'
 approved_bytes = 101241846
+unchanged_crlf_script = 'scripts/build_windows.ps1'
+unchanged_crlf_sha256 = '123e46ea0af21b97d2092efa228d8bb46c4d085a71511dce414cf9fe830d61aa'
 package_name = 'HongguoTV-0.1.48-windows-x64.zip'
 reader_case = '__main__.WindowsSingleInstanceNativeTests.test_report_publication_recovers_after_reader_lock'
 failed_case = '__main__.WindowsSingleInstanceNativeTests.test_shutdown_activation_waits_for_takeover_or_cancelled_exit'
@@ -44,7 +46,29 @@ def digest(path):
 
 
 def git(root, *arguments):
-    return subprocess.check_output(['git', *arguments], cwd=root, text=True).strip()
+    return subprocess.check_output(['git', *arguments], cwd=root, text=True).rstrip('\r\n')
+
+
+def validate_tracked_source(root, status):
+    if not status:
+        return
+    error = 'Tracked source files changed after checkout: ' + repr(status)
+    if status != ' M ' + unchanged_crlf_script + '\0':
+        raise ValueError(error)
+    if git(root, 'diff', '--cached', '--name-only', '--no-renames', '--'):
+        raise ValueError(error)
+    difference = git(root, 'diff', '--raw', '--no-renames', '--', unchanged_crlf_script)
+    fields, separator, name = difference.partition('\t')
+    metadata = fields.split()
+    if (not separator or name != unchanged_crlf_script or len(metadata) != 5
+            or metadata[:2] != [':100644', '100644'] or metadata[-1] != 'M'):
+        raise ValueError(error)
+    path = root / unchanged_crlf_script
+    original = subprocess.check_output(['git', 'show', 'HEAD:' + unchanged_crlf_script], cwd=root)
+    if (not stat.S_ISREG(path.lstat().st_mode)
+            or hashlib.sha256(original).hexdigest() != unchanged_crlf_sha256
+            or path.read_bytes() != original):
+        raise ValueError(error)
 
 
 def source_digest(root, commit, name):
@@ -73,8 +97,7 @@ def validate_source(root):
     changed = set(git(root, 'diff', '--name-only', '--no-renames', approved_commit, current, '--').splitlines())
     if changed - release_only_paths:
         raise ValueError('Application or build inputs changed; a fresh compilation is required')
-    if git(root, 'status', '--porcelain', '--untracked-files=no'):
-        raise ValueError('Tracked source files changed after checkout')
+    validate_tracked_source(root, git(root, 'status', '--porcelain=v1', '-z', '--untracked-files=no'))
     return current, sorted(changed)
 
 
