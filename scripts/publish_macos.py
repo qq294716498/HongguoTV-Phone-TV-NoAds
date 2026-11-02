@@ -10,8 +10,8 @@ import shutil
 import subprocess
 
 REPO = 'qq294716498/HongguoTV-Phone-TV-NoAds'
-BUILD_RUN = ''
-BUILD_COMMIT = ''
+BUILD_RUN = 41383092284
+BUILD_COMMIT = '0af8eb27588ed1685aacc7a5ff3afeb29f2f165a'
 SHA256 = ''
 RUNTIME_BASELINE = '58a40832b75b3687c531d8f50bfa1eeda54e0432'
 VERSION, BUILD = '0.1.46', 71

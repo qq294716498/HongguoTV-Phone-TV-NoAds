@@ -17,6 +17,14 @@ Windows CI 的真实完整 PlayerScreen 四集自然续播、三次原生交接�
 
 三 ABI APK 的独立公网下载、原证书、版本码 1071／2071／4071、最低 Android 8、SHA-256、CRC、16 KiB 对齐及品牌资产复核通过。Windows ZIP 的实际 updater 下载、SHA-256、正式静态通道与模拟 API 限流回退通过；Android Latest 指向本版，旧 0.1.43 资产保持。真实手机／TV、报告者片源、Windows 用户 GPU 与音频设备、macOS 及物理音画连续性仍未验收；Windows 包保持未签名，不保证所有设备与媒体零故障。
 
+## macOS 0.1.46+71（候选已验证，未发布）
+
+Mac 已复用本轮跳集修复和灰白“已追剧”配色，保留原 Mac 站源范围、最低 macOS 13 与 ad-hoc 签名方式。[构建 CI](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/41383092284) 的五项任务全部成功，源码固定为 `0af8eb27588ed1685aacc7a5ff3afeb29f2f165a`：完整 Flutter 回归、Go race、实际统计绑定、通用包双架构／最低系统版本／签名检查；Apple 芯片和 Intel 各通过严格四集、三次原生交接与仅一次 open，以及打包后各三次普通／加密播放、跳转倍速音量、全屏及合并检查。真实用户 Mac、上游片源和物理音画连续性仍未验收。
+
+首轮完整回归发现测试临时目录的祖先链接触发 Windows 清理安全检查；仅将测试夹具根目录规范化为真实路径，生产拒绝链接策略保持。相同隔离链接目录条件由 8 项失败恢复为 9 项通过，Mac 完整回归随后通过。
+
+发布尚未执行：Actions 产物 `13114626518`（Intel 连播报告）和 `13113904914`（通用包）下载的存储重定向均返回 Forbidden。已停止这两个资源，没有取得包文件或内部 ZIP SHA-256，没有借助其他地址、客户端或执行环境读取被拒产物。发布脚本固定成功 run／源码，包 SHA 留空并默认拒绝发布；需恢复产物读取后复用现有成功构建完成发布。当前正式 Mac 仍为下方 0.1.34，Android／Windows 0.1.46 及其更新入口保持。
+
 ## 0.1.45+70（构建候选，未正式发布，已并入 0.1.46）
 
 已完成 Android 三 ABI 原证书构建并保留 Actions 产物，但 Windows 新完整 App 门禁未通过原生交接断言，发布被拦截。后续修正片尾队列边界并补充无音频端点的 CI 隔离验证；使用递增版本避免已安装候选被视为同版本。
@@ -152,7 +160,7 @@ Windows [原生视频诊断](https://github.com/qq294716498/HongguoTV-Phone-TV-N
 
 运行源码 `d8178b996953eb000381e1e42ef4c93610dc96cf`；Android / Windows 发布提交 `03245b6c814da9201a011ec8ddbc85f5139a1cab` 仅增加发布门禁。[Android CI](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/40646438022)、[Windows CI](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/40646438055)、[Mac 构建与双架构验证](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/40646317995)、[Mac 发布校验](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/40647710494) 均通过。Android 为 Latest；Windows / Mac 使用独立发布标签，既有资产保持。
 
-## macOS 正式版：0.1.33+58（已发布）
+## macOS 首发记录：0.1.33+58（历史已发布）
 
 新增 macOS 13 及以上通用应用工程，原生核心同时编译 Apple 芯片 arm64 和 Intel x86_64。播放器使用 media_kit，补齐全屏、桌面控制条、播放防休眠和本地核心加载；下载、合并使用共用核心及 FFmpegKit。Mac 设备互联归类为电脑；暂不提供 Windows 专用托盘、迷你窗及自动安装更新。 新增原生图形能力预检，具备条件时使用硬件输出，否则使用兼容输出并尝试 VideoToolbox copy 解码，避免缺少 OpenGL 图形格式时直接崩溃。界面使用 Skia Metal，规避 Intel 验证环境中 Impeller 的 GPU 挂起；全屏请求按顺序执行并等待系统完成事件，避免进入动画尚未结束就切换退出。打包时逐项校验原生库的双架构及最低系统版本。
 
@@ -355,12 +363,12 @@ Windows 10/11 x64 完整 ZIP 仍未签名。构建、完整包校验、合成媒
 
 请选择与平台和架构匹配的安装包；可用版本、校验清单和源码以对应 Release 的实际附件为准。
 
-[Android 最新正式版](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/latest) · [Windows 正式版](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/windows-v0.1.43-68) · [macOS 正式版](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/macos-v0.1.33-58)
+[Android 最新正式版](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/latest) · [Windows 正式版](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/windows-v0.1.43-68) · [macOS 正式版](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/macos-v0.1.34-59)
 
 | 设备架构 | 下载 |
 | --- | --- |
 | Windows 10/11 x64 · 完整 ZIP、未签名 | [HongguoTV 0.1.43 Windows x64](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.43-68/HongguoTV-0.1.43-windows-x64.zip) |
-| macOS 13 及以上 · Apple 芯片 / Intel 通用，未公证 | [HongguoTV 0.1.33 macOS 通用 ZIP](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/macos-v0.1.33-58/HongguoTV-0.1.33-macos-universal.zip) |
+| macOS 13 及以上 · Apple 芯片 / Intel 通用，未公证 | [HongguoTV 0.1.34 macOS 通用 ZIP](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/macos-v0.1.34-59/HongguoTV-0.1.34-macos-universal.zip) |
 | Android arm64-v8a · 大多数手机及较新的电视 / 盒子 | [HongguoTV 0.1.43 ARM64](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.43-68/HongguoTV-0.1.43-arm64-v8a.apk) |
 | Android armeabi-v7a · 32 位手机 / 电视 / 盒子 | [HongguoTV 0.1.43 32 位](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.43-68/HongguoTV-0.1.43-armeabi-v7a.apk) |
 | Android x86_64 · 对应架构模拟器 | [HongguoTV 0.1.43 x86_64](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.43-68/HongguoTV-0.1.43-x86_64.apk) |
@@ -422,7 +430,7 @@ Windows 请完整解压到可写目录，勿只复制 EXE 或混放旧 DLL。**�
 | --- | --- |
 | Android 手机 / Android TV | 0.1.43+68 三 ABI、既有正式证书、最低 Android 8.0；包名、版本、架构、证书、CRC / 对齐、资源、SHA-256 与公网更新下载结果见发布附件 |
 | Windows | 0.1.43+68 x64 未签名完整 ZIP；构建、版本 / DLL / 运行库、资源、SHA-256、合成媒体原生启动、托盘 / 迷你窗、原生单播放器四组队列、18 项更新事务、16 项单实例回归和公网下载 / 静态清单回退结果见发布附件 |
-| macOS | 0.1.33+58 通用 ZIP，最低 macOS 13；41 个原生二进制双架构及最低系统版本、ad-hoc 签名完整性、两种架构各三次合成播放 / 加密解码 / 全屏 / 合并和公网 SHA-256 检查通过；未做 Apple 公证，真实硬件输出及上游播放仍待实机验收 |
+| macOS | 当前正式包 0.1.34+59，最低 macOS 13，ad-hoc、未公证。0.1.46+71 候选五项 Mac CI 均成功，产物存储读取 Forbidden 导致尚未发布；真实用户设备、上游内容和物理音画连续性未验收 |
 | iOS | 保留工程与构建支持，本次无已签名安装包 |
 
 静态检查、默认 / 全站源自动化、Python 门禁、两种 Go race 配置及平台构建的结果，见 [Android 发布附件](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/app-v0.1.43-68) 与 [Windows 发布附件](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/windows-v0.1.43-68)。请以本次 CI 和随包报告为准，不把源码、构建记录或签名检查等同完整实机验收。
