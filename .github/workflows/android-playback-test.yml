@@ -1,0 +1,158 @@
+name: Android private playback test APK
+
+on:
+  push:
+    branches: [test/android-playback-performance-local]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-private-playback-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  GOPROXY: https://proxy.golang.org,direct
+  GOSUMDB: sum.golang.org
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Require the dedicated private test identity
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          version = re.search(r'^version:\s*(\S+)', Path('pubspec.yaml').read_text(), re.M).group(1)
+          if version != '0.1.48-test.1+73':
+              raise SystemExit('This workflow only builds the approved private test version')
+          PY
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: native/go.mod
+          cache-dependency-path: native/go.sum
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: "platforms;android-36"
+          accept-android-sdk-licenses: true
+      - run: sdkmanager 'ndk;28.2.13676358'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+      - run: flutter pub get --enforce-lockfile
+      - run: python3 -m unittest discover -s scripts -p 'test_*.py'
+      - run: dart format --output=none --set-exit-if-changed lib test integration_test test_driver
+      - run: flutter analyze --no-pub --no-fatal-infos lib test integration_test test_driver
+      - name: Install media test dependency
+        timeout-minutes: 5
+        run: |
+          if ! command -v ffmpeg >/dev/null; then
+            sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update
+            sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 install -y --no-install-recommends ffmpeg
+          fi
+      - run: flutter test --no-pub --dart-define=DISABLE_REMOTE_IMAGES=true --concurrency=2
+      - run: flutter test --no-pub --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true --concurrency=2
+      - run: go test -race ./...
+        working-directory: native
+      - run: go test -race -ldflags="-X duanjuapp/native/core.buildAllSources=true" ./...
+        working-directory: native
+      - name: Run complete native player JVM regressions
+        working-directory: android
+        run: gradle :video_player_android:testDebugUnitTest
+      - name: Verify native player coverage and exact source
+        run: python3 scripts/verify_android_player_tests.py
+      - name: Upload private check reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: HongguoTV-playback-test-checks-${{ github.run_attempt }}
+          path: |
+            dist/android/Android-player-tests.json
+            build/video_player_android/test-results/testDebugUnitTest/
+            build/video_player_android/reports/tests/testDebugUnitTest/
+          if-no-files-found: warn
+          retention-days: 7
+
+  apk:
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Confirm the existing original signing is available
+        run: python3 scripts/check_android_signing.py
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: native/go.mod
+          cache-dependency-path: native/go.sum
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: "platforms;android-36"
+          accept-android-sdk-licenses: true
+      - run: sdkmanager 'ndk;28.2.13676358'
+      - name: Configure the original certificate for this runner
+        run: |
+          python3 scripts/configure_signing.py
+          test -s android/key.properties
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      - name: Build only the two private Android test packages
+        run: python3 scripts/build_android.py --all-sources --abi arm64-v8a --abi armeabi-v7a
+      - name: Verify original certificate, test identity and package integrity
+        run: python3 scripts/verify_test_apks.py
+      - name: Remove signing files
+        if: always()
+        run: python3 scripts/configure_signing.py --clean
+      - name: Upload the verified ARM64 private test package
+        uses: actions/upload-artifact@v4
+        with:
+          name: HongguoTV-playback-test-arm64-${{ github.run_attempt }}
+          path: |
+            dist/android/*-arm64-v8a.apk
+            dist/android/APK-test-validation.json
+            dist/android/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload the verified ARMv7 private test package
+        uses: actions/upload-artifact@v4
+        with:
+          name: HongguoTV-playback-test-armv7-${{ github.run_attempt }}
+          path: |
+            dist/android/*-armeabi-v7a.apk
+            dist/android/APK-test-validation.json
+            dist/android/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 7

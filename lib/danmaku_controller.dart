@@ -132,6 +132,24 @@ class DanmakuController extends ChangeNotifier {
         (discontinuity ||
             nextPosition < positionMs ||
             nextPosition - positionMs > 2000);
+    final nextValidDuration =
+        nextDuration > 0 && nextDuration <= danmakuMaxDurationMs
+        ? nextDuration
+        : 0;
+    final nextRate = speed.isFinite && speed > 0 ? speed : 1.0;
+    if (!drift &&
+        !jumped &&
+        !durationChanged &&
+        (_seeking || nextPosition == positionMs) &&
+        nextValidDuration == durationMs &&
+        nextRate == rate &&
+        playing == _playing &&
+        buffering == _buffering &&
+        foreground == _foreground &&
+        available == _available) {
+      _ensureWindow();
+      return;
+    }
     if (jumped || durationChanged) timelineRevision++;
     if (durationChanged) {
       contentRevision++;
@@ -143,10 +161,8 @@ class DanmakuController extends ChangeNotifier {
       _cancel();
     }
     if (!_seeking) positionMs = nextPosition;
-    durationMs = nextDuration > 0 && nextDuration <= danmakuMaxDurationMs
-        ? nextDuration
-        : 0;
-    rate = speed.isFinite && speed > 0 ? speed : 1;
+    durationMs = nextValidDuration;
+    rate = nextRate;
     _playing = playing;
     _buffering = buffering;
     _foreground = foreground;

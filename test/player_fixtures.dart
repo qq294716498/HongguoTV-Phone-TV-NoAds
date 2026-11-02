@@ -111,6 +111,11 @@ class ScriptedPlayer extends PlatformPlayer {
     bufferController.add(value);
   }
 
+  void buffering(bool value) {
+    state = state.copyWith(buffering: value);
+    bufferingController.add(value);
+  }
+
   @override
   Future<void> play() async {
     state = state.copyWith(playing: true);

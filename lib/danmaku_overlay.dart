@@ -232,8 +232,6 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
           item.timeMs < controller.positionMs - 1000 ||
           !_realtimeSeen.add(item.id))
         continue;
-      final text = danmakuFlightText(item);
-      final size = measure(text).ceilToDouble() + 8;
       var lane = -1;
       for (var candidate = 0; candidate < rows; candidate++) {
         if (_realtimeFlights
@@ -249,6 +247,8 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
         }
       }
       if (lane < 0) continue;
+      final text = danmakuFlightText(item);
+      final size = measure(text).ceilToDouble() + 8;
       _realtimeFlights.add(
         DanmakuFlight(
           DanmakuItem(

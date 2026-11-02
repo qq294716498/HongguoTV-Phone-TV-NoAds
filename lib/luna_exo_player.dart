@@ -216,6 +216,7 @@ class LunaExoPlayer implements Player {
   _PlayerMediaOperation? _pendingMedia;
   Completer<void> _commandsCancelled = Completer<void>();
   final _activeCommands = <VideoPlayerController, int>{};
+  int _rateRequestRevision = 0;
   final _controllerDisposals = Expando<Future<void>>();
   final bool Function()? television;
   final bool Function()? textureOutput;
@@ -1783,13 +1784,37 @@ class LunaExoPlayer implements Player {
   Future<void> setRate(double rate) async {
     if (_disposed) return;
     final r = rate.clamp(0.25, 4.0);
-    state = state.copyWith(rate: r);
-    _safeAdd(stream.rateController, r);
+    final revision = ++_rateRequestRevision;
     final c = _controller;
-    if (c == null) return;
+    if (c == null) {
+      state = state.copyWith(rate: r);
+      _safeAdd(stream.rateController, r);
+      return;
+    }
+    final previous = state.rate;
     try {
       await _command(c, () => c.setPlaybackSpeed(r));
-    } catch (_) {}
+      if (revision != _rateRequestRevision) return;
+      state = state.copyWith(rate: r);
+      _safeAdd(stream.rateController, r);
+    } on _PlayerOperationCancelled {
+      if (!_disposed && c == _controller && revision == _rateRequestRevision) {
+        c.value = c.value.copyWith(playbackSpeed: previous);
+      }
+      return;
+    } catch (error) {
+      if (!_disposed && c == _controller && revision == _rateRequestRevision) {
+        c.value = c.value.copyWith(playbackSpeed: previous);
+      }
+      final code =
+          error is PlatformException &&
+              RegExp(r'^[A-Za-z0-9_.-]{1,80}$').hasMatch(error.code)
+          ? error.code
+          : error.runtimeType.toString();
+      DiaryService.add(
+        '[PlaybackRate] requested=$r result=unconfirmed error=$code',
+      );
+    }
   }
 
   @override

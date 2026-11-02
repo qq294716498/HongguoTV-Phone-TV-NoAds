@@ -131,8 +131,18 @@ class _PlayerControlsState extends State<PlayerControls> {
     _lastPlaying = widget.player.state.playing;
     for (final stream in [
       widget.player.stream.position,
-      widget.player.stream.duration,
       widget.player.stream.buffer,
+    ]) {
+      _subscriptions.add(
+        stream.listen((_) {
+          if (mounted && (_controlsVisible || _seekValue != null)) {
+            setState(() {});
+          }
+        }),
+      );
+    }
+    for (final stream in [
+      widget.player.stream.duration,
       widget.player.stream.playing,
       widget.player.stream.buffering,
       widget.player.stream.volume,
