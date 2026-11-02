@@ -1,109 +1,15 @@
-name: macOS universal
+name: macOS regression diagnosis
 on:
   push:
-    branches: ['feature/macos-*']
-  workflow_dispatch:
+    branches: [diagnostic/macos-regression-0.1.46-71]
 permissions:
   contents: read
 concurrency:
-  group: macos-${{ github.ref }}
+  group: macos-regression-diagnosis-${{ github.ref }}
   cancel-in-progress: false
-env:
-  GOPROXY: https://proxy.golang.org,direct
-  GOSUMDB: sum.golang.org
 jobs:
-  build:
+  regression:
     runs-on: macos-15
-    timeout-minutes: 50
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: native/go.mod
-          cache-dependency-path: native/go.sum
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.47.4'
-          channel: stable
-          cache: true
-      - run: flutter pub get --enforce-lockfile
-      - run: python3 -m unittest discover -s scripts -p 'test_*.py'
-      - run: dart format --output=none --set-exit-if-changed lib test integration_test test_driver
-      - name: Analyze the complete application
-        run: |
-          set -o pipefail
-          mkdir -p dist/macos
-          flutter analyze --no-pub --no-fatal-infos lib test integration_test test_driver 2>&1 | tee dist/macos/analysis.log
-      - name: Run complete Flutter regressions with machine evidence
-        run: |
-          set -o pipefail
-          flutter test --no-pub --dart-define=DISABLE_REMOTE_IMAGES=true --concurrency=2 --machine | tee dist/macos/flutter-tests.jsonl
-      - run: go test -race ./...
-        working-directory: native
-      - name: Bind actual checks to this build
-        run: python3 scripts/verify_macos_checks.py --tests dist/macos/flutter-tests.jsonl --analysis dist/macos/analysis.log
-      - name: Prepare FFmpeg macOS frameworks
-        run: |
-          plugin=$(python3 -c "import json,urllib.parse; print(urllib.parse.urlparse(next(p['rootUri'] for p in json.load(open('.dart_tool/package_config.json'))['packages'] if p['name']=='ffmpeg_kit_flutter_new_min_gpl')).path)")
-          cd "$plugin/macos"
-          bash ../scripts/setup_macos.sh
-      - run: python3 scripts/build_macos.py
-      - uses: actions/upload-artifact@v4
-        with:
-          name: macos-universal
-          path: dist/macos/*
-          if-no-files-found: error
-  smoke:
-    needs: build
-    strategy:
-      fail-fast: false
-      matrix:
-        runner: [macos-15, macos-15-intel]
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 10
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: macos-universal
-          path: package
-      - name: Verify and launch bundled native playback
-        run: |
-          cd package
-          shasum -a 256 -c SHA256SUMS.txt
-          ditto -x -k HongguoTV-*-macos-universal.zip extracted
-          codesign --verify --deep --strict extracted/HongguoTV.app
-          python3 - <<'PY'
-          import json, pathlib, platform, subprocess
-          root = pathlib.Path.cwd()
-          runs = []
-          for attempt in range(3):
-              report = root / f'macOS-smoke-{attempt}.json'
-              result = subprocess.run([str(root / 'extracted/HongguoTV.app/Contents/MacOS/HongguoTV'), '--package-smoke', str(report), str(root / 'synthetic.mp4')], timeout=120)
-              if report.exists(): print(report.read_text(), flush=True)
-              result.check_returncode()
-              data = json.loads(report.read_text())
-              assert data['ok'] and data['nativeCore'] and data['mediaKitPlayback'] and data['remux'] and data['encryptedPlayback'] and data['fullscreen']
-              runs.append(data)
-          summary = dict(runs[-1], hostArchitecture=platform.machine(), repeatedLaunches=len(runs), runs=runs)
-          import os
-          summary.update(platform='macos', sourceCommit=os.environ['GITHUB_SHA'], workflowRun=os.environ['GITHUB_RUN_ID'], allSources=False)
-          (root / 'macOS-smoke.json').write_text(json.dumps(summary, indent=2))
-          PY
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: macos-smoke-${{ matrix.runner }}
-          path: package/macOS-smoke.json
-          if-no-files-found: warn
-
-  playback:
-    strategy:
-      fail-fast: false
-      matrix:
-        runner: [macos-15, macos-15-intel]
-    runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -119,17 +25,62 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get --enforce-lockfile
-      - name: Prepare FFmpeg macOS frameworks
+      - name: Reproduce complete Flutter regressions
         run: |
-          plugin=$(python3 -c "import json,urllib.parse; print(urllib.parse.urlparse(next(p['rootUri'] for p in json.load(open('.dart_tool/package_config.json'))['packages'] if p['name']=='ffmpeg_kit_flutter_new_min_gpl')).path)")
-          cd "$plugin/macos"
-          bash ../scripts/setup_macos.sh
-      - run: python3 scripts/build_native.py --platform darwin
-      - name: Verify four actual PlayerScreen episodes and three native handoffs
-        run: flutter test -d macos integration_test/macos_app_autoplay_chain_test.dart --no-pub --dart-define=DISABLE_REMOTE_IMAGES=true --reporter=expanded
+          set -o pipefail
+          mkdir -p dist/macos-diagnosis
+          flutter test --no-pub --dart-define=DISABLE_REMOTE_IMAGES=true --concurrency=2 --machine | tee dist/macos-diagnosis/flutter-tests.jsonl
+      - name: Preserve independent failure annotations and test evidence
+        if: always()
+        run: |
+          python3 - <<'PYDIAG'
+          import collections, json, os, pathlib
+          root = pathlib.Path('dist/macos-diagnosis')
+          root.mkdir(parents=True, exist_ok=True)
+          source = root / 'flutter-tests.jsonl'
+          started, completed, errors, parse_errors, done = {}, {}, collections.defaultdict(list), [], []
+          if source.exists():
+              for number, line in enumerate(source.read_text().splitlines(), 1):
+                  if not line.strip() or line.startswith('Shell: '):
+                      continue
+                  try:
+                      event = json.loads(line)
+                  except json.JSONDecodeError:
+                      parse_errors.append(number)
+                      continue
+                  if not isinstance(event, dict):
+                      continue
+                  kind = event.get('type')
+                  if kind == 'testStart':
+                      started[event['test']['id']] = event['test']
+                  elif kind == 'testDone':
+                      completed[event['testID']] = event
+                  elif kind == 'error':
+                      errors[event.get('testID')].append({'error': event.get('error'), 'stackTrace': event.get('stackTrace')})
+                  elif kind == 'done':
+                      done.append(event)
+          failures = []
+          for identity, result in completed.items():
+              if result.get('result') != 'success':
+                  failures.append({'testID': identity, 'test': started.get(identity, {}).get('name'), 'result': result, 'errors': errors.get(identity, [])})
+          for identity in set(started) - set(completed):
+              failures.append({'testID': identity, 'test': started[identity].get('name'), 'incomplete': True, 'errors': errors.get(identity, [])})
+          visible = [value for identity, value in completed.items() if not value.get('hidden') and not started.get(identity, {}).get('name', '').startswith('loading ')]
+          report = {'sourceCommit': os.environ['GITHUB_SHA'], 'workflowRun': os.environ['GITHUB_RUN_ID'], 'diagnosticOnly': True, 'passed': sum(value.get('result') == 'success' and not value.get('skipped') for value in visible), 'skipped': sum(value.get('skipped') is True for value in visible), 'done': done, 'failures': failures, 'globalErrors': errors.get(None, []), 'unparsedLines': parse_errors}
+          (root / 'failure-summary.json').write_text(json.dumps(report, ensure_ascii=False, indent=2))
+          def escape(value):
+              return value.replace('%', '%25').replace(chr(13), '%0D').replace(chr(10), '%0A')
+          print('Diagnostic results:', report['passed'], 'passed,', len(failures), 'failed/incomplete,', report['skipped'], 'skipped')
+          for failure in failures:
+              message = str(failure['test']) + chr(10) + json.dumps(failure['errors'], ensure_ascii=False)
+              print('::error title=Mac Flutter regression::' + escape(message[:6000]))
+          if not failures and (not done or done[-1].get('success') is not True):
+              print('::error title=Mac Flutter regression::No complete successful regression evidence; inspect the diagnostic summary artifact.')
+          pathlib.Path(os.environ['GITHUB_STEP_SUMMARY']).write_text('Mac regression diagnosis: ' + str(report['passed']) + ' passed; ' + str(len(failures)) + ' failed/incomplete; ' + str(report['skipped']) + ' skipped.' + chr(10) + chr(10) + chr(10).join('- ' + str(failure['test']) for failure in failures))
+          PYDIAG
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: macos-autoplay-${{ matrix.runner }}
-          path: dist/macos/macOS-app-autoplay-chain.json
+          name: macos-regression-diagnosis
+          path: dist/macos-diagnosis/*
           if-no-files-found: warn
