@@ -36,6 +36,7 @@ release_only_paths = frozenset({
     'integration_test/macos_app_autoplay_chain_test.dart',
     'integration_test/desktop_app_autoplay_chain.dart',
     'scripts/verify_android_player_tests.py', 'scripts/test_verify_android_player_tests.py',
+    'scripts/test_windows_transaction.py',
     'scripts/test_windows_single_instance_native.py', 'scripts/tests/windows_single_instance_harness.cpp',
     '.github/workflows/macos.yml', '.github/workflows/macos-publish.yml',
     '.github/workflows/windows-recovery.yml',
