@@ -9,7 +9,7 @@ concurrency:
   group: macos-stable-publish
   cancel-in-progress: false
 env:
-  MACOS_BUILD_RUN: '0'
+  MACOS_BUILD_RUN: '41490862910'
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -20,6 +20,8 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Require the exact new macOS build pins before reading artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           python3 - <<'PY'
           import os, sys
@@ -27,6 +29,8 @@ jobs:
           import publish_macos
           publish_macos.require_pins()
           publish_macos.validate_release_source(publish_macos.BUILD_COMMIT)
+          publish_macos.validate_release_source(publish_macos.source_commit())
+          publish_macos.validate_build(str(publish_macos.BUILD_RUN), publish_macos.BUILD_COMMIT)
           if str(publish_macos.BUILD_RUN) != os.environ['MACOS_BUILD_RUN']:
               raise SystemExit('macOS artifact run does not match the pinned new build')
           PY

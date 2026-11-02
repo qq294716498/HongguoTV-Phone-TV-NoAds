@@ -113,16 +113,59 @@ class MacOSPublishTests(unittest.TestCase):
                 publish.main()
             mutation.assert_not_called()
 
+    def build_jobs(self, attempt=1):
+        return [dict(id=index, name=name, run_id=int(self.run), head_sha=self.commit,
+                     run_attempt=attempt, status='completed', conclusion='success')
+                for index, name in enumerate(sorted(publish.JOBS), start=1)]
+
+    def build_run(self, attempt=1):
+        return dict(head_sha=self.commit, conclusion='success', status='completed',
+                    path='.github/workflows/macos.yml', run_attempt=attempt)
+
     def test_build_requires_exact_workflow_source_and_all_five_successful_jobs(self):
-        run = {'head_sha': self.commit, 'conclusion': 'success', 'status': 'completed', 'path': '.github/workflows/macos.yml'}
-        jobs = [{'name': name, 'conclusion': 'success'} for name in publish.JOBS]
-        with mock.patch.object(publish, 'api', side_effect=[run, {'jobs': jobs}]):
+        run, jobs = self.build_run(), self.build_jobs()
+        with mock.patch.object(publish, 'api', side_effect=[run, {'total_count': len(jobs), 'jobs': jobs}]):
             publish.validate_build(self.run, self.commit)
-        for value in [{**run, 'head_sha': 'c' * 40}, {**run, 'path': '.github/workflows/build.yml'}, {**run, 'conclusion': 'failure'}]:
+        for value in [{**run, 'head_sha': 'c' * 40}, {**run, 'path': '.github/workflows/build.yml'},
+                      {**run, 'conclusion': 'failure'}, {**run, 'run_attempt': None}]:
             with mock.patch.object(publish, 'api', return_value=value), self.assertRaises(ValueError):
                 publish.validate_build(self.run, self.commit)
         for value in [jobs[:-1], [*jobs, jobs[0]], [{**job, 'conclusion': 'skipped'} if index == 0 else job for index, job in enumerate(jobs)]]:
-            with mock.patch.object(publish, 'api', side_effect=[run, {'jobs': value}]), self.assertRaises(ValueError):
+            with mock.patch.object(publish, 'api', side_effect=[run, {'total_count': len(value), 'jobs': value}]), self.assertRaises(ValueError):
+                publish.validate_build(self.run, self.commit)
+
+    def test_partial_rerun_preserves_successful_jobs_and_replaces_cancelled_arm_execution(self):
+        jobs = self.build_jobs()
+        arm = next(job for job in jobs if job['name'] == 'playback (macos-15)')
+        arm['conclusion'] = 'cancelled'
+        replacement = {**arm, 'id': 100, 'run_attempt': 2, 'conclusion': 'success'}
+        for history in [[*jobs, replacement], [replacement, *reversed(jobs)]]:
+            with mock.patch.object(publish, 'api', side_effect=[self.build_run(2), {'total_count': len(history), 'jobs': history}]) as api:
+                selected = publish.validate_build(self.run, self.commit)
+            self.assertEqual(len(selected), 5)
+            self.assertEqual(selected[arm['name']]['id'], 100)
+            self.assertEqual(selected['build']['run_attempt'], 1)
+            self.assertTrue(api.call_args_list[1].args[0].endswith('jobs?filter=all&per_page=100'))
+
+    def test_latest_failed_execution_never_falls_back_to_an_older_success(self):
+        jobs = self.build_jobs()
+        arm = next(job for job in jobs if job['name'] == 'playback (macos-15)')
+        jobs.append({**arm, 'id': 100, 'run_attempt': 2, 'conclusion': 'failure'})
+        with mock.patch.object(publish, 'api', side_effect=[self.build_run(2), {'total_count': len(jobs), 'jobs': jobs}]), self.assertRaisesRegex(ValueError, 'latest'):
+            publish.validate_build(self.run, self.commit)
+
+    def test_job_history_rejects_wrong_identity_duplicates_and_truncation(self):
+        jobs = self.build_jobs()
+        variants = [{'total_count': 6, 'jobs': jobs}, {'jobs': jobs}]
+        for field, value in [('run_id', 999), ('head_sha', 'f' * 40), ('run_attempt', 3),
+                             ('run_attempt', True), ('id', 0), ('status', 'in_progress')]:
+            changed = copy.deepcopy(jobs)
+            changed[0][field] = value
+            variants.append({'total_count': len(changed), 'jobs': changed})
+        variants.append({'total_count': 6, 'jobs': [*jobs, {**jobs[0], 'id': 100}]})
+        variants.append({'total_count': 6, 'jobs': [*jobs, {**jobs[0], 'id': 100, 'name': 'unexpected'}]})
+        for history in variants:
+            with self.subTest(history=history), mock.patch.object(publish, 'api', side_effect=[self.build_run(2), history]), self.assertRaises(ValueError):
                 publish.validate_build(self.run, self.commit)
 
     def test_runtime_production_paths_cannot_be_whitelisted_by_directory(self):

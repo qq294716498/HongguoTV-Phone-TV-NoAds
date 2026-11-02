@@ -10,10 +10,10 @@ import shutil
 import subprocess
 
 REPO = 'qq294716498/HongguoTV-Phone-TV-NoAds'
-BUILD_RUN = 0
-BUILD_COMMIT = ''
-SHA256 = ''
-RUNTIME_BASELINE = ''
+BUILD_RUN = 41490862910
+BUILD_COMMIT = 'ffe63c54f530bc97cc7a7fd62f2c5c10b81e60fa'
+SHA256 = '48ca734e5586cda4dbb8cd0d7b8af6fbbc70e6706f3683b952bad4117c46ddc7'
+RUNTIME_BASELINE = 'ffe63c54f530bc97cc7a7fd62f2c5c10b81e60fa'
 VERSION, BUILD = '0.1.48', 74
 TAG = 'macos-v0.1.48-74'
 PACKAGE = 'HongguoTV-0.1.48-macos-universal.zip'
@@ -38,6 +38,7 @@ release_only_paths = frozenset({
     'scripts/verify_android_player_tests.py', 'scripts/test_verify_android_player_tests.py',
     'scripts/test_windows_single_instance_native.py', 'scripts/tests/windows_single_instance_harness.cpp',
     '.github/workflows/macos.yml', '.github/workflows/macos-publish.yml',
+    '.github/workflows/windows-recovery.yml',
     'scripts/build_macos.py', 'scripts/publish_macos.py', 'scripts/test_macos_publish.py',
     'scripts/verify_macos_checks.py', 'scripts/test_verify_macos_checks.py',
 })
@@ -103,15 +104,43 @@ def validate_identity(value, commit, run, scope=True):
         raise ValueError('macOS existing source scope must remain false')
 
 
+def select_latest_jobs(history, run, commit, attempt):
+    jobs = history.get('jobs')
+    total = history.get('total_count')
+    if not isinstance(jobs, list) or type(total) is not int or total != len(jobs) or total > 100:
+        raise ValueError('Complete macOS job history is required')
+    latest, identities, executions = {}, set(), set()
+    for job in jobs:
+        if not isinstance(job, dict):
+            raise ValueError('Invalid macOS job history')
+        name, identity, execution = job.get('name'), job.get('id'), job.get('run_attempt')
+        if (name not in JOBS or type(identity) is not int or identity <= 0
+                or type(execution) is not int or not 1 <= execution <= attempt
+                or job.get('run_id') != int(run) or job.get('head_sha') != commit):
+            raise ValueError('macOS job history does not match the pinned build')
+        if identity in identities or (name, execution) in executions:
+            raise ValueError('Duplicate macOS job execution')
+        identities.add(identity)
+        executions.add((name, execution))
+        if name not in latest or execution > latest[name]['run_attempt']:
+            latest[name] = job
+    if (set(latest) != JOBS or any(job.get('status') != 'completed'
+            or job.get('conclusion') != 'success' for job in latest.values())):
+        raise ValueError('All five latest macOS jobs must complete successfully')
+    return latest
+
+
 def validate_build(run, commit):
     if not re.fullmatch(r'[1-9][0-9]*', str(run)) or not re.fullmatch(r'[0-9a-f]{40}', commit):
         raise ValueError('Validated macOS build run and commit must be pinned')
     value = api(f'actions/runs/{run}')
     if value.get('head_sha') != commit or value.get('conclusion') != 'success' or value.get('status') != 'completed' or value.get('path') != '.github/workflows/macos.yml':
         raise ValueError('Exact macOS build workflow did not pass')
-    jobs = api(f'actions/runs/{run}/jobs?filter=latest&per_page=100')['jobs']
-    if len(jobs) != len(JOBS) or {job['name'] for job in jobs} != JOBS or any(job.get('conclusion') != 'success' for job in jobs):
-        raise ValueError('All five macOS build and architecture jobs must pass')
+    attempt = value.get('run_attempt')
+    if type(attempt) is not int or attempt < 1:
+        raise ValueError('Exact macOS workflow attempt is required')
+    history = api(f'actions/runs/{run}/jobs?filter=all&per_page=100')
+    return select_latest_jobs(history, run, commit, attempt)
 
 
 def minimum_version(value):
