@@ -9,6 +9,8 @@ import sys
 import urllib.request
 from pathlib import Path
 
+import reuse_windows_package as reuse
+
 root = Path(__file__).resolve().parents[1]
 output = root / 'dist/windows'
 repository = 'qq294716498/HongguoTV-Phone-TV-NoAds'
@@ -31,7 +33,22 @@ release_only_paths = frozenset({
     'scripts/verify_android_player_tests.py', 'scripts/test_verify_android_player_tests.py',
     'scripts/test_windows_single_instance_native.py',
     'scripts/tests/windows_single_instance_harness.cpp',
+    '.github/workflows/windows-recovery.yml',
 })
+
+
+def release_target():
+    return reuse.approved_commit if os.environ.get('WINDOWS_RECOVERY') == 'true' else os.environ['GITHUB_SHA']
+
+
+def validate_recovery():
+    if (os.environ.get('WINDOWS_BINARY_COMMIT') != reuse.approved_commit
+            or os.environ.get('WINDOWS_BINARY_RUN') != reuse.approved_run):
+        raise ValueError('Recovery binary source and workflow are not the pinned original build')
+    provenance = reuse.check_provenance(root, read_json('Windows-reuse-provenance.json'))
+    if read_json('Windows-recovery-validation.json') != reuse.manifest(root, output):
+        raise ValueError('Recovery validation report hashes differ from this workflow')
+    return provenance
 
 
 def validate_release_source(commit):
@@ -76,7 +93,7 @@ def release_description(version):
 
 def finalize_release_notes(tag):
     published = json.loads(github('api', f'repos/{repository}/releases/tags/{tag}'))
-    if tag != 'windows-v0.1.48-74' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
+    if tag != 'windows-v0.1.48-74' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != release_target():
         raise ValueError('Only the current verified Windows stable release notes may be finalized')
     body = published['body']
     if body.count(pending_publication_note) != 1:
@@ -128,6 +145,7 @@ def validate_single_instance(value):
         'test_cross_path_owner_blocks_updater_child_without_ack',
         'test_update_start_refuses_legacy_owner',
         'test_shutdown_activation_waits_for_takeover_or_cancelled_exit',
+        'test_report_publication_recovers_after_reader_lock',
     }
     expected = {'__main__.WindowsSingleInstanceNativeTests.' + name for name in names}
     cases = value.get('cases', [])
@@ -253,12 +271,14 @@ def main():
         raise ValueError('This workflow only publishes Windows 0.1.48+74')
     tag = f'windows-v{version}-{build}'
     package = output / f'HongguoTV-{version}-windows-x64.zip'
+    recovery = validate_recovery() if os.environ.get('WINDOWS_RECOVERY') == 'true' else None
+    target = release_target()
     if sys.argv[1] == 'stage':
         validate_release_source(os.environ['GITHUB_SHA'])
-        if os.environ.get('WINDOWS_BINARY_COMMIT') != os.environ['GITHUB_SHA'] or os.environ.get('WINDOWS_BINARY_RUN') != os.environ['GITHUB_RUN_ID']:
+        if recovery is None and (os.environ.get('WINDOWS_BINARY_COMMIT') != os.environ['GITHUB_SHA'] or os.environ.get('WINDOWS_BINARY_RUN') != os.environ['GITHUB_RUN_ID']):
             raise ValueError('Windows release requires fresh compilation in this workflow run')
         current_head = json.loads(github('api', f'repos/{repository}/git/ref/heads/{release_branch}'))['object']['sha']
-        if current_head != os.environ['GITHUB_SHA']:
+        if current_head != target:
             raise ValueError('A newer source commit superseded this release candidate')
         validation = read_json('Windows-validation.json')
         smoke = read_json('Windows-smoke.json')
@@ -321,7 +341,7 @@ def main():
         source = max(root.parent.glob('真果·鉴-*.zip'), key=lambda file: file.stat().st_mtime_ns)
         source_package = output / f'HongguoTV-{version}-source.zip'
         shutil.copy2(source, source_package)
-        commit = os.environ['GITHUB_SHA']
+        commit = target
         ci = f'https://github.com/{repository}/actions/runs/{os.environ["GITHUB_RUN_ID"]}'
         write_json('Source-and-checks.json', {
             'version': version, 'build': int(build), 'sourceCommit': commit,
@@ -330,6 +350,17 @@ def main():
             'workflowRun': ci,
             'binaryBuildCommit': os.environ['WINDOWS_BINARY_COMMIT'],
             'binaryBuildRun': os.environ['WINDOWS_BINARY_RUN'],
+            'validationSourceCommit': os.environ['GITHUB_SHA'],
+            'validationWorkflowRun': os.environ['GITHUB_RUN_ID'],
+            'sourceArchiveCommit': os.environ['GITHUB_SHA'],
+            'reusedCompiledPackage': recovery is not None,
+            'fullFlutterGoChecksSourceCommit': reuse.approved_commit if recovery is not None else commit,
+            'fullFlutterGoChecksWorkflowRun': reuse.approved_run if recovery is not None else os.environ['GITHUB_RUN_ID'],
+            'fullFlutterGoChecksJob': reuse.approved_checks_job if recovery is not None else None,
+            'fullChecksSourceCommit': reuse.approved_commit if recovery is not None else commit,
+            'fullChecksWorkflowRun': reuse.approved_run if recovery is not None else os.environ['GITHUB_RUN_ID'],
+            'pythonChecksSourceCommit': os.environ['GITHUB_SHA'],
+            'pythonChecksWorkflowRun': os.environ['GITHUB_RUN_ID'],
             'formatAndAnalysisPassed': True, 'pythonTestsPassed': True,
             'flutterDefaultAndAllSourceTestsPassed': True, 'goRaceDefaultAndAllSourcesPassed': True,
             'windowsCompileAndPackageValidationPassed': True, 'nativeUpdateTransactionsPassed': True,
@@ -345,10 +376,14 @@ def main():
                           'audio device output', 'physical audio/display continuity', 'actual Android IME latency', 'macOS queue playback']})
         notes = release_description(version)
         notes += f'\n源码提交：https://github.com/{repository}/commit/{commit}\n\nCI：{ci}\n\n校验：SHA256SUMS.txt。\n\n{pending_publication_note}\n'
+        if recovery is not None:
+            notes += f'\n二进制来源：{reuse.approved_commit}，原构建 {reuse.approved_run}；恢复验证提交：{os.environ["GITHUB_SHA"]}。源码压缩包包含恢复验证夹具，应用与编译输入保持原二进制来源；原夹具的读锁报告丢失缺陷通过确定性红绿复验，原16项、新增读锁及全部后续门禁重验通过。\n'
         notes_file = Path(os.environ['RUNNER_TEMP']) / 'windows-release-notes.md'
         notes_file.write_text(notes, encoding='utf-8')
         assets = [package, source_package] + [output / name for name in
                  ['Windows-validation.json', 'Windows-smoke.json', 'Windows-signature.json', 'Windows-update-transaction.json', 'Windows-single-instance-native.json', 'Windows-playback-queue.json', 'Windows-app-autoplay-chain.json', 'Source-and-checks.json']]
+        if recovery is not None:
+            assets += [output / name for name in ['Windows-reuse-provenance.json', 'Windows-recovery-validation.json', 'Windows-single-instance-original-reader-lock.json', 'Windows-single-instance-original-build.json']]
         subprocess.run(['gh', 'release', 'create', tag, *map(str, assets), '--target', commit,
                         '--title', f'红果TV Windows {version} · x64 未签名正式版',
                         '--notes-file', str(notes_file), '--draft', '--latest=false'], check=True)

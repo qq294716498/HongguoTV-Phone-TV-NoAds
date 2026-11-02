@@ -27,6 +27,7 @@ approved_source = 'ffe63c54f530bc97cc7a7fd62f2c5c10b81e60fa'
 release_only_paths = frozenset({
     'README.md', '.github/workflows/android-stable.yml',
     '.github/workflows/windows-preview.yml',
+    '.github/workflows/windows-recovery.yml',
     'scripts/publish_android_stable.py', 'scripts/test_android_stable_publish.py',
     'scripts/publish_windows_stable.py', 'scripts/test_windows_stable_publish.py',
     'scripts/reuse_windows_package.py', 'scripts/test_reuse_windows_package.py',

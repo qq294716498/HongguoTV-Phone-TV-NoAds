@@ -26,6 +26,8 @@ bool attached = false, legacy = false, hold_only = false;
 bool desktop_ready = true, first_frame_ready = true, paused = true;
 bool hang_activation = false, update_start = false, ack = false;
 bool mutex_exists = false;
+bool report_pending = false;
+DWORD report_publish_failures = 0, last_report_error = ERROR_SUCCESS;
 
 std::wstring Arg(const wchar_t* name, const wchar_t* fallback = L"") {
   auto it = args.find(name);
@@ -52,6 +54,7 @@ std::string Json(const std::wstring& value) {
 }
 const char* Bool(bool value) { return value ? "true" : "false"; }
 void Report() {
+  report_pending = true;
   const auto temporary = report_path + L".tmp." + std::to_wstring(GetCurrentProcessId());
   std::ofstream out(std::filesystem::path(temporary), std::ios::binary | std::ios::trunc);
   out << "{\"result\":" << Json(result_name)
@@ -68,9 +71,17 @@ void Report() {
       << ",\"command\":" << last_command << ",\"elapsed_ms\":" << guard_elapsed
       << ",\"mutex\":" << Json(mutex_name) << ",\"error\":" << Json(error_text)
       << ",\"ack\":" << Bool(ack) << ",\"child_pid\":" << child_pid
-      << ",\"mutex_exists\":" << Bool(mutex_exists) << "}";
+      << ",\"mutex_exists\":" << Bool(mutex_exists)
+      << ",\"report_publish_failures\":" << report_publish_failures
+      << ",\"last_report_error\":" << last_report_error << "}";
   out.close();
-  MoveFileExW(temporary.c_str(), report_path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+  if (!out) return;
+  if (MoveFileExW(temporary.c_str(), report_path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+    report_pending = false;
+  } else {
+    last_report_error = GetLastError();
+    ++report_publish_failures;
+  }
 }
 void RestoreOwnWindow() {
   const DWORD delay = restores == 0 ? Number(L"restore-delay-once", 0) : 0;
@@ -247,6 +258,7 @@ int wmain(int argc, wchar_t** argv) {
       Report();
     }
     ReadControl();
+    if (report_pending) Report();
     Sleep(10);
   }
   if (guard) guard->DetachWindow();

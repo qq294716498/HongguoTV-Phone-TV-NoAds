@@ -1,0 +1,177 @@
+name: Windows 0.1.48 package recovery
+
+on:
+  push:
+    branches: [verify/windows-package-0.1.48-74]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: windows-recovery-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PYTHONUTF8: '1'
+  GOPROXY: https://proxy.golang.org,direct
+  GOSUMDB: sum.golang.org
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Verify all Python helper and publication regressions
+        run: python3 -m unittest discover -s scripts -p 'test_*.py'
+
+  windows:
+    needs: [checks]
+    runs-on: windows-2022
+    timeout-minutes: 55
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REUSE_RUN_ID: '41490857169'
+      HG_VIDEO_LAYOUT_CAPTURE_DIR: ${{ github.workspace }}\dist\windows-video-layout
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: native/go.mod
+          cache-dependency-path: native/go.sum
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - name: Use runner MinGW compiler
+        shell: pwsh
+        run: |
+          $compiler = (Get-Command gcc.exe -ErrorAction Stop).Source
+          $target = & $compiler -dumpmachine
+          if ($target -notmatch '^x86_64-w64-mingw32$') { throw "Expected x64 MinGW, found $target" }
+          (Split-Path $compiler) | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - run: python -m pip install pefile==2024.8.26
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: 13165551336
+          run-id: 41490857169
+          github-token: ${{ github.token }}
+          path: dist/windows
+          merge-multiple: true
+      - name: Verify and unpack the exact successful compilation
+        run: python scripts/reuse_windows_package.py
+      - run: flutter pub get --enforce-lockfile
+      - name: Reproduce report loss with the original harness under a held reader lock
+        shell: pwsh
+        run: |
+          $original = Join-Path $env:RUNNER_TEMP 'original-single-instance-harness.cpp'
+          python -c "import pathlib,subprocess,sys; pathlib.Path(sys.argv[1]).write_bytes(subprocess.check_output(['git','show','ca5a75106b2b7c2efb9ec0b180992fdf48bb941d:scripts/tests/windows_single_instance_harness.cpp']))" $original
+          python scripts/test_windows_single_instance_native.py --msvc --harness-source $original --case test_report_publication_recovers_after_reader_lock --report dist/windows/Windows-single-instance-original-reader-lock.json
+          if ($LASTEXITCODE -ne 1) { throw 'Original harness must fail exactly the held-reader regression' }
+          python scripts/reuse_windows_package.py verify-reader-lock
+          if ($LASTEXITCODE -ne 0) { throw 'Original harness failure did not prove the expected report-loss condition' }
+          exit 0
+      - name: Verify isolated native single-instance lifecycle with MSVC
+        run: python scripts/test_windows_single_instance_native.py --msvc --report dist/windows/Windows-single-instance-native.json
+      - name: Validate updater ZIP handling on Windows filesystem
+        run: flutter test --no-pub test/windows_update_package_test.dart test/windows_update_startup_test.dart test/windows_update_cleanup_test.dart --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true --reporter=expanded
+      - name: Verify version, x64 architecture, DLL imports, resources and hashes
+        run: python scripts/verify_windows_package.py
+      - name: Start unpacked client with synthetic H264 and AAC media
+        run: python scripts/smoke_windows.py
+      - name: Verify native Windows video configuration and pixel boundaries
+        timeout-minutes: 20
+        run: flutter test -d windows integration_test/windows_video_layout_test.dart --no-pub --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true --reporter=expanded
+      - name: Verify native single-player queue and fallback with synthetic media
+        timeout-minutes: 10
+        run: flutter test -d windows integration_test/windows_playback_queue_test.dart --no-pub --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true --reporter=expanded
+      - name: Verify full App four-episode autoplay without one-second skipping
+        timeout-minutes: 10
+        run: flutter test -d windows integration_test/windows_app_autoplay_chain_test.dart --no-pub --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true --reporter=expanded
+      - name: Verify update commit, restart, rollback and locked-directory handling
+        run: python scripts/test_windows_transaction.py
+      - name: Record Authenticode status
+        shell: pwsh
+        run: |
+          $exe = 'build\windows\x64\runner\Release\HongguoTV.exe'
+          $signature = Get-AuthenticodeSignature $exe
+          @{ status = $signature.Status.ToString(); signed = ($signature.Status -eq 'Valid'); file = 'HongguoTV.exe' } | ConvertTo-Json | Set-Content -Encoding utf8 dist\windows\Windows-signature.json
+          if ($signature.Status -ne 'NotSigned') { throw 'Unexpected executable signature state' }
+      - name: Seal validation reports against the exact reused package and validation source
+        run: python scripts/reuse_windows_package.py seal-validation
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hongguotv-windows-x64
+          path: dist/windows/*
+          if-no-files-found: warn
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hongguotv-windows-video-layout
+          path: dist/windows-video-layout/*
+          if-no-files-found: warn
+          retention-days: 14
+
+  release:
+    if: github.ref == 'refs/heads/verify/windows-package-0.1.48-74'
+    needs: [checks, windows]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      WINDOWS_BINARY_COMMIT: ca5a75106b2b7c2efb9ec0b180992fdf48bb941d
+      WINDOWS_BINARY_RUN: '41490857169'
+      WINDOWS_RECOVERY: 'true'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: hongguotv-windows-x64
+          path: dist/windows
+      - name: Publish validated Windows stable release without changing Android Latest
+        run: python3 scripts/publish_windows_stable.py stage
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - name: Publish verified public Windows fallback manifest
+        run: python3 scripts/publish_windows_stable.py channel
+      - name: Verify public Windows updater download and Android channel
+        env:
+          CHECK_WINDOWS_UPDATE: 'true'
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if flutter test --no-pub test/windows_update_live_test.dart --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true --reporter=expanded; then
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
+      - name: Verify Android assets unchanged and attach checksums
+        run: python3 scripts/publish_windows_stable.py finalize
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hongguotv-windows-release-evidence
+          path: dist/windows/*
+          retention-days: 14

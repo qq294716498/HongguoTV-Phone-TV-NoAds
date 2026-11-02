@@ -87,6 +87,7 @@ class WindowsReleaseNotesTests(unittest.TestCase):
                 mock.patch.object(publish, 'read_json', return_value={'before': {'tag': 'app-v0.1.22-47'}}), \
                 mock.patch.object(publish, 'metadata', return_value={'tag': 'app-v0.1.20-45'}), \
                 mock.patch.object(publish, 'finalize_release_notes') as notes, \
+                mock.patch.dict(publish.os.environ, {'GITHUB_SHA': 'current'}), \
                 mock.patch.object(publish.subprocess, 'run') as writes, \
                 mock.patch('sys.argv', ['publish_windows_stable.py', 'finalize']):
             with self.assertRaisesRegex(ValueError, 'Android Latest or original assets changed'):
@@ -125,7 +126,7 @@ class WindowsStablePublishTests(unittest.TestCase):
         self.write('Windows-update-transaction.json', self.transactions)
         self.single_instance = {
             'compiler': {'family': 'MSVC', 'path': 'synthetic-cl.exe'},
-            'nativeExecuted': True, 'successful': True, 'testsRun': 16,
+            'nativeExecuted': True, 'successful': True, 'testsRun': 17,
             'sourceCommit': 'current', 'workflowRun': '100',
             'cases': [{'test': '__main__.WindowsSingleInstanceNativeTests.' + name, 'status': 'passed'} for name in [
                 'test_concurrent_launches_have_one_primary',
@@ -144,6 +145,7 @@ class WindowsStablePublishTests(unittest.TestCase):
                 'test_cross_path_owner_blocks_updater_child_without_ack',
                 'test_update_start_refuses_legacy_owner',
                 'test_shutdown_activation_waits_for_takeover_or_cancelled_exit',
+                'test_report_publication_recovers_after_reader_lock',
             ]]}
         self.write('Windows-single-instance-native.json', self.single_instance)
         self.playback_queue = {

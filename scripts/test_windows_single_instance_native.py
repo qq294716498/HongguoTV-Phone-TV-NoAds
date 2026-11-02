@@ -7,6 +7,7 @@ Non-Windows unittest discovery records explicit skips, never native passes.
 import argparse
 import ctypes
 import datetime
+import hashlib
 import json
 import os
 import shutil
@@ -21,6 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 REQUESTED_CXX = os.environ.get('CXX')
 FORCE_MSVC = False
 COMPILER = {}
+HARNESS_SOURCE = ROOT / 'scripts/tests/windows_single_instance_harness.cpp'
 
 
 def wait_for(predicate, timeout=8):
@@ -102,7 +104,7 @@ def compile_fixtures(directory):
         compiler_args = [compiler, '/nologo', '/std:c++17', '/EHsc', '/utf-8',
                          '/DUNICODE', '/D_UNICODE', '/DNOMINMAX', '/W4', '/WX', '/wd4100']
         COMPILER = {'family': 'MSVC', 'path': str(compiler)}
-    source = ROOT / 'scripts/tests/windows_single_instance_harness.cpp'
+    source = HARNESS_SOURCE
     guard = ROOT / 'windows/runner/single_instance.cpp'
     resource = ROOT / 'scripts/tests/windows_single_instance_harness.rc'
     for kind in ['current', 'legacy']:
@@ -431,6 +433,54 @@ class WindowsSingleInstanceNativeTests(unittest.TestCase):
         resumed.wait_state(lambda value: value['restores'] == 1)
         self.assert_paused(resumed)
 
+    def test_report_publication_recovers_after_reader_lock(self):
+        owner = self.owner()
+        owner.command('hide')
+        state = owner.wait_state(lambda value: not value['visible'])
+        kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+        kernel.CreateFileW.argtypes = [ctypes.c_wchar_p, ctypes.c_ulong, ctypes.c_ulong,
+                                      ctypes.c_void_p, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_void_p]
+        kernel.CreateFileW.restype = ctypes.c_void_p
+        kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+        reader = kernel.CreateFileW(str(owner.report), 0x80000000, 0x1 | 0x2,
+                                    None, 3, 0x80, None)
+        self.assertNotEqual(reader, ctypes.c_void_p(-1).value)
+        self.assertTrue(reader)
+        user = ctypes.WinDLL('user32', use_last_error=True)
+        user.SendMessageTimeoutW.argtypes = [ctypes.c_void_p, ctypes.c_uint,
+                                            ctypes.c_size_t, ctypes.c_ssize_t,
+                                            ctypes.c_uint, ctypes.c_uint,
+                                            ctypes.POINTER(ctypes.c_size_t)]
+        user.SendMessageTimeoutW.restype = ctypes.c_ssize_t
+        user.IsWindowVisible.argtypes = [ctypes.c_void_p]
+        user.IsWindowVisible.restype = ctypes.c_int
+        try:
+            reply = ctypes.c_size_t()
+            sent = user.SendMessageTimeoutW(state['hwnd'], 0x0111, 41001, 0,
+                                            0x1 | 0x2, 1000, ctypes.byref(reply))
+            self.assertTrue(sent, 'The synthetic window did not finish its restore callback')
+            self.assertTrue(user.IsWindowVisible(state['hwnd']))
+            stale = owner.state()
+            self.assertFalse(stale['visible'], stale)
+            self.assertEqual(stale['restores'], 0, stale)
+            self.native_observations = [{
+                'operation': 'restore-while-report-reader-denies-delete',
+                'nativeVisible': True, 'publishedVisible': stale['visible'],
+                'publishedRestores': stale['restores'],
+            }]
+        finally:
+            kernel.CloseHandle(reader)
+        updated = owner.wait_state(lambda value: value['visible'] and value['restores'] == 1)
+        self.assertTrue(updated['attached'], updated)
+        self.assertGreater(updated['report_publish_failures'], state.get('report_publish_failures', 0), updated)
+        self.assertIn(updated['last_report_error'], [5, 32], updated)
+        self.native_observations.append({
+            'operation': 'publish-after-reader-release',
+            'reportPublishFailures': updated['report_publish_failures'],
+            'lastReportError': updated['last_report_error'],
+        })
+        self.assert_paused(owner)
+
 
 class EvidenceResult(unittest.TextTestResult):
     def startTest(self, test):
@@ -440,7 +490,8 @@ class EvidenceResult(unittest.TextTestResult):
 
     def record(self, test, status, detail=''):
         self.evidence.append({'test': test.id(), 'status': status,
-                              'seconds': round(time.monotonic() - self.started, 3), 'detail': detail})
+                              'seconds': round(time.monotonic() - self.started, 3), 'detail': detail,
+                              'observations': getattr(test, 'native_observations', [])})
 
     def addSuccess(self, test):
         super().addSuccess(test)
@@ -464,16 +515,23 @@ class EvidenceResult(unittest.TextTestResult):
 
 
 def main():
-    global REQUESTED_CXX, FORCE_MSVC
+    global REQUESTED_CXX, FORCE_MSVC, HARNESS_SOURCE
     parser = argparse.ArgumentParser(description=__doc__)
     selection = parser.add_mutually_exclusive_group()
     selection.add_argument('--cxx', help='LLVM-MinGW clang++ path (also accepts CXX)')
     selection.add_argument('--msvc', action='store_true', help='Require the Visual Studio x64 C++ toolchain')
     parser.add_argument('--report', type=Path, help='Write native execution evidence JSON')
+    parser.add_argument('--harness-source', type=Path, default=HARNESS_SOURCE)
+    parser.add_argument('--case', choices=[name for name in dir(WindowsSingleInstanceNativeTests)
+                                         if name.startswith('test_')])
     options = parser.parse_args()
     REQUESTED_CXX = options.cxx or REQUESTED_CXX
     FORCE_MSVC = options.msvc
-    suite = unittest.defaultTestLoader.loadTestsFromTestCase(WindowsSingleInstanceNativeTests)
+    HARNESS_SOURCE = options.harness_source.resolve()
+    if not HARNESS_SOURCE.is_file():
+        raise ValueError('The requested synthetic harness source does not exist')
+    suite = (unittest.TestSuite([WindowsSingleInstanceNativeTests(options.case)]) if options.case
+             else unittest.defaultTestLoader.loadTestsFromTestCase(WindowsSingleInstanceNativeTests))
     result = unittest.TextTestRunner(verbosity=2, resultclass=EvidenceResult).run(suite)
     if options.report:
         options.report.parent.mkdir(parents=True, exist_ok=True)
@@ -482,6 +540,9 @@ def main():
             'sourceCommit': os.environ.get('GITHUB_SHA'),
             'workflowRun': os.environ.get('GITHUB_RUN_ID'),
             'compiler': COMPILER, 'nativeExecuted': result.testsRun > 0 and not result.skipped,
+            'harnessSourceSha256': hashlib.sha256(HARNESS_SOURCE.read_bytes().replace(b'\r\n', b'\n')).hexdigest(),
+            'instanceGuardSourceSha256': hashlib.sha256((ROOT / 'windows/runner/single_instance.cpp').read_bytes().replace(b'\r\n', b'\n')).hexdigest(),
+            'sourceHashNormalization': 'LF',
             'successful': result.wasSuccessful(), 'testsRun': result.testsRun,
             'cases': getattr(result, 'evidence', []),
             'isolation': 'Synthetic appid, PE brand, executable name, windows, processes and temporary files only',
