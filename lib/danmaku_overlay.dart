@@ -5,6 +5,7 @@ import 'package:flutter/scheduler.dart';
 
 import 'danmaku_controller.dart';
 import 'danmaku_emoji_render.dart';
+import 'danmaku_exit_motion.dart';
 import 'danmaku_models.dart';
 import 'danmaku_text.dart';
 import 'windows_danmaku_overlay.dart';
@@ -102,6 +103,7 @@ class DanmakuOverlay extends StatefulWidget {
     this.opacity,
     this.desktop = false,
     this.animationBehavior,
+    this.currentVisible = true,
   });
   final DanmakuController controller;
   final double aspectRatio;
@@ -111,13 +113,35 @@ class DanmakuOverlay extends StatefulWidget {
   final double? opacity;
   final bool desktop;
   final AnimationBehavior? animationBehavior;
+  final bool currentVisible;
 
   @override
   State<DanmakuOverlay> createState() => _DanmakuOverlayState();
 }
 
+class _RetiringDanmakuFlight {
+  _RetiringDanmakuFlight({
+    required this.identity,
+    required this.flight,
+    required this.motion,
+    required this.startedAt,
+    required this.viewport,
+    required this.top,
+    required this.height,
+    required this.content,
+  });
+  final int identity;
+  final DanmakuFlight flight;
+  final DanmakuExitMotion motion;
+  final Duration startedAt;
+  final Rect viewport;
+  final double top;
+  final double height;
+  final Widget content;
+}
+
 class _DanmakuOverlayState extends State<DanmakuOverlay>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   Object? _layout;
   List<DanmakuFlight> _schedule = const [];
   int _realtimePositionMs = 0;
@@ -133,6 +157,20 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
   int? _mobileTimelineRevision;
   Object? _realtimeItemsRevision;
   Map<String, DanmakuItem> _realtimeItems = {};
+  final _motionKeys = <String, GlobalKey<_DanmakuMotionState>>{};
+  final _retiring = <_RetiringDanmakuFlight>[];
+  final _exitClock = ValueNotifier<Duration>(Duration.zero);
+  final _exitStructure = ValueNotifier<int>(0);
+  late final Ticker _exitTicker;
+  Duration _exitElapsed = Duration.zero;
+  Duration _exitOrigin = Duration.zero;
+  late int _planRevision;
+  late int _exitResetRevision;
+  int? _endedPlanRevision;
+  int _exitIdentity = 0;
+  Rect _viewport = Rect.zero;
+  double _topInset = 0;
+  double _rowHeight = 0;
 
   bool get _mobile => widget.mobile && !widget.television;
   bool get _realtime => widget.television || _mobile;
@@ -145,6 +183,9 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
   @override
   void initState() {
     super.initState();
+    _planRevision = widget.controller.planRevision;
+    _exitResetRevision = widget.controller.exitResetRevision;
+    widget.controller.addListener(_controllerChanged);
     _emojiCache.addListener(_emojiReady);
     _realtimeTicker = createTicker((elapsed) {
       final delta = elapsed.inMilliseconds - _realtimeElapsedMs;
@@ -152,7 +193,159 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
       _realtimeBaseMs += delta * _realtimeSpeed;
       _realtimePositionMs = _realtimeBaseMs.round();
     });
+    _exitTicker = createTicker((_) {
+      if (!widget.controller.exitsAllowed) {
+        _clearRetiring();
+        return;
+      }
+      _exitElapsed =
+          SchedulerBinding.instance.currentSystemFrameTimeStamp - _exitOrigin;
+      final previous = _retiring.length;
+      _retiring.removeWhere(
+        (flight) => flight.motion.completedAt(_exitElapsed - flight.startedAt),
+      );
+      _exitClock.value = _exitElapsed;
+      if (_retiring.length != previous) _exitStructure.value++;
+      if (_retiring.isEmpty) _exitTicker.stop();
+    });
   }
+
+  @override
+  void didUpdateWidget(DanmakuOverlay oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_controllerChanged);
+      _clearRetiring();
+      _motionKeys.clear();
+      _planRevision = widget.controller.planRevision;
+      _exitResetRevision = widget.controller.exitResetRevision;
+      _endedPlanRevision = null;
+      widget.controller.addListener(_controllerChanged);
+    }
+  }
+
+  void _clearRetiring() {
+    _exitTicker.stop();
+    if (_retiring.isEmpty) return;
+    _retiring.clear();
+    _exitStructure.value++;
+  }
+
+  void _retireVisible() {
+    if (_viewport.isEmpty || !widget.controller.exitsAllowed) return;
+    if (_retiring.isEmpty) {
+      _exitElapsed = Duration.zero;
+      _exitOrigin = SchedulerBinding.instance.currentSystemFrameTimeStamp;
+      _exitClock.value = Duration.zero;
+    } else {
+      _exitElapsed =
+          SchedulerBinding.instance.currentSystemFrameTimeStamp - _exitOrigin;
+    }
+    final previous = _retiring.length;
+    for (final key in _motionKeys.values) {
+      if (_retiring.length >= maxDanmakuFlights) break;
+      final state = key.currentState;
+      if (state == null ||
+          state.x >= _viewport.width ||
+          state.x + state.widget.flight.width <= 0) {
+        continue;
+      }
+      final motion = state.widget;
+      _retiring.add(
+        _RetiringDanmakuFlight(
+          identity: ++_exitIdentity,
+          flight: motion.flight,
+          motion: DanmakuExitMotion(
+            startX: state.x,
+            width: motion.flight.width,
+            velocityPxPerSecond: state.velocity,
+          ),
+          startedAt: _exitElapsed,
+          viewport: _viewport,
+          top: _topInset + motion.flight.lane * _rowHeight,
+          height: _rowHeight,
+          content: RepaintBoundary(
+            child: DanmakuEmojiText(
+              text: motion.flight.text,
+              style: motion.style,
+              scaler: motion.scaler,
+              cache: _emojiCache,
+            ),
+          ),
+        ),
+      );
+    }
+    _motionKeys.clear();
+    if (_retiring.length == previous) return;
+    _exitStructure.value++;
+    if (!_exitTicker.isActive) {
+      _exitTicker.start();
+    }
+  }
+
+  void _controllerChanged() {
+    final controller = widget.controller;
+    if (!controller.exitsAllowed ||
+        _exitResetRevision != controller.exitResetRevision) {
+      _exitResetRevision = controller.exitResetRevision;
+      _clearRetiring();
+      _motionKeys.clear();
+    }
+    if (_planRevision != controller.planRevision) {
+      _retireVisible();
+      _planRevision = controller.planRevision;
+      _endedPlanRevision = null;
+      _realtimeLayout = null;
+      _layout = null;
+      _realtimeFlights.clear();
+      _realtimeSeen.clear();
+    } else if (controller.atEnd && _endedPlanRevision != _planRevision) {
+      _retireVisible();
+      _endedPlanRevision = _planRevision;
+    }
+  }
+
+  Widget _retiringLayer() => AnimatedBuilder(
+    animation: _exitStructure,
+    builder: (context, _) => Stack(
+      children: [
+        for (final flight in _retiring)
+          Positioned.fromRect(
+            key: ValueKey('danmaku-exit-item-${flight.identity}'),
+            rect: flight.viewport,
+            child: ClipRect(
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Positioned(
+                    left: 0,
+                    top: flight.top,
+                    width: flight.flight.width,
+                    height: flight.height,
+                    child: AnimatedBuilder(
+                      animation: _exitClock,
+                      child: flight.content,
+                      builder: (context, child) => Transform.translate(
+                        key: ValueKey(
+                          'danmaku-exit-motion-${flight.identity}-${flight.flight.item.id}',
+                        ),
+                        offset: Offset(
+                          flight.motion.positionAt(
+                            _exitClock.value - flight.startedAt,
+                          ),
+                          0,
+                        ),
+                        child: child,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    ),
+  );
 
   void _emojiReady() {
     if (mounted) setState(() {});
@@ -230,8 +423,11 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
     for (final item in controller.items) {
       if (item.timeMs > controller.positionMs ||
           item.timeMs < controller.positionMs - 1000 ||
-          !_realtimeSeen.add(item.id))
+          _realtimeSeen.contains(item.id))
         continue;
+      if (_realtimeFlights.length + _retiring.length >= maxDanmakuFlights)
+        break;
+      _realtimeSeen.add(item.id);
       var lane = -1;
       for (var candidate = 0; candidate < rows; candidate++) {
         if (_realtimeFlights
@@ -268,6 +464,10 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
 
   @override
   void dispose() {
+    widget.controller.removeListener(_controllerChanged);
+    _exitTicker.dispose();
+    _exitClock.dispose();
+    _exitStructure.dispose();
     _emojiCache.dispose();
     _realtimeTicker.dispose();
     super.dispose();
@@ -282,6 +482,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
           flightText: danmakuFlightText,
           speed: widget.speed ?? 1,
           opacity: widget.opacity ?? .62,
+          currentVisible: widget.currentVisible,
         )
       : _legacy(context);
 
@@ -354,7 +555,15 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
                 ),
               ],
             );
-            return Center(
+            _viewport = Rect.fromLTWH(
+              (constraints.maxWidth - width) / 2,
+              (constraints.maxHeight - height) / 2,
+              width,
+              height,
+            );
+            _topInset = topInset;
+            _rowHeight = rowHeight;
+            final live = Center(
               child: SizedBox(
                 width: width,
                 height: height,
@@ -363,9 +572,11 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
                     animation: widget.controller,
                     builder: (context, _) {
                       final controller = widget.controller;
-                      final visible = _mobile
-                          ? controller.mobileVisible
-                          : controller.visible;
+                      final visible =
+                          widget.currentVisible &&
+                          (_mobile
+                              ? controller.mobileVisible
+                              : controller.visible);
                       if (!visible || rows == 0) {
                         _realtimeTicker.stop();
                         _realtimeLayout = null;
@@ -428,59 +639,79 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
                       final position = _realtime
                           ? _realtimePositionMs
                           : controller.positionMs;
-                      return Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          for (final flight in flights)
-                            if (position >= flight.item.timeMs &&
+                      final visibleFlights = flights
+                          .where(
+                            (flight) =>
+                                position >= flight.item.timeMs &&
                                 position <
                                     flight.item.timeMs +
                                         (_realtime
                                             ? flight.lifetimeMs
-                                            : lifetimeMs))
-                              Positioned(
-                                key: ValueKey('danmaku-item-${flight.item.id}'),
-                                left: 0,
-                                top: topInset + flight.lane * rowHeight,
-                                width: flight.width,
-                                height: rowHeight,
-                                child: _DanmakuMotion(
-                                  animationBehavior:
-                                      widget.animationBehavior ??
-                                      (widget.television
-                                          ? AnimationBehavior.preserve
-                                          : AnimationBehavior.normal),
-                                  flight: flight,
-                                  lifetimeMs: _realtime
-                                      ? flight.lifetimeMs
-                                      : lifetimeMs,
-                                  width: width,
-                                  positionMs: position,
-                                  moving: _mobile
-                                      ? controller.mobileMoving
-                                      : controller.moving,
-                                  rate: _realtime
-                                      ? _realtimeSpeed
-                                      : controller.rate,
-                                  revision: _mobile
-                                      ? (
-                                          controller.motionRevision,
-                                          _realtimeLayout,
-                                        )
-                                      : widget.television
-                                      ? _realtimeLayout!
-                                      : controller.motionRevision,
-                                  style: style,
-                                  scaler: scaler,
-                                  emojiCache: _emojiCache,
+                                            : lifetimeMs),
+                          )
+                          .take(maxDanmakuFlights - _retiring.length)
+                          .toList();
+                      final activeIds = visibleFlights
+                          .map((flight) => flight.item.id)
+                          .toSet();
+                      _motionKeys.removeWhere(
+                        (id, _) => !activeIds.contains(id),
+                      );
+                      return Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          for (final flight in visibleFlights)
+                            Positioned(
+                              key: ValueKey('danmaku-item-${flight.item.id}'),
+                              left: 0,
+                              top: topInset + flight.lane * rowHeight,
+                              width: flight.width,
+                              height: rowHeight,
+                              child: _DanmakuMotion(
+                                key: _motionKeys.putIfAbsent(
+                                  flight.item.id,
+                                  () => GlobalKey<_DanmakuMotionState>(),
                                 ),
+                                animationBehavior:
+                                    widget.animationBehavior ??
+                                    (widget.television
+                                        ? AnimationBehavior.preserve
+                                        : AnimationBehavior.normal),
+                                flight: flight,
+                                lifetimeMs: _realtime
+                                    ? flight.lifetimeMs
+                                    : lifetimeMs,
+                                width: width,
+                                positionMs: position,
+                                moving: _mobile
+                                    ? controller.mobileMoving
+                                    : controller.moving,
+                                rate: _realtime
+                                    ? _realtimeSpeed
+                                    : controller.rate,
+                                revision: _mobile
+                                    ? (
+                                        controller.motionRevision,
+                                        _realtimeLayout,
+                                      )
+                                    : widget.television
+                                    ? _realtimeLayout!
+                                    : controller.motionRevision,
+                                style: style,
+                                scaler: scaler,
+                                emojiCache: _emojiCache,
                               ),
+                            ),
                         ],
                       );
                     },
                   ),
                 ),
               ),
+            );
+            return Stack(
+              fit: StackFit.expand,
+              children: [live, _retiringLayer()],
             );
           },
         ),
@@ -491,6 +722,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
 
 class _DanmakuMotion extends StatefulWidget {
   const _DanmakuMotion({
+    super.key,
     required this.animationBehavior,
     required this.flight,
     required this.lifetimeMs,
@@ -525,6 +757,11 @@ class _DanmakuMotionState extends State<_DanmakuMotion>
     vsync: this,
     animationBehavior: widget.animationBehavior,
   );
+
+  double get x =>
+      widget.width - (widget.width + widget.flight.width) * _motion.value;
+  double get velocity =>
+      (widget.width + widget.flight.width) * _motion.velocity;
 
   @override
   void initState() {

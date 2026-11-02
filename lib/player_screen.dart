@@ -730,7 +730,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         (widget.store.profileEpoch != _profileEpoch ||
             widget.store.locked ||
             !widget.store.allowsSource('hongguo'))) {
-      _danmaku.setPlan(null);
+      _danmaku.setPlan(null, retirePrevious: false);
     }
   }
 
@@ -2128,7 +2128,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       if (await _offerLowerQuality()) return;
       if (_closed || !mounted || generation != _generation) return;
     }
-    _danmaku.setPlan(null);
+    _danmaku.setPlan(null, retirePrevious: false);
     _errorTimer?.cancel();
     _pendingError = false;
     final position = _currentPosition;
@@ -2631,7 +2631,11 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
     _enhancement.suspend();
     _seekSequence++;
-    _danmaku.setPlan(null);
+    _danmaku.setPlan(
+      null,
+      retirePrevious:
+          recoveryAction == null && (changingSeason || index != _index),
+    );
     _acceptErrors = false;
     _pendingError = false;
     _errorTimer?.cancel();
@@ -4137,9 +4141,10 @@ class _PlayerScreenState extends State<PlayerScreen>
               );
             },
           ),
-        if (!hideOverlayForPictureInPicture && !_hasRetainedFrame)
+        if (!hideOverlayForPictureInPicture)
           DanmakuOverlay(
             controller: _danmaku,
+            currentVisible: !_hasRetainedFrame,
             animationBehavior: AppLayout.isTelevisionDevice(context)
                 ? AnimationBehavior.preserve
                 : AnimationBehavior.normal,

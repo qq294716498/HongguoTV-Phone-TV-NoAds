@@ -54,6 +54,8 @@ void main() {
           '0.1.39': 64,
           '0.1.43': 68,
           '0.1.45': 70,
+          '0.1.46': 71,
+          '0.1.48-test.1': 73,
         }.entries) {
           final upgrade = AppRelease.parse(
             stableData,

@@ -12,11 +12,11 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[1]
 output = root / 'dist/windows'
 repository = 'qq294716498/HongguoTV-Phone-TV-NoAds'
-release_branch = 'release/windows-android-0.1.46-71'
-approved_source = '58a40832b75b3687c531d8f50bfa1eeda54e0432'
-previous_windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48', 'windows-v0.1.24-49', 'windows-v0.1.25-50', 'windows-v0.1.29-54', 'windows-v0.1.30-55', 'windows-v0.1.31-56', 'windows-v0.1.32-57', 'windows-v0.1.34-59', 'windows-v0.1.38-63', 'windows-v0.1.39-64', 'windows-v0.1.43-68')
-previous_android_tag = 'app-v0.1.43-68'
-previous_android_commit = '54c17cb7048acbb4c05f8d7075d01d7c8ce88ece'
+release_branch = 'release/windows-android-0.1.48-74'
+approved_source = 'PIN_FINAL_RUNTIME_COMMIT_BEFORE_RELEASE'
+previous_windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48', 'windows-v0.1.24-49', 'windows-v0.1.25-50', 'windows-v0.1.29-54', 'windows-v0.1.30-55', 'windows-v0.1.31-56', 'windows-v0.1.32-57', 'windows-v0.1.34-59', 'windows-v0.1.38-63', 'windows-v0.1.39-64', 'windows-v0.1.43-68', 'windows-v0.1.46-71')
+previous_android_tag = 'app-v0.1.46-71'
+previous_android_commit = '6799ab8b0fb317e73d6dd3c49da860bdc0880f55'
 pending_publication_note = '公开发布核验进行中：尚未完成 Windows 公网 ZIP 下载、升级通道及 Android Latest 隔离检查。'
 verified_publication_note = '公开发布核验已完成：Windows 公网 ZIP 下载与 SHA-256、正式升级通道和 API 限流回退检查通过；Android Latest 隔离及旧版本资产保持检查通过。'
 release_only_paths = frozenset({
@@ -52,6 +52,11 @@ def github(*arguments):
 def release_description(version):
     return (
         f'红果TV Windows {version} · x64\n\n'
+        '- 切换剧集时，已上屏的旧弹幕从当前位置短时平滑加速离屏，新集使用独立时间轴；不把旧弹幕重新排入新集，也不等待退场才切换视频。快速切集、暂停、关闭弹幕及退出页面按有界生命周期处理。\n'
+        '- 局域网续播同步优先保留最高季、同季最高集，选择完整有效记录；同季同集采用最近修改。保留主动重看、拖动、清空和删除记录，两端需升级到支持新规则的版本。\n'
+        '- 减少隐藏播放控件随进度反复重建，以及弹幕重复通知和无空轨道时的文字测量；保留弹幕默认规则、画质和解码策略。\n'
+        '- Android 播放日记增加实际倍速、音频解码器和欠载等可测指标，倍速命令失败不再假报成功；指标不代表实际声画偏移。报告者反馈 0.1.48-test.1+73 在其设备音画同步恢复，不等同所有设备或 Windows 音画验收。\n'
+        '- 正式 build 74 高于私测 build 73，可覆盖对应架构测试版；保持原有配置、追剧和观看记录。\n'
         '- 修复连续自动续播的完成和进度事件边界：忽略与当前媒体状态不符的迟到通知，位置回退不再充当切集确认；异常时保留或恢复当前集，按原生身份确认交接，保留正常连播及单播放器。\n'
         '- 手机 Android 旧异步进度跨集返回、零时长窗口伪完成及重复 ready 回写时钟已修正；相关回归覆盖五集连续交接。真实设备和报告者片源仍需复验，不保证所有设备零故障。\n'
         '- “已追剧”斜角标使用灰白底深灰字，与保持强调色的“已有下季”区分；有效紧邻下一季仍优先显示，追剧页不重复提示，角标位置和字号保持。\n'
@@ -71,7 +76,7 @@ def release_description(version):
 
 def finalize_release_notes(tag):
     published = json.loads(github('api', f'repos/{repository}/releases/tags/{tag}'))
-    if tag != 'windows-v0.1.46-71' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
+    if tag != 'windows-v0.1.48-74' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
         raise ValueError('Only the current verified Windows stable release notes may be finalized')
     body = published['body']
     if body.count(pending_publication_note) != 1:
@@ -244,8 +249,8 @@ def main():
     version, build = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(encoding='utf-8'), re.MULTILINE).group(1).split('+')
     if not re.fullmatch(r'\d+\.\d+\.\d+', version):
         raise ValueError('Only Windows stable releases are allowed')
-    if version != '0.1.46' or build != '71':
-        raise ValueError('This workflow only publishes Windows 0.1.46+71')
+    if version != '0.1.48' or build != '74':
+        raise ValueError('This workflow only publishes Windows 0.1.48+74')
     tag = f'windows-v{version}-{build}'
     package = output / f'HongguoTV-{version}-windows-x64.zip'
     if sys.argv[1] == 'stage':
@@ -311,7 +316,7 @@ def main():
         write_json('Android-isolation.json', {'before': android, 'androidParserUnchanged': True,
                                               'parserSha256': hashlib.sha256(old.encode()).hexdigest()})
         subprocess.run([sys.executable, 'scripts/finish_task.py', '--message',
-                        '完成 Windows 0.1.46 x64 连续自动切集时钟与媒体代次修复、灰白追剧角标和真实完整App四集门禁；实体设备音画连续性仍未验收'], check=True)
+                        '完成 Windows 0.1.48 x64 弹幕切集平滑退场、最高季最高集同步及播放性能优化；保留完整App四集与更新事务门禁，实体设备音画连续性仍未验收'], check=True)
         subprocess.run([sys.executable, 'scripts/sync_source.py', '--check'], check=True)
         source = max(root.parent.glob('真果·鉴-*.zip'), key=lambda file: file.stat().st_mtime_ns)
         source_package = output / f'HongguoTV-{version}-source.zip'
@@ -331,6 +336,9 @@ def main():
             'nativeSingleInstancePassed': True, 'nativeSinglePlayerQueuePassed': True,
             'nativeAppAutoplayChainPassed': True,
             'nativeTrayAndMiniWindowPassed': True, 'unsigned': True,
+            'reportedPrivateAndroidTestAVRestored': True,
+            'reportedPrivateTestVersion': '0.1.48-test.1+73',
+            'physicalWindowsAudioVideoVerified': False,
             'sourceArchiveSha256': hashlib.file_digest(source_package.open('rb'), 'sha256').hexdigest(),
             'notTested': ['real-provider playback on physical Windows hardware', 'long-running episode/season transitions',
                           'public-release-to-running-previous-client replacement', 'consumer Windows 10/11 GPU/CPU compatibility',

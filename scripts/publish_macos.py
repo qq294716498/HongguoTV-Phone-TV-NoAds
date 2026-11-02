@@ -10,14 +10,15 @@ import shutil
 import subprocess
 
 REPO = 'qq294716498/HongguoTV-Phone-TV-NoAds'
-BUILD_RUN = 41383092284
-BUILD_COMMIT = '0af8eb27588ed1685aacc7a5ff3afeb29f2f165a'
+BUILD_RUN = 0
+BUILD_COMMIT = ''
 SHA256 = ''
-RUNTIME_BASELINE = '58a40832b75b3687c531d8f50bfa1eeda54e0432'
-VERSION, BUILD = '0.1.46', 71
-TAG = 'macos-v0.1.46-71'
-PACKAGE = 'HongguoTV-0.1.46-macos-universal.zip'
-PROTECTED_TAGS = ('app-v0.1.46-71', 'windows-v0.1.46-71', 'macos-v0.1.34-59')
+RUNTIME_BASELINE = ''
+VERSION, BUILD = '0.1.48', 74
+TAG = 'macos-v0.1.48-74'
+PACKAGE = 'HongguoTV-0.1.48-macos-universal.zip'
+PROTECTED_TAGS = ('app-v0.1.48-74', 'windows-v0.1.48-74', 'macos-v0.1.34-59',
+                  'app-v0.1.46-71', 'windows-v0.1.46-71')
 JOBS = {'build', 'smoke (macos-15)', 'smoke (macos-15-intel)',
         'playback (macos-15)', 'playback (macos-15-intel)'}
 PENDING_NOTE = '公开发布核验进行中：尚未完成 macOS 公网下载、SHA-256 与其他平台隔离复核。'
@@ -79,6 +80,8 @@ def source_commit():
 
 
 def validate_release_source(commit):
+    if not re.fullmatch(r'[0-9a-f]{40}', RUNTIME_BASELINE):
+        raise ValueError('Approved macOS runtime baseline must be pinned')
     if not re.fullmatch(r'[0-9a-f]{40}', commit):
         raise ValueError('Exact release source commit is required')
     ancestor = subprocess.check_output(['git', 'merge-base', RUNTIME_BASELINE, commit], cwd=root, text=True).strip()
@@ -211,7 +214,7 @@ def release_identity(value):
 def isolation_state():
     latest = api('releases/latest')
     if latest.get('tag_name') != PROTECTED_TAGS[0]:
-        raise ValueError('Android Latest must remain on the existing 0.1.46 release')
+        raise ValueError('Android Latest must remain on ' + PROTECTED_TAGS[0])
     releases = {tag: release_identity(api('releases/tags/' + tag)) for tag in PROTECTED_TAGS}
     if any(value['draft'] or value['prerelease'] for value in releases.values()):
         raise ValueError('Protected releases must remain stable')
@@ -236,7 +239,7 @@ def prepare(artifacts=None, output=None, build_run=None, build_commit=None):
     changed = validate_release_source(release_commit)
     version = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(), re.M).group(1)
     if version != f'{VERSION}+{BUILD}':
-        raise ValueError('Existing 0.1.46+71 version must be preserved')
+        raise ValueError(f'Expected approved macOS version {VERSION}+{BUILD}')
     package = artifacts / 'package' / PACKAGE
     package_report = read_json(artifacts / 'package/macOS-validation.json')
     validate_package(package_report, package, commit, run)
@@ -274,14 +277,18 @@ def prepare(artifacts=None, output=None, build_run=None, build_commit=None):
 
 
 def require_pins():
-    if not re.fullmatch(r'[1-9][0-9]*', str(BUILD_RUN)) or not re.fullmatch(r'[0-9a-f]{40}', BUILD_COMMIT) or not re.fullmatch(r'[0-9a-f]{64}', SHA256):
-        raise ValueError('Publication refused until exact BUILD_RUN, BUILD_COMMIT and SHA256 are pinned')
+    if not re.fullmatch(r'[1-9][0-9]*', str(BUILD_RUN)) or not re.fullmatch(r'[0-9a-f]{40}', BUILD_COMMIT) or not re.fullmatch(r'[0-9a-f]{64}', SHA256) or not re.fullmatch(r'[0-9a-f]{40}', RUNTIME_BASELINE):
+        raise ValueError('Publication refused until exact BUILD_RUN, BUILD_COMMIT, SHA256 and RUNTIME_BASELINE are pinned')
 
 
 def notes():
     return f'''红果TV macOS {VERSION} · Apple 芯片 / Intel 通用版
 
-同步已发布 0.1.46+71 的连续自动切集修复与灰白“已追剧”配色，保留单播放器、现有站源范围和兼容策略。
+续播同步优先保留最高季、同季最高集；同季同集采用最近记录，保留本机主动重看、拖动和明确清空。不同版本或季数证据不足时不强行合并。
+
+切集时，屏上旧弹幕短暂平滑加速离屏，新集使用独立时间轴，不把旧内容重新排入新集，也不等待弹幕退场才播放。减少控件和弹幕的重复更新及无效测量，保留弹幕、单播放器和默认解码策略。
+
+包含此前的连续自动切集修复、灰白“已追剧”配色及多季浏览改进。Android 测试用户反馈其设备音画同步恢复，仅代表该设备；Mac 不能据此视为已经完成实体音画验收。
 
 两种架构分别完成三次普通 / 加密合成媒体启动自检及四集真实 PlayerScreen 自动续播检查，验证公共 / 原生时钟、交接身份、观看记录与单播放器。完整 Flutter 回归、静态检查和 Go race 通过；实际数量见附件报告。使用 Skia Metal，最低 macOS 13。
 

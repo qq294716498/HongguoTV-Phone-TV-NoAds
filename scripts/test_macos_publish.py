@@ -21,8 +21,8 @@ class MacOSPublishTests(unittest.TestCase):
         self.commit, self.release_commit, self.run = 'a' * 40, 'b' * 40, '123'
         self.content = b'synthetic validated universal package'
         self.checksum = hashlib.sha256(self.content).hexdigest()
-        (self.root / 'pubspec.yaml').write_text('version: 0.1.46+71\n')
-        self.identity = {'ok': True, 'version': '0.1.46', 'build': 71,
+        (self.root / 'pubspec.yaml').write_text('version: 0.1.48+74\n')
+        self.identity = {'ok': True, 'version': '0.1.48', 'build': 74,
                          'sourceCommit': self.commit, 'workflowRun': self.run, 'allSources': False}
         names = ['Contents/MacOS/HongguoTV', 'Contents/Frameworks/libduanju_core.dylib']
         self.package_report = {**self.identity, 'package': publish.PACKAGE, 'bytes': len(self.content),
@@ -37,15 +37,16 @@ class MacOSPublishTests(unittest.TestCase):
         self.write('package/macOS-checks.json', self.checks)
         (self.artifacts / 'package' / publish.PACKAGE).write_bytes(self.content)
         for arch in ('arm64', 'x86_64'):
-            smoke_run = {'version': '0.1.46', 'build': 71, **{key: True for key in publish.SMOKE_KEYS}}
+            smoke_run = {'version': '0.1.48', 'build': 74, **{key: True for key in publish.SMOKE_KEYS}}
             self.write(f'{arch}/macOS-smoke.json', {**self.identity, 'platform': 'macos', 'hostArchitecture': arch,
                                                    'repeatedLaunches': 3, 'runs': [copy.deepcopy(smoke_run) for _ in range(3)]})
             self.write(f'playback-{arch}/macOS-app-autoplay-chain.json', self.chain(arch))
-        self.protected = {'androidLatest': 'current-46', 'windowsRelease': 'current-46', 'windowsChannel': 'current', 'oldMacOS': '34'}
+        self.protected = {'androidLatest': 'current-48', 'windowsRelease': 'current-48', 'windowsChannel': 'current', 'oldMacOS': '34'}
         for patch in [mock.patch.object(publish, 'root', self.root),
                       mock.patch.object(publish, 'source_commit', return_value=self.release_commit),
                       mock.patch.object(publish, 'BUILD_RUN', ''), mock.patch.object(publish, 'BUILD_COMMIT', ''),
-                      mock.patch.object(publish, 'SHA256', '')]:
+                      mock.patch.object(publish, 'SHA256', ''),
+                      mock.patch.object(publish, 'RUNTIME_BASELINE', 'd' * 40)]:
             patch.start()
             self.addCleanup(patch.stop)
 
@@ -131,6 +132,16 @@ class MacOSPublishTests(unittest.TestCase):
         with mock.patch.object(publish.subprocess, 'check_output', side_effect=[publish.RUNTIME_BASELINE + '\n', 'README.md\nscripts/publish_macos.py\n']):
             self.assertEqual(publish.validate_release_source(self.commit), ['README.md', 'scripts/publish_macos.py'])
 
+    def test_unpinned_runtime_blocks_source_validation_and_publication(self):
+        with mock.patch.object(publish, 'RUNTIME_BASELINE', ''), \
+                mock.patch.object(publish.subprocess, 'check_output') as command:
+            with self.assertRaisesRegex(ValueError, 'baseline must be pinned'):
+                publish.validate_release_source(self.commit)
+            command.assert_not_called()
+        self.pins()
+        with mock.patch.object(publish, 'RUNTIME_BASELINE', ''), self.assertRaisesRegex(ValueError, 'pinned'):
+            publish.require_pins()
+
     def test_package_rejects_tampering_newer_system_thin_binaries_or_signing_changes(self):
         variants = [{**self.package_report, 'sha256': '0' * 64}, {**self.package_report, 'bytes': 1},
                     {**self.package_report, 'allSources': True}, {**self.package_report, 'sourceCommit': 'c' * 40},
@@ -207,13 +218,31 @@ class MacOSPublishTests(unittest.TestCase):
 
         with mock.patch.object(publish, 'api', side_effect=api):
             before = publish.isolation_state()
-            releases[publish.PROTECTED_TAGS[2]]['assets'][0]['id'] = 999
-            after = publish.isolation_state()
-            self.assertNotEqual(before, after)
+            self.assertEqual(set(before['releases']), {
+                'app-v0.1.48-74', 'windows-v0.1.48-74', 'macos-v0.1.34-59',
+                'app-v0.1.46-71', 'windows-v0.1.46-71'})
+            for tag in ('macos-v0.1.34-59', 'app-v0.1.46-71', 'windows-v0.1.46-71'):
+                original = releases[tag]['assets'][0]['id']
+                releases[tag]['assets'][0]['id'] = 999
+                self.assertNotEqual(before, publish.isolation_state())
+                releases[tag]['assets'][0]['id'] = original
             self.assertEqual(before['windowsChannel']['branchCommit'], 'e' * 40)
+            releases[publish.PROTECTED_TAGS[0]]['tag_name'] = 'app-v0.1.46-71'
+            with self.assertRaisesRegex(ValueError, 'Latest must remain on app-v0.1.48-74'):
+                publish.isolation_state()
+            releases[publish.PROTECTED_TAGS[0]]['tag_name'] = publish.PROTECTED_TAGS[0]
             manifest['release']['tag_name'] = 'windows-v0.1.43-68'
             with self.assertRaisesRegex(ValueError, 'channel identity'):
                 publish.isolation_state()
+
+    def test_publish_workflow_checks_fresh_source_pins_before_artifact_reads(self):
+        workflow = (Path(__file__).resolve().parents[1] / '.github/workflows/macos-publish.yml').read_text()
+        download = workflow.index('uses: actions/download-artifact@v4')
+        self.assertLess(workflow.index('publish_macos.require_pins()'), download)
+        self.assertLess(workflow.index('publish_macos.validate_release_source(publish_macos.BUILD_COMMIT)'), download)
+        self.assertNotIn('41383092284', workflow)
+        self.assertIn('branches: [release/macos-0.1.48-74]', workflow)
+        self.assertEqual(workflow.count('run-id: ${{ env.MACOS_BUILD_RUN }}'), 5)
 
     def public_fixture(self):
         self.prepare()

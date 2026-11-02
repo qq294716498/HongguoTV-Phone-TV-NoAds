@@ -31,6 +31,8 @@ class DanmakuController extends ChangeNotifier {
   int timelineRevision = 0;
   int contentRevision = 0;
   int dataRevision = 0;
+  int planRevision = 0;
+  int exitResetRevision = 0;
   List<DanmakuItem> items = const [];
   DateTime? _anchorTime;
   int _anchorPosition = 0;
@@ -40,6 +42,8 @@ class DanmakuController extends ChangeNotifier {
   bool get supported =>
       _plan != null && _plan!.session.isNotEmpty && _plan!.danmakuId.isNotEmpty;
   bool get seeking => _seeking;
+  bool get exitsAllowed => !_closed && _enabled && _foreground;
+  bool get atEnd => supported && durationMs > 0 && positionMs >= durationMs;
   bool get mobileVisible =>
       !_closed &&
       supported &&
@@ -72,10 +76,16 @@ class DanmakuController extends ChangeNotifier {
     return '等待播放';
   }
 
-  void setPlan(PlaybackPlan? plan) {
-    if (_closed || identical(_plan, plan)) return;
+  void setPlan(PlaybackPlan? plan, {bool retirePrevious = true}) {
+    if (_closed) return;
+    if (!retirePrevious) exitResetRevision++;
+    if (identical(_plan, plan)) {
+      if (!retirePrevious) notifyListeners();
+      return;
+    }
     _cancel();
     _plan = plan;
+    planRevision++;
     timelineRevision++;
     contentRevision++;
     _pages.clear();

@@ -13,33 +13,31 @@ from publish_android_stable import certificate, offsets, validate_apks
 
 class AndroidStablePublishTests(unittest.TestCase):
     def test_notes_describe_android_changes_without_windows_settings(self):
-        notes = publish.release_description('0.1.46')
-        self.assertIn('遥控长按左右', notes)
-        self.assertIn('查看全季', notes)
+        notes = publish.release_description('0.1.48')
         self.assertNotIn('视频兼容模式', notes)
         self.assertNotIn('EXE', notes)
         self.assertNotIn('长剧名续季搜索', notes)
         self.assertNotIn('弹幕提速', notes)
-        for expected in ['顶部本系列标题或季号搜索', '横向季封面', '我的追剧卡片移除', '已追剧', '左上角紧凑斜角标', '有效紧接下一季', '不叠加', '已有下季', '避免遮挡封面', '搜索输入', '输入法组合', 'TV 排行榜', '唯一播放器队列', '安全暂停', '不保证', '官方分组', '紧接的下一季', '命中立即显示', '无结果缓存十分钟', '保留观看进度和追剧记录', '旧异步进度', '未知时长', '重复 ready', '片尾位置', '媒体身份确认', '开关', '灰白底深灰字']:
+        for expected in ['短时平滑加速退场', '旧弹幕不重新排入新集时间轴', '视频切换不等待', '隐藏播放控件', '完全重复通知', '保留弹幕功能', '原生实际倍速', '欠载', '不将其当成实际声画偏移', '最高季', '同季最高集', '完整进度', '两端需升级', '主动清空', '0.1.48-test.1+73', '覆盖升级并保留数据', '唯一播放器队列', '安全暂停', '该反馈不代表所有设备或片源', '不保证']:
             self.assertIn(expected, notes)
 
-    def test_release_uses_published_043_baseline_and_preserves_all_windows_releases(self):
+    def test_release_uses_published_046_baseline_and_preserves_all_windows_releases(self):
         import publish_windows_stable as windows
-        self.assertEqual(publish.previous_android_tag, 'app-v0.1.43-68')
-        self.assertEqual(publish.previous_android_commit, '54c17cb7048acbb4c05f8d7075d01d7c8ce88ece')
+        self.assertEqual(publish.previous_android_tag, 'app-v0.1.46-71')
+        self.assertEqual(publish.previous_android_commit, '6799ab8b0fb317e73d6dd3c49da860bdc0880f55')
         self.assertEqual(windows.previous_android_tag, publish.previous_android_tag)
         self.assertEqual(windows.previous_android_commit, publish.previous_android_commit)
-        self.assertEqual(publish.windows_tag, 'windows-v0.1.46-71')
+        self.assertEqual(publish.windows_tag, 'windows-v0.1.48-74')
         self.assertEqual(windows.previous_windows_tags, (
-            'windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48', 'windows-v0.1.24-49', 'windows-v0.1.25-50', 'windows-v0.1.29-54', 'windows-v0.1.30-55', 'windows-v0.1.31-56', 'windows-v0.1.32-57', 'windows-v0.1.34-59', 'windows-v0.1.38-63', 'windows-v0.1.39-64', 'windows-v0.1.43-68'))
+            'windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48', 'windows-v0.1.24-49', 'windows-v0.1.25-50', 'windows-v0.1.29-54', 'windows-v0.1.30-55', 'windows-v0.1.31-56', 'windows-v0.1.32-57', 'windows-v0.1.34-59', 'windows-v0.1.38-63', 'windows-v0.1.39-64', 'windows-v0.1.43-68', 'windows-v0.1.46-71'))
         self.assertEqual(publish.windows_tags, (*windows.previous_windows_tags, publish.windows_tag))
         self.assertEqual(windows.release_branch, publish.release_branch)
         self.assertEqual(windows.approved_source, publish.approved_source)
         self.assertEqual(windows.release_only_paths, publish.release_only_paths)
 
     def test_final_notes_mark_verified_public_downloads_and_preserve_limits(self):
-        tag = 'app-v0.1.46-71'
-        body = '0.1.46+71\n取源恢复与冷却修复。\n既有证书；Android 8.0；真实手机 / TV 仍未实测。\n' + publish.pending_publication_note
+        tag = 'app-v0.1.48-74'
+        body = '0.1.48+74\n取源恢复与冷却修复。\n既有证书；Android 8.0；真实手机 / TV 仍未实测。\n' + publish.pending_publication_note
         final = body.replace(publish.pending_publication_note, publish.verified_publication_note)
         current = dict(tag_name=tag, draft=False, prerelease=False, target_commitish='current', body=body)
         with mock.patch.object(publish, 'release', side_effect=[current, {**current, 'body': final}]) as reads, \
@@ -54,7 +52,7 @@ class AndroidStablePublishTests(unittest.TestCase):
             self.assertIn('真实手机 / TV 仍未实测', final)
 
     def test_final_notes_cannot_modify_old_or_unverified_release(self):
-        tag = 'app-v0.1.23-48'
+        tag = 'app-v0.1.48-74'
         current = dict(tag_name=tag, draft=False, prerelease=False, target_commitish='current', body=publish.pending_publication_note)
         cases = [('tag_name', 'app-v0.1.22-47'), ('draft', True), ('prerelease', True),
                  ('target_commitish', 'old'), ('body', 'no publication status')]
@@ -66,9 +64,16 @@ class AndroidStablePublishTests(unittest.TestCase):
                     publish.finalize_release_notes(tag)
                 written.assert_not_called()
                 edits.assert_not_called()
+        old_tag = 'app-v0.1.46-71'
+        with mock.patch.object(publish, 'release', return_value={**current, 'tag_name': old_tag}), \
+                mock.patch.dict(publish.os.environ, {'GITHUB_SHA': 'current'}), \
+                mock.patch.object(publish.subprocess, 'run') as edits:
+            with self.assertRaises(ValueError):
+                publish.finalize_release_notes(old_tag)
+            edits.assert_not_called()
 
     def test_failed_public_latest_validation_never_marks_notes_complete(self):
-        with mock.patch.object(Path, 'read_text', return_value='version: 0.1.46+71\n'), \
+        with mock.patch.object(Path, 'read_text', return_value='version: 0.1.48+74\n'), \
                 mock.patch.object(publish.os, 'chdir'), mock.patch.object(publish, 'validate_release_source'), \
                 mock.patch.object(publish, 'read', return_value={}), \
                 mock.patch.object(publish, 'github', return_value=json.dumps({'tag_name': 'app-v0.1.22-47'})), \
@@ -84,7 +89,7 @@ class AndroidStablePublishTests(unittest.TestCase):
     def test_only_exact_release_branch_push_or_explicit_dispatch_can_publish(self):
         root = Path(__file__).resolve().parents[1]
         fix = 'fix/hongguo-playback-release-0.1.22-47'
-        release = 'release/windows-android-0.1.46-71'
+        release = 'release/windows-android-0.1.48-74'
         for filename in ['android-stable.yml', 'windows-preview.yml']:
             workflow = (root / '.github/workflows' / filename).read_text()
             branches = re.search(r'(?m)^    branches: (.*)$', workflow).group(1)
@@ -93,7 +98,7 @@ class AndroidStablePublishTests(unittest.TestCase):
             expression = re.search(r'(?m)^  release:\n(?:    [^\n]*\n)*?    if: ([^\n]+)', workflow).group(1)
             expression = expression.replace('github.ref', 'ref').replace('github.event_name', 'event').replace('inputs.publish_release', 'publish')
             expression = expression.replace('&&', ' and ').replace('||', ' or ')
-            for branch in [fix, release, 'candidate/hongguo-retry-single-instance-0.1.23-48', 'release/windows-android-0.1.22-47', 'release/windows-android-0.1.23-48', 'windows/other', 'main']:
+            for branch in [fix, release, 'candidate/hongguo-retry-single-instance-0.1.23-48', 'release/windows-android-0.1.22-47', 'release/windows-android-0.1.23-48', 'release/windows-android-0.1.46-71', 'windows/other', 'main']:
                 for event in ['push', 'workflow_dispatch', 'pull_request']:
                     for publish in [False, True]:
                         expected = branch == release and (event == 'push' or (event == 'workflow_dispatch' and publish))
@@ -188,10 +193,22 @@ class AndroidStablePublishTests(unittest.TestCase):
                 publish.validate_release_source('candidate')
             commands.assert_not_called()
 
+    def test_private_test_version_cannot_enter_formal_publication(self):
+        with mock.patch.object(Path, 'read_text', return_value='version: 0.1.48-test.1+73\n'), \
+                mock.patch.object(publish.os, 'chdir'), \
+                mock.patch.object(publish, 'validate_release_source') as source, \
+                mock.patch.object(publish, 'github') as github, \
+                mock.patch.object(publish.subprocess, 'run') as writes:
+            with self.assertRaisesRegex(ValueError, 'only publishes Android 0.1.48'):
+                publish.main()
+            source.assert_not_called()
+            github.assert_not_called()
+            writes.assert_not_called()
+
     def test_changed_android_latest_blocks_staging_without_publication(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            (root / 'pubspec.yaml').write_text('version: 0.1.46+71\n')
+            (root / 'pubspec.yaml').write_text('version: 0.1.48+74\n')
             values = [json.dumps({'object': {'sha': 'current'}}),
                       json.dumps({'tag_name': 'app-v0.1.20-45'})]
             with mock.patch.object(publish, 'root', root), mock.patch.object(publish.os, 'chdir'), \
@@ -205,7 +222,26 @@ class AndroidStablePublishTests(unittest.TestCase):
                     publish.main()
                 self.assertEqual(github.call_count, 2)
                 self.assertEqual(commands.call_args_list, [mock.call(
-                    ['gh', 'release', 'view', 'app-v0.1.46-71'],
+                    ['gh', 'release', 'view', 'app-v0.1.48-74'],
+                    stdout=publish.subprocess.DEVNULL, stderr=publish.subprocess.DEVNULL)])
+
+    def test_retargeted_stable_tag_blocks_staging_without_publication(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'pubspec.yaml').write_text('version: 0.1.48+74\n')
+            values = [json.dumps({'object': {'sha': 'current'}}),
+                      json.dumps({'tag_name': publish.previous_android_tag, 'target_commitish': 'other'})]
+            with mock.patch.object(publish, 'root', root), mock.patch.object(publish.os, 'chdir'), \
+                    mock.patch.object(publish, 'validate_release_source'), mock.patch.object(publish, 'validate_apks'), \
+                    mock.patch.object(publish, 'read', return_value={'ok': True}), \
+                    mock.patch.object(publish, 'github', side_effect=values), \
+                    mock.patch.object(publish.subprocess, 'run', return_value=mock.Mock(returncode=1)) as writes, \
+                    mock.patch.dict(publish.os.environ, {'GITHUB_SHA': 'current'}), \
+                    mock.patch('sys.argv', ['publish_android_stable.py', 'stage']):
+                with self.assertRaisesRegex(ValueError, 'baseline source changed'):
+                    publish.main()
+                self.assertEqual(writes.call_args_list, [mock.call(
+                    ['gh', 'release', 'view', 'app-v0.1.48-74'],
                     stdout=publish.subprocess.DEVNULL, stderr=publish.subprocess.DEVNULL)])
 
     def test_android_jvm_gate_precedes_signing_and_restores_original_build_java(self):
@@ -226,18 +262,18 @@ class AndroidStablePublishTests(unittest.TestCase):
         self.assertIn('build/video_player_android/test-results/testDebugUnitTest/', workflow)
 
     def test_jvm_report_blocks_stale_source_skips_or_missing_queue_cases(self):
-        report = dict(ok=True, version='0.1.46', build=71, sourceCommit='current',
+        report = dict(ok=True, version='0.1.48', build=74, sourceCommit='current',
                       workflowRun=f'https://github.com/{publish.repository}/actions/runs/123',
-                      testCount=156, suiteCount=20, failures=0, errors=0, skipped=0,
+                      testCount=161, suiteCount=20, failures=0, errors=0, skipped=0,
                       realDevicePlaybackVerified=False,
                       requiredCases={suite: sorted(cases) for suite, cases in publish.required_cases.items()})
         with mock.patch.dict(publish.os.environ, {'GITHUB_RUN_ID': '123'}):
-            publish.validate_android_player_report(report, '0.1.46', 71, 'current')
-            for field, value in [('sourceCommit', 'old'), ('workflowRun', 'other'), ('testCount', 155),
+            publish.validate_android_player_report(report, '0.1.48', 74, 'current')
+            for field, value in [('sourceCommit', 'old'), ('workflowRun', 'other'), ('testCount', 160),
                                  ('suiteCount', 19), ('failures', 1), ('errors', 1), ('skipped', 1),
                                  ('realDevicePlaybackVerified', True), ('requiredCases', {})]:
                 with self.subTest(field=field), self.assertRaises(ValueError):
-                    publish.validate_android_player_report({**report, field: value}, '0.1.46', 71, 'current')
+                    publish.validate_android_player_report({**report, field: value}, '0.1.48', 74, 'current')
 
     def test_signing_preflight_reports_presence_without_secret_values(self):
         env = {name: 'synthetic-secret-value' for name in SIGNING_NAMES}

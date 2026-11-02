@@ -23,6 +23,15 @@ required_cases = {
         'preparedQueueKeepsFiveEpisodesBeyondTwoSecondsBeforeEachNaturalHandoff',
         'queuePauseDropsOnlyCandidateAndManualAdvanceRetainsPause',
     },
+    'io.flutter.plugins.videoplayer.PlaybackDiagnosticsTest': {
+        'snapshotReadsNativeSpeedAndAudioStateWithoutChangingPlayback',
+        'audioUnderrunsKeepLifetimeCountsAndIdentifyOldMediaEvents',
+        'lateDecoderAndErrorsCannotPoisonCurrentMediaOrExposeMessages',
+        'lateVideoDisableKeepsTheActiveDecoderAndIsCountedOnce',
+        'absentMimeAndUnboundedMetadataRemainSafeToReport',
+        'durationRefreshesAfterInitiallyUnknownTimeline',
+        'countersSurviveDecoderRestartWithoutDoubleCountingSnapshots',
+    },
 }
 
 
@@ -48,11 +57,11 @@ def summarize(results, version, build, commit, workflow_run):
         if any(case.find(tag) is not None for case in cases for tag in ['failure', 'error', 'skipped']):
             raise ValueError('Android player testcase did not pass')
         suites[name] = names
-    if len(suites) < 20 or sum(map(len, suites.values())) < 156:
+    if len(suites) < 20 or sum(map(len, suites.values())) < 161:
         raise ValueError('Complete Android player regression reports are missing')
     for name, expected in required_cases.items():
         if not expected.issubset(suites.get(name, [])):
-            raise ValueError('Required single-player queue regression is missing: ' + name)
+            raise ValueError('Required Android player regression is missing: ' + name)
     return {
         'ok': True,
         'version': version,

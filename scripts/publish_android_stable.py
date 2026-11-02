@@ -14,16 +14,16 @@ root = Path(__file__).resolve().parents[1]
 output = root / 'dist/android'
 repository = 'qq294716498/HongguoTV-Phone-TV-NoAds'
 certificate = '55c3c3395a00e56e99b8bfd580b14c99618da74db19692a2e42606eb05c47ba9'
-windows_tag = 'windows-v0.1.46-71'
-windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48', 'windows-v0.1.24-49', 'windows-v0.1.25-50', 'windows-v0.1.29-54', 'windows-v0.1.30-55', 'windows-v0.1.31-56', 'windows-v0.1.32-57', 'windows-v0.1.34-59', 'windows-v0.1.38-63', 'windows-v0.1.39-64', 'windows-v0.1.43-68', windows_tag)
-previous_android_tag = 'app-v0.1.43-68'
-previous_android_commit = '54c17cb7048acbb4c05f8d7075d01d7c8ce88ece'
+windows_tag = 'windows-v0.1.48-74'
+windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48', 'windows-v0.1.24-49', 'windows-v0.1.25-50', 'windows-v0.1.29-54', 'windows-v0.1.30-55', 'windows-v0.1.31-56', 'windows-v0.1.32-57', 'windows-v0.1.34-59', 'windows-v0.1.38-63', 'windows-v0.1.39-64', 'windows-v0.1.43-68', 'windows-v0.1.46-71', windows_tag)
+previous_android_tag = 'app-v0.1.46-71'
+previous_android_commit = '6799ab8b0fb317e73d6dd3c49da860bdc0880f55'
 pending_publication_note = '公开发布核验进行中：尚未完成三 ABI 公网下载、签名复核及 Android / Windows 升级通道隔离检查。'
 verified_publication_note = '公开发布核验已完成：三 ABI 公网下载、SHA-256、正式证书与版本复核通过；Android Latest 和 Windows 升级通道隔离、旧版本资产保持检查通过。'
 windows_verified_publication_note = '公开发布核验已完成：Windows 公网 ZIP 下载与 SHA-256、正式升级通道和 API 限流回退检查通过；Android Latest 隔离及旧版本资产保持检查通过。'
 offsets = {'arm64-v8a': 2000, 'armeabi-v7a': 1000, 'x86_64': 4000}
-release_branch = 'release/windows-android-0.1.46-71'
-approved_source = '58a40832b75b3687c531d8f50bfa1eeda54e0432'
+release_branch = 'release/windows-android-0.1.48-74'
+approved_source = 'PIN_FINAL_RUNTIME_COMMIT_BEFORE_RELEASE'
 release_only_paths = frozenset({
     'README.md', '.github/workflows/android-stable.yml',
     '.github/workflows/windows-preview.yml',
@@ -57,18 +57,13 @@ def github(*arguments):
 def release_description(version):
     return (
         f'红果TV Android {version} · 手机 / Android TV\n\n'
-        '- 修复自动续播后后续集只播一秒就连续跳集的问题：按媒体代次和控制器身份过滤旧异步进度，忽略未知时长窗口的伪位置；迟到的重复 ready 不再回写当前时钟、暂停或真实完成状态。\n'
-        '- 自动切集同时校验当前完成状态和片尾位置，位置回退本身不再触发下一集；等待原生媒体身份确认，未确认则恢复当前集，旧事件按身份和代次隔离。\n'
-        '- 下一集预加载和自动连播开关按实际选择保存并生效；默认仍开启，关闭自动连播时保留按需缓存而不挂入原生自动队列，不通过关闭默认续播掩盖故障。\n'
-        '- “已追剧”左上角标改为灰白底深灰字，“已有下季”保留强调色；有效紧接下一季仍优先，追剧页不重复显示已追剧。\n'
-        '- 多季浏览页增加顶部本系列标题或季号搜索与横向季封面，保留当前季、选集和观看进度；我的追剧卡片移除重复“已追剧”字样，其他页面改用左上角紧凑斜角标；已有有效紧接下一季时优先显示“已有下季”，不叠加“已追剧”，避免遮挡封面底部季数。\n'
-        '- 优化 APK 搜索输入：避免每键重建目录、过滤和排序，保留输入法组合状态；联想仅取消已发请求，迟到结果、快速输入、清空、提交和返回按当前查询生效。\n'
-        '- TV 排行榜改为随宽度和字体调整的多列多行卡片；电视“我的追剧”顶区紧凑化，保留可读文字、遥控焦点和返回位置。正常切集加载不再自动弹出底部恢复按钮。\n'
-        '- 使用唯一播放器队列提前准备已核验的下一集缓存；原生实际切项后同步集数、标题、弹幕和观看记录。当前缓冲不足、暂停或后台时安全暂停下一集预取并保留缓存，失败回退普通播放，不创建第二播放器。\n'
-        '- 仅对满足平台能力和媒体安全条件的候选启用队列；不同编码、慢网、过期凭证或不支持的片源仍可能等待，不保证所有设备或片源零间隙。硬解与画质默认策略保持。\n'
-        '- 保留下一季定向搜索、官方分组核验、紧接的下一季及命中立即显示；复用缓存和无结果缓存十分钟，缺季、同名或部分响应证据不足时不误报，保留观看进度和追剧记录。\n'
-        '- 保留 TV 遥控长按左右定位和手机全屏“查看全季”文字入口。\n'
-        '\n本次构建、静态检查、默认及全站源回归、Android 原生队列 JVM 回归和三 ABI 安装包校验由发布门禁验证，详细结果见随附报告。真实手机 / TV 输入法、MediaCodec、音画连续性和长时间流畅度仍未实测。\n'
+        '- 切换下一集时，已在屏上的旧弹幕沿原方向短时平滑加速退场；旧弹幕不重新排入新集时间轴，视频切换不等待弹幕动画。暂停、连续快速切集、关闭弹幕和退出页面按独立生命周期处理。\n'
+        '- 隐藏播放控件不再随进度和缓冲位置反复重建；弹幕跳过完全重复通知，轨道可用后再测量新文字。保留弹幕功能、运动规则与默认设置，不通过关闭弹幕、无缝续播或降低清晰度掩盖故障。\n'
+        '- 播放日记增加原生实际倍速、音调、音频解码器、欠载和时间线信息；累计计数标明播放器生命周期，不将其当成实际声画偏移。倍速设置失败不再假报成功，错误信息脱敏，迟到命令不覆盖新设置。\n'
+        '- 同一追剧记录的续播同步优先保留最高季、同季最高集，选取完整进度；同季同集采用最近修改。手动及自动同步共用规则，两端需升级；主动清空和取消追剧仍生效，不强行归并不同版本或无法可靠识别的季数。\n'
+        '- 正式构建号 74 高于测试版 0.1.48-test.1+73，三 ABI 继续使用 com.hongguo.tv 和既有正式证书，支持从对应架构的测试版覆盖升级并保留数据。最低 Android 8.0 保持。\n'
+        '- 保留连续自动续播的媒体代次与片尾校验、唯一播放器队列及安全暂停预取、灰白“已追剧”角标、TV 多行布局、全季封面搜索和遥控长按定位。\n'
+        '\n用户已反馈测试版 0.1.48-test.1+73 在其设备恢复音画同步；该反馈不代表所有设备或片源。构建、默认及全站源回归、Android 原生 JVM 和三 ABI 签名完整性检查由发布门禁验证，详细结果见随附报告；不保证所有设备绝对平滑或物理音画零间隙。\n'
     )
 
 
@@ -78,7 +73,7 @@ def release(tag):
 
 def finalize_release_notes(tag):
     published = release(tag)
-    if tag != 'app-v0.1.46-71' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
+    if tag != 'app-v0.1.48-74' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
         raise ValueError('Only the current verified Android stable release notes may be finalized')
     body = published['body']
     if body.count(pending_publication_note) != 1:
@@ -156,7 +151,7 @@ def validate_android_player_report(report, version, build, commit):
     expected_run = f'https://github.com/{repository}/actions/runs/{os.environ["GITHUB_RUN_ID"]}'
     if report.get('ok') is not True or report.get('version') != version or report.get('build') != build or report.get('sourceCommit') != commit or report.get('workflowRun') != expected_run:
         raise ValueError('Android native player report identity does not match this release')
-    if report.get('testCount', 0) < 156 or report.get('suiteCount', 0) < 20 or any(report.get(key) != 0 for key in ['failures', 'errors', 'skipped']):
+    if report.get('testCount', 0) < 161 or report.get('suiteCount', 0) < 20 or any(report.get(key) != 0 for key in ['failures', 'errors', 'skipped']):
         raise ValueError('Android native player regression gate did not pass in full')
     if report.get('realDevicePlaybackVerified') is not False:
         raise ValueError('JVM player tests cannot claim physical device verification')
@@ -170,8 +165,8 @@ def main():
     os.chdir(root)
     version, raw_build = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(), re.M).group(1).split('+')
     build = int(raw_build)
-    if version != '0.1.46' or build != 71:
-        raise ValueError('This workflow only publishes Android 0.1.46+71')
+    if version != '0.1.48' or build != 74:
+        raise ValueError('This workflow only publishes Android 0.1.48+74')
     validate_release_source(os.environ['GITHUB_SHA'])
     tag = f'app-v{version}-{build}'
     phase = sys.argv[1]
@@ -190,6 +185,8 @@ def main():
         latest = json.loads(github('api', f'repos/{repository}/releases/latest'))
         if latest['tag_name'] != previous_android_tag or int(latest['tag_name'].rsplit('-', 1)[1]) >= build:
             raise ValueError('Android version must increase beyond current stable')
+        if latest.get('target_commitish') != previous_android_commit:
+            raise ValueError('Android stable baseline source changed')
         listed = json.loads(github('api', f'repos/{repository}/releases?per_page=100'))
         for item in listed:
             match = re.fullmatch(r'app-v\d+\.\d+\.\d+-(\d+)', item['tag_name'])
@@ -197,7 +194,7 @@ def main():
                 raise ValueError('A newer or reserved Android build already exists')
         validate_android_player_report(read('Android-player-tests.json'), version, build, os.environ['GITHUB_SHA'])
         write('Release-before.json', {'android': snapshot(latest), 'windows': validated_windows_snapshots(os.environ['GITHUB_SHA'])})
-        subprocess.run([sys.executable, 'scripts/finish_task.py', '--message', 'Android 0.1.46 连续自动切集时钟与媒体代次修复、真实播放开关及灰白角标；三ABI既有正式签名和五集原生队列自动化通过，实体设备仍未验收'], check=True)
+        subprocess.run([sys.executable, 'scripts/finish_task.py', '--message', 'Android 0.1.48 弹幕切集平滑退场、播放性能与真实诊断、最高季最高集同步；三ABI原签名和原生回归通过，用户私测反馈不代表全部设备'], check=True)
         subprocess.run([sys.executable, 'scripts/sync_source.py', '--check'], check=True)
         source = max(root.parent.glob('真果·鉴-*.zip'), key=lambda p: p.stat().st_mtime_ns)
         source_package = output / f'HongguoTV-{version}-source.zip'
@@ -211,9 +208,10 @@ def main():
               'formatAnalysisPythonFlutterAndGoRacePassed': True, 'allThreeSignedApksValidated': True,
               'androidPlayerJvmTestsPassed': True, 'androidPlayerJvmReport': 'Android-player-tests.json',
               'androidFiveEpisodeQueueJvmRequiredCaseVerified': True,
+              'reportedPrivateTestVersion': '0.1.48-test.1+73', 'reportedPrivateTestAvSyncRestored': True,
               'realPhoneOrTvPerformanceMeasured': False, 'realDevicePlaybackVerified': False})
         notes = release_description(version)
-        notes += f'\n源码：https://github.com/{repository}/commit/{head}\n\nCI：https://github.com/{repository}/actions/runs/{os.environ["GITHUB_RUN_ID"]}\n\n手机 / TV 继续共用 com.hongguo.tv、既有正式证书和 Android 8.0 最低版本。真实手机 / TV 覆盖安装、流畅度、解码和长时间连播仍未实测。\n\n{pending_publication_note}\n'
+        notes += f'\n源码：https://github.com/{repository}/commit/{head}\n\nCI：https://github.com/{repository}/actions/runs/{os.environ["GITHUB_RUN_ID"]}\n\n手机 / TV 继续共用 com.hongguo.tv、既有正式证书和 Android 8.0 最低版本。报告者的测试版同步恢复反馈仅限其设备；其他真实手机 / TV、MediaCodec、音频设备和长时间连续播放仍待验收。\n\n{pending_publication_note}\n'
         notes_file = Path(os.environ['RUNNER_TEMP']) / 'android-release-notes.md'
         notes_file.write_text(notes, encoding='utf-8')
         assets = [output / f'HongguoTV-{version}-{abi}.apk' for abi in offsets] + [source_package, output / 'APK-validation.json', output / 'Source-and-checks.json', output / 'Signing-availability.json', output / 'Android-player-tests.json']

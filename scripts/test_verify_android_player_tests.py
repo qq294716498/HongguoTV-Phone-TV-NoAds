@@ -13,7 +13,8 @@ class AndroidPlayerReportTests(unittest.TestCase):
         self.results = Path(self.temporary.name)
         self.commit = 'a' * 40
         self.run = 'https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/123'
-        suites = {**required_cases, **{f'synthetic.Suite{index:02}': {f'case{n}' for n in range(8)} for index in range(18)}}
+        suites = {**required_cases, **{f'synthetic.Suite{index:02}': {f'case{n}' for n in range(8)} for index in range(17)}}
+        suites['synthetic.Suite00'].update(f'extra{n}' for n in range(6))
         for name, cases in suites.items():
             suite = ET.Element('testsuite', name=name, tests=str(len(cases)), failures='0', errors='0', skipped='0')
             for case in sorted(cases):
@@ -21,12 +22,12 @@ class AndroidPlayerReportTests(unittest.TestCase):
             ET.ElementTree(suite).write(self.results / f'TEST-{name}.xml')
 
     def summarize(self):
-        return summarize(self.results, '0.1.46', 71, self.commit, self.run)
+        return summarize(self.results, '0.1.48', 74, self.commit, self.run)
 
     def test_complete_passed_reports_keep_exact_identity_and_queue_cases(self):
         report = self.summarize()
         self.assertTrue(report['ok'])
-        self.assertEqual(report['testCount'], 156)
+        self.assertEqual(report['testCount'], 161)
         self.assertEqual(report['suiteCount'], 20)
         self.assertEqual(report['sourceCommit'], self.commit)
         self.assertEqual(report['workflowRun'], self.run)
@@ -48,7 +49,30 @@ class AndroidPlayerReportTests(unittest.TestCase):
         suite.remove(case)
         ET.SubElement(suite, 'testcase', name='syntheticExtraPassingCase', classname=suite.attrib['name'])
         tree.write(path)
-        with self.assertRaisesRegex(ValueError, 'Required single-player queue regression is missing'):
+        with self.assertRaisesRegex(ValueError, 'Required Android player regression is missing'):
+            self.summarize()
+
+    def test_diagnostic_case_is_required_even_when_total_count_is_unchanged(self):
+        path = self.results / 'TEST-io.flutter.plugins.videoplayer.PlaybackDiagnosticsTest.xml'
+        tree = ET.parse(path)
+        suite = tree.getroot()
+        case = next(case for case in suite.findall('testcase')
+                    if case.attrib['name'] == 'audioUnderrunsKeepLifetimeCountsAndIdentifyOldMediaEvents')
+        suite.remove(case)
+        ET.SubElement(suite, 'testcase', name='syntheticExtraPassingCase', classname=suite.attrib['name'])
+        tree.write(path)
+        with self.assertRaisesRegex(ValueError, 'PlaybackDiagnosticsTest'):
+            self.summarize()
+
+    def test_old_156_case_total_cannot_satisfy_the_new_diagnostics_gate(self):
+        path = self.results / 'TEST-synthetic.Suite00.xml'
+        tree = ET.parse(path)
+        suite = tree.getroot()
+        for case in suite.findall('testcase')[:5]:
+            suite.remove(case)
+        suite.set('tests', str(len(suite.findall('testcase'))))
+        tree.write(path)
+        with self.assertRaisesRegex(ValueError, 'Complete Android player regression reports are missing'):
             self.summarize()
 
     def test_failure_error_and_skip_attributes_block(self):
@@ -89,7 +113,7 @@ class AndroidPlayerReportTests(unittest.TestCase):
     def test_wrong_identity_or_non_github_run_blocks(self):
         for commit, run in [('unknown', self.run), (self.commit, 'https://example.com/runs/123')]:
             with self.subTest(commit=commit, run=run), self.assertRaises(ValueError):
-                summarize(self.results, '0.1.46', 71, commit, run)
+                summarize(self.results, '0.1.48', 74, commit, run)
 
 
 if __name__ == '__main__':

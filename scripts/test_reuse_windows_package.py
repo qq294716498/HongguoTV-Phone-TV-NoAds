@@ -7,6 +7,21 @@ import publish_windows_stable as windows
 
 
 class ReleaseSourceGateTests(unittest.TestCase):
+    def setUp(self):
+        for name, value in [('approved_commit', 'a' * 40), ('approved_run', '100'), ('approved_sha256', 'b' * 64)]:
+            patch = mock.patch.object(reuse, name, value)
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def test_unpinned_reuse_blocks_before_network_or_git(self):
+        for name in ['approved_commit', 'approved_run', 'approved_sha256']:
+            with self.subTest(name=name), mock.patch.object(reuse, name, 'PIN_BEFORE_REUSE'), \
+                    mock.patch.object(reuse.os, 'chdir'), \
+                    mock.patch.object(reuse.subprocess, 'check_output') as commands:
+                with self.assertRaisesRegex(ValueError, 'must be pinned'):
+                    reuse.main()
+                commands.assert_not_called()
+
     def test_reuse_accepts_release_configuration_but_rejects_application_or_build_changes(self):
         with mock.patch.object(reuse.subprocess, 'check_output', return_value='README.md\n.github/workflows/android-stable.yml\n'):
             reuse.validate_source(Path('.'))
