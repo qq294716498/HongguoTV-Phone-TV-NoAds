@@ -29,6 +29,7 @@ release_only_paths = frozenset({
     'scripts/publish_windows_stable.py', 'scripts/test_windows_stable_publish.py',
     'scripts/publish_android_stable.py',
     'scripts/reuse_windows_package.py', 'scripts/test_reuse_windows_package.py',
+    'scripts/test_windows_transaction.py',
     'scripts/test_windows_single_instance_native.py',
     'scripts/tests/windows_single_instance_harness.cpp',
 })

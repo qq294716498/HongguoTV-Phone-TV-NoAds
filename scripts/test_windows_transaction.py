@@ -31,6 +31,41 @@ def records(directory, target):
         for file in sorted(directory.rglob('*')) if file.is_file()), encoding='utf-8')
 
 
+def stop_confirmed_client(kernel, pid, evidence):
+    kernel.OpenProcess.argtypes = [ctypes.c_ulong, ctypes.c_int, ctypes.c_ulong]
+    kernel.OpenProcess.restype = ctypes.c_void_p
+    kernel.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_ulong]
+    kernel.WaitForSingleObject.restype = ctypes.c_ulong
+    kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+    kernel.CloseHandle.restype = ctypes.c_int
+    evidence['pid'] = int(pid)
+    handle = kernel.OpenProcess(0x00100000, False, int(pid))
+    if not handle:
+        raise RuntimeError(f'Cannot hold the confirmed client process: Win32={ctypes.get_last_error()}')
+    try:
+        result = subprocess.run(['taskkill', '/F', '/PID', str(pid)], capture_output=True)
+        evidence['taskkillReturnCode'] = result.returncode
+        result.check_returncode()
+        evidence['waitResult'] = kernel.WaitForSingleObject(handle, 10000)
+        if evidence['waitResult'] != 0:
+            raise RuntimeError('Confirmed client exit was not observed: ' + repr(evidence))
+    finally:
+        evidence['handleClosed'] = bool(kernel.CloseHandle(handle))
+        if not evidence['handleClosed']:
+            raise RuntimeError(f'Cannot close the client process handle: Win32={ctypes.get_last_error()}')
+
+
+def confirm_finalizing_receipt(recorded, nonce, install, build):
+    assert recorded.get('schema') == 1 and recorded.get('phase') == 'finalizing', recorded
+    fields = recorded.get('fields')
+    identity = recorded.get('identity')
+    assert isinstance(fields, dict) and isinstance(identity, dict), recorded
+    assert identity.get('schema') == 1, recorded
+    for value in [fields, identity]:
+        assert value.get('nonce') == nonce and value.get('build') == str(build), recorded
+        assert isinstance(value.get('root'), str) and Path(value['root']) == install, recorded
+
+
 def compile_fixtures(directory, cxx='g++.exe'):
     compiler = Path(cxx)
     windres = str(compiler.with_name('windres.exe')) if compiler.is_absolute() else 'windres.exe'
@@ -123,6 +158,9 @@ def transaction(base, fixtures, mode, real=False):
     handle = None
     cleanup_handle = None
     restarted = None
+    restart_streams = []
+    restart_logs = [base / 'restart.stdout.log', base / 'restart.stderr.log']
+    old_client_exit_waits = []
     child_pids = []
     cleanup_result = None
     process = None
@@ -218,16 +256,29 @@ def transaction(base, fixtures, mode, real=False):
                     assert phase['phase'] == 'acknowledged' and phase['nonce'] == nonce, phase
                 receipt = tx / 'cleanup-receipt.json'
                 wait_for(lambda: receipt.exists() and json.loads(receipt.read_text(encoding='utf-8'))['phase'] == 'finalizing', seconds=40)
+                finalizing = json.loads(receipt.read_text(encoding='utf-8'))
+                confirm_finalizing_receipt(finalizing, nonce, install, build)
+                assert child_pids and all(pid.isdecimal() and int(pid) > 0 for pid in child_pids), child_pids
                 assert not backup.exists() and not stage.exists() and not cached_package.exists()
                 assert not (tx / 'HongguoTV-updater.exe').exists()
                 assert not plan.exists() and (tx / 'old-files.tsv').exists()
                 kernel.CloseHandle.argtypes = [ctypes.c_void_p]
-                kernel.CloseHandle(cleanup_handle)
+                kernel.CloseHandle.restype = ctypes.c_int
+                if not kernel.CloseHandle(cleanup_handle):
+                    raise RuntimeError(f'Cannot release the cleanup fixture lock: Win32={ctypes.get_last_error()}')
                 cleanup_handle = None
                 for child_pid in child_pids:
-                    subprocess.run(['taskkill', '/F', '/PID', child_pid], check=True, capture_output=True)
-                restarted = subprocess.Popen([str(install / 'HongguoTV.exe')], env=environment, cwd=install)
+                    evidence = {}
+                    old_client_exit_waits.append(evidence)
+                    stop_confirmed_client(kernel, child_pid, evidence)
+                for path in restart_logs:
+                    restart_streams.append(path.open('wb'))
+                restarted = subprocess.Popen([str(install / 'HongguoTV.exe')], env=environment, cwd=install,
+                                             stdout=restart_streams[0], stderr=restart_streams[1])
                 def cleanup_finished():
+                    code = restarted.poll()
+                    if code is not None:
+                        raise RuntimeError(f'Restarted client exited before cleanup confirmation: PID={restarted.pid}, code={code}')
                     try:
                         result = json.loads((support / 'windows-update-cleanup.json').read_text(encoding='utf-8'))
                         return not tx.exists() and result.get('complete') is True and result.get('nonce') == nonce
@@ -242,7 +293,10 @@ def transaction(base, fixtures, mode, real=False):
                                   'backupRemoved': True, 'downloadRemoved': True,
                                   'transactionRemoved': True, 'retryAfterRestart': True,
                                   'installationDirectoryPreserved': str(install),
-                                  'configurationPreserved': True}
+                                  'configurationPreserved': True,
+                                  'oldClientExitWaits': old_client_exit_waits,
+                                  'restartPid': restarted.pid,
+                                  'restartRunningAfterCleanup': restarted.poll() is None}
         elif mode == 'stop-unconfirmed':
             assert code == 1 and 'exit unconfirmed; rollback withheld' in status, status
             assert backup.is_dir() and install.is_dir() and not stage.exists()
@@ -290,11 +344,28 @@ def transaction(base, fixtures, mode, real=False):
     except BaseException:
         if real:
             diagnostic = {'case': 'real-client-startup-ack', 'ok': False,
-                          'files': {}}
-            for name in ['status.txt', f'startup-{build}.json', 'startup-processes.log']:
+                          'files': {}, 'oldClientExitWaits': old_client_exit_waits,
+                          'restartPid': restarted.pid if restarted else None,
+                          'restartReturnCode': restarted.poll() if restarted else None,
+                          'transactionExists': tx.exists(),
+                          'transactionEntries': sorted(file.name for file in tx.iterdir()) if tx.is_dir() else []}
+            for name in ['status.txt', f'startup-{build}.json', 'startup-processes.log', 'cleanup-receipt.json']:
                 file = tx / name
                 if file.exists():
                     diagnostic['files'][name] = file.read_text(encoding='utf-8', errors='replace')[-16000:]
+            for name, file in [('windows-update-cleanup.json', support / 'windows-update-cleanup.json'),
+                               *[(path.name, path) for path in restart_logs]]:
+                if file.exists():
+                    diagnostic['files'][name] = file.read_text(encoding='utf-8', errors='replace')[-16000:]
+            def redact(value):
+                if isinstance(value, str):
+                    return value.replace(str(base), '<fixture>').replace(str(support), '<fixture-support>')
+                if isinstance(value, dict):
+                    return {key: redact(item) for key, item in value.items()}
+                if isinstance(value, list):
+                    return [redact(item) for item in value]
+                return value
+            diagnostic = redact(diagnostic)
             (root / 'dist/windows/Windows-update-failure.json').write_text(json.dumps(diagnostic, indent=2) + '\n', encoding='utf-8')
             print(json.dumps(diagnostic, ensure_ascii=True), flush=True)
         raise
@@ -322,6 +393,8 @@ def transaction(base, fixtures, mode, real=False):
         if restarted and restarted.poll() is None:
             restarted.terminate()
             restarted.wait(timeout=10)
+        for stream in restart_streams:
+            stream.close()
         if real or mode == 'stop-unconfirmed':
             pid_file = tx / 'started-pids.txt'
             if pid_file.exists():

@@ -31,6 +31,7 @@ release_only_paths = frozenset({
     'integration_test/windows_playback_queue_test.dart',
     'integration_test/windows_app_autoplay_chain_test.dart',
     'scripts/verify_android_player_tests.py', 'scripts/test_verify_android_player_tests.py',
+    'scripts/test_windows_transaction.py',
     'scripts/test_windows_single_instance_native.py',
     'scripts/tests/windows_single_instance_harness.cpp',
     '.github/workflows/windows-recovery.yml',
