@@ -36,7 +36,7 @@ validation_reports = (
     'Windows-validation.json', 'Windows-smoke.json', 'Windows-signature.json',
     'Windows-update-transaction.json', 'Windows-single-instance-native.json',
     'Windows-single-instance-original-reader-lock.json', 'Windows-playback-queue.json',
-    'Windows-app-autoplay-chain.json',
+    'Windows-app-autoplay-chain.json', 'Windows-generated-source.json',
 )
 
 
