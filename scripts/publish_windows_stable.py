@@ -383,7 +383,7 @@ def main():
         assets = [package, source_package] + [output / name for name in
                  ['Windows-validation.json', 'Windows-smoke.json', 'Windows-signature.json', 'Windows-update-transaction.json', 'Windows-single-instance-native.json', 'Windows-playback-queue.json', 'Windows-app-autoplay-chain.json', 'Source-and-checks.json']]
         if recovery is not None:
-            assets += [output / name for name in ['Windows-reuse-provenance.json', 'Windows-recovery-validation.json', 'Windows-single-instance-original-reader-lock.json', 'Windows-single-instance-original-build.json']]
+            assets += [output / name for name in ['Windows-reuse-provenance.json', 'Windows-recovery-validation.json', 'Windows-single-instance-original-reader-lock.json', 'Windows-single-instance-original-build.json', 'Windows-generated-source.json']]
         subprocess.run(['gh', 'release', 'create', tag, *map(str, assets), '--target', commit,
                         '--title', f'红果TV Windows {version} · x64 未签名正式版',
                         '--notes-file', str(notes_file), '--draft', '--latest=false'], check=True)

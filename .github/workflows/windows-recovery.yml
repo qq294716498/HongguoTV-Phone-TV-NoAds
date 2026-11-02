@@ -71,7 +71,6 @@ jobs:
           merge-multiple: true
       - name: Verify and unpack the exact successful compilation
         run: python scripts/reuse_windows_package.py
-      - run: flutter pub get --enforce-lockfile
       - name: Reproduce report loss with the original harness under a held reader lock
         shell: pwsh
         run: |
@@ -84,6 +83,7 @@ jobs:
           exit 0
       - name: Verify isolated native single-instance lifecycle with MSVC
         run: python scripts/test_windows_single_instance_native.py --msvc --report dist/windows/Windows-single-instance-native.json
+      - run: flutter pub get --enforce-lockfile
       - name: Validate updater ZIP handling on Windows filesystem
         run: flutter test --no-pub test/windows_update_package_test.dart test/windows_update_startup_test.dart test/windows_update_cleanup_test.dart --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true --reporter=expanded
       - name: Verify version, x64 architecture, DLL imports, resources and hashes
@@ -108,6 +108,41 @@ jobs:
           $signature = Get-AuthenticodeSignature $exe
           @{ status = $signature.Status.ToString(); signed = ($signature.Status -eq 'Valid'); file = 'HongguoTV.exe' } | ConvertTo-Json | Set-Content -Encoding utf8 dist\windows\Windows-signature.json
           if ($signature.Status -ne 'NotSigned') { throw 'Unexpected executable signature state' }
+      - name: Restore only the generated Mac registrant after Windows validation
+        shell: bash
+        env:
+          PREPARATION_REPORT: dist/windows/Windows-generated-source.json
+        run: &restore_generated_macos |
+          python - <<'PYRESTORE'
+          import hashlib, json, os, pathlib, stat, subprocess, sys
+          assert os.environ.get('GITHUB_ACTIONS') == 'true'
+          sys.path.insert(0, 'scripts')
+          import reuse_windows_package as reuse
+          root = pathlib.Path.cwd()
+          name = 'macos/Flutter/GeneratedPluginRegistrant.swift'
+          changed = set(reuse.git(root, 'diff', '--name-only', '--no-renames', '--').splitlines())
+          if changed - {name, reuse.unchanged_crlf_script} or reuse.git(root, 'diff', '--cached', '--name-only', '--'):
+              raise SystemExit('Unexpected tracked source changes during Flutter preparation: ' + repr(sorted(changed)))
+          path = root / name
+          assert stat.S_ISREG(path.lstat().st_mode)
+          original = subprocess.check_output(['git', 'show', 'HEAD:' + name])
+          before = path.read_bytes()
+          assert b'Generated file. Do not edit.' in original[:80] and b'Generated file. Do not edit.' in before[:80]
+          difference = reuse.git(root, 'diff', '--no-ext-diff', '--', name)
+          print(difference or 'The generated Mac registrant already matches HEAD')
+          if before != original:
+              path.write_bytes(original)
+          reuse.validate_source(root)
+          result = {'sourceCommit': os.environ['GITHUB_SHA'], 'workflowRun': os.environ['GITHUB_RUN_ID'],
+                    'path': name, 'generatedOnOtherPlatform': True, 'changed': before != original,
+                    'beforeSha256': hashlib.sha256(before).hexdigest(),
+                    'headSha256': hashlib.sha256(original).hexdigest(),
+                    'afterSha256': hashlib.sha256(path.read_bytes()).hexdigest(),
+                    'restoredExactlyToHead': path.read_bytes() == original, 'diff': difference}
+          print(json.dumps(result))
+          if os.environ.get('PREPARATION_REPORT'):
+              pathlib.Path(os.environ['PREPARATION_REPORT']).write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
+          PYRESTORE
       - name: Seal validation reports against the exact reused package and validation source
         run: python scripts/reuse_windows_package.py seal-validation
       - uses: actions/upload-artifact@v4
@@ -154,6 +189,9 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get --enforce-lockfile
+      - name: Keep generated Mac source at the committed value after Linux pub get
+        shell: bash
+        run: *restore_generated_macos
       - name: Publish verified public Windows fallback manifest
         run: python3 scripts/publish_windows_stable.py channel
       - name: Verify public Windows updater download and Android channel
