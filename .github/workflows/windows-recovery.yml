@@ -90,6 +90,8 @@ jobs:
         run: python scripts/verify_windows_package.py
       - name: Start unpacked client with synthetic H264 and AAC media
         run: python scripts/smoke_windows.py
+      - name: Verify update commit, restart, rollback and locked-directory handling
+        run: python scripts/test_windows_transaction.py
       - name: Verify native Windows video configuration and pixel boundaries
         timeout-minutes: 20
         run: flutter test -d windows integration_test/windows_video_layout_test.dart --no-pub --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true --reporter=expanded
@@ -99,8 +101,6 @@ jobs:
       - name: Verify full App four-episode autoplay without one-second skipping
         timeout-minutes: 10
         run: flutter test -d windows integration_test/windows_app_autoplay_chain_test.dart --no-pub --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true --reporter=expanded
-      - name: Verify update commit, restart, rollback and locked-directory handling
-        run: python scripts/test_windows_transaction.py
       - name: Record Authenticode status
         shell: pwsh
         run: |
@@ -132,6 +132,11 @@ jobs:
           print(difference or 'The generated Mac registrant already matches HEAD')
           if before != original:
               path.write_bytes(original)
+          if path.read_bytes() != original:
+              raise SystemExit('Generated Mac source did not restore to the exact committed bytes')
+          subprocess.run(['git', 'add', '--', name], check=True)
+          if reuse.git(root, 'diff', '--cached', '--name-only', '--'):
+              raise SystemExit('Refreshing generated source changed the index content')
           reuse.validate_source(root)
           result = {'sourceCommit': os.environ['GITHUB_SHA'], 'workflowRun': os.environ['GITHUB_RUN_ID'],
                     'path': name, 'generatedOnOtherPlatform': True, 'changed': before != original,

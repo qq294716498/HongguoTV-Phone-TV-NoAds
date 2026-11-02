@@ -12,6 +12,7 @@ import zipfile
 
 import reuse_windows_package as reuse
 import publish_windows_stable as windows
+import test_windows_transaction as transaction
 
 
 class RecoveryGateTests(unittest.TestCase):
@@ -24,6 +25,26 @@ class RecoveryGateTests(unittest.TestCase):
             'validationHarnessSourceSha256': '2' * 64,
             'instanceGuardSourceSha256': '3' * 64,
         }
+
+    def test_real_cleanup_receipt_confirms_nested_identity_before_stopping_fixture_client(self):
+        nonce = '0123456789abcdef0123456789abcdef'
+        install = Path('fixture') / 'with spaces 中文'
+        fields = {'nonce': nonce, 'root': str(install), 'build': '74'}
+        receipt = {'schema': 1, 'phase': 'finalizing', 'fields': fields,
+                   'identity': {'schema': 1, **fields, 'plan.txt': 'a' * 64,
+                                'old-files.tsv': 'b' * 64, 'new-files.tsv': 'c' * 64},
+                   'old': {'HongguoTV.exe': 'd' * 64}, 'next': {'HongguoTV.exe': 'e' * 64}}
+        self.assertNotIn('nonce', receipt)
+        transaction.confirm_finalizing_receipt(receipt, nonce, install, 74)
+        for section in ['fields', 'identity']:
+            for field, value in [('nonce', 'other'), ('root', 'other'), ('build', '73')]:
+                changed = copy.deepcopy(receipt)
+                changed[section][field] = value
+                with self.subTest(section=section, field=field), self.assertRaises(AssertionError):
+                    transaction.confirm_finalizing_receipt(changed, nonce, install, 74)
+        for field, value in [('phase', 'authorized'), ('schema', 2), ('fields', None), ('identity', None)]:
+            with self.subTest(field=field), self.assertRaises(AssertionError):
+                transaction.confirm_finalizing_receipt({**receipt, field: value}, nonce, install, 74)
 
     def original_run(self):
         return {'id': int(reuse.approved_run), 'head_sha': reuse.approved_commit,
