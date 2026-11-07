@@ -1,8 +1,8 @@
-name: Android private playback test APK
+name: Android private stream diagnostic APK
 
 on:
   push:
-    branches: [test/android-playback-performance-local]
+    branches: [test/android-stream-0.1.49-75]
 
 permissions:
   contents: read
@@ -29,7 +29,7 @@ jobs:
           from pathlib import Path
           import re
           version = re.search(r'^version:\s*(\S+)', Path('pubspec.yaml').read_text(), re.M).group(1)
-          if version != '0.1.48-test.1+73':
+          if version != '0.1.49-test.1+75':
               raise SystemExit('This workflow only builds the approved private test version')
           PY
       - uses: actions/setup-java@v4
@@ -79,7 +79,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: HongguoTV-playback-test-checks-${{ github.run_attempt }}
+          name: HongguoTV-stream-test-checks-${{ github.run_attempt }}
           path: |
             dist/android/Android-player-tests.json
             build/video_player_android/test-results/testDebugUnitTest/
@@ -139,7 +139,7 @@ jobs:
       - name: Upload the verified ARM64 private test package
         uses: actions/upload-artifact@v4
         with:
-          name: HongguoTV-playback-test-arm64-${{ github.run_attempt }}
+          name: HongguoTV-stream-test-arm64-${{ github.run_attempt }}
           path: |
             dist/android/*-arm64-v8a.apk
             dist/android/APK-test-validation.json
@@ -149,7 +149,7 @@ jobs:
       - name: Upload the verified ARMv7 private test package
         uses: actions/upload-artifact@v4
         with:
-          name: HongguoTV-playback-test-armv7-${{ github.run_attempt }}
+          name: HongguoTV-stream-test-armv7-${{ github.run_attempt }}
           path: |
             dist/android/*-armeabi-v7a.apk
             dist/android/APK-test-validation.json

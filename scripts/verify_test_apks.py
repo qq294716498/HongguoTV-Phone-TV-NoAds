@@ -83,9 +83,9 @@ def main():
         raise ValueError('Built source does not match the workflow commit')
     report = {
         'version': package_version, 'sourceCommit': commit, 'testBuild': True,
-        'allSources': True, 'includesUnpublishedSyncCommit': '83e4063a8d759afedeaded0530af4061a76dc5d7',
+        'allSources': True, 'baselineCommit': 'ca5a75106b2b7c2efb9ec0b180992fdf48bb941d',
         'publicReleaseCreated': False, 'updatesPublished': False, 'apks': results,
-        'realDeviceAvSyncVerified': False,
+        'realDeviceAvSyncVerified': False, 'realDevicePlaybackVerified': False,
     }
     (options.directory / 'APK-test-validation.json').write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n')
     print(json.dumps(report, ensure_ascii=False, indent=2))
