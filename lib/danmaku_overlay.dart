@@ -507,6 +507,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
                 ? portraitLandscapeVideoRect(
                     constraints.biggest,
                     aspect,
+                    verticalOffset: PortraitVideoPosition.of(context),
                     padding: MediaQuery.paddingOf(context),
                     textScaler: MediaQuery.textScalerOf(context),
                   )

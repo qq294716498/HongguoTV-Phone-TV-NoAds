@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 Rect? portraitLandscapeVideoRect(
   Size viewport,
   double aspectRatio, {
+  double verticalOffset = -.15,
   EdgeInsets padding = EdgeInsets.zero,
   TextScaler textScaler = TextScaler.noScaling,
 }) {
@@ -28,10 +29,36 @@ Rect? portraitLandscapeVideoRect(
   final header = 96 + math.max(0, textScaler.scale(32) - 32);
   return Rect.fromLTWH(
     padding.left + (width - size.width) / 2,
-    padding.top + math.min(centeredTop, header),
+    padding.top +
+        (centeredTop +
+                height *
+                    (verticalOffset.isFinite
+                        ? verticalOffset.clamp(-.5, .5)
+                        : -.15))
+            .clamp(math.min(centeredTop, header), height - size.height),
     size.width,
     size.height,
   );
+}
+
+class PortraitVideoPosition extends InheritedWidget {
+  const PortraitVideoPosition({
+    super.key,
+    required this.offset,
+    required super.child,
+  });
+
+  final double offset;
+
+  static double of(BuildContext context) =>
+      context
+          .dependOnInheritedWidgetOfExactType<PortraitVideoPosition>()
+          ?.offset ??
+      -.15;
+
+  @override
+  bool updateShouldNotify(PortraitVideoPosition oldWidget) =>
+      offset != oldWidget.offset;
 }
 
 class PortraitVideoFrame extends StatelessWidget {
@@ -54,6 +81,7 @@ class PortraitVideoFrame extends StatelessWidget {
           ? portraitLandscapeVideoRect(
               size,
               aspectRatio,
+              verticalOffset: PortraitVideoPosition.of(context),
               padding: MediaQuery.paddingOf(context),
               textScaler: MediaQuery.textScalerOf(context),
             )

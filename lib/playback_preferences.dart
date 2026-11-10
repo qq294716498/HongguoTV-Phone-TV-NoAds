@@ -12,6 +12,7 @@ const danmakuSpeeds = [.5, .75, 1.0, 1.15, 1.25, 1.5, 2.0];
 
 class PlaybackPreferences {
   const PlaybackPreferences({
+    this.portraitVideoOffset = -.15,
     this.speed = 1,
     this.quality = 0,
     this.autoAdvance = true,
@@ -26,6 +27,7 @@ class PlaybackPreferences {
     this.enhancement = const VideoEnhancementPreferences(),
   });
 
+  final double portraitVideoOffset;
   final double speed;
   final int quality;
   final bool autoAdvance;
@@ -55,6 +57,7 @@ class PlaybackPreferences {
           : .62);
 
   PlaybackPreferences copyWith({
+    double? portraitVideoOffset,
     double? speed,
     int? quality,
     bool? autoAdvance,
@@ -68,6 +71,7 @@ class PlaybackPreferences {
     bool? windowsVideoCompatibility,
     VideoEnhancementPreferences? enhancement,
   }) => PlaybackPreferences(
+    portraitVideoOffset: portraitVideoOffset ?? this.portraitVideoOffset,
     speed: speed ?? this.speed,
     quality: quality ?? this.quality,
     autoAdvance: autoAdvance ?? this.autoAdvance,
@@ -84,6 +88,7 @@ class PlaybackPreferences {
   );
 
   Map<String, dynamic> toJson() => {
+    'portraitVideoOffset': portraitVideoOffset,
     'speed': speed,
     'quality': quality,
     'autoAdvance': autoAdvance,
@@ -107,7 +112,11 @@ class PlaybackPreferences {
     if (!playbackSpeeds.contains(speed) || quality < 0 || quality > 4320) {
       throw const FormatException('播放偏好无效');
     }
+    final offset = value['portraitVideoOffset'];
     return PlaybackPreferences(
+      portraitVideoOffset: offset is num && offset.isFinite
+          ? offset.toDouble().clamp(-.5, .5)
+          : -.15,
       speed: speed,
       quality: quality,
       autoAdvance: autoAdvance,

@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test(
-    'landscape image is raised below header without changing aspect ratio',
+    'landscape image moves up fifteen percent without changing aspect ratio',
     () {
       for (final viewport in [
         const Size(360, 800),
@@ -16,13 +16,41 @@ void main() {
           final rect = portraitLandscapeVideoRect(viewport, aspect)!;
           expect(rect.width / rect.height, closeTo(aspect, .0001));
           expect(rect.width, viewport.width);
-          expect(rect.top, lessThanOrEqualTo(96));
+          final centered = (viewport.height - rect.height) / 2;
+          expect(
+            rect.top,
+            closeTo(
+              (centered - viewport.height * .15).clamp(
+                centered < 96 ? centered : 96,
+                viewport.height - rect.height,
+              ),
+              .001,
+            ),
+          );
           expect(rect.top, lessThan((viewport.height - rect.height) / 2));
           expect(rect.bottom, lessThanOrEqualTo(viewport.height));
         }
       }
     },
   );
+
+  test('saved offsets move both ways and stay within the safe viewport', () {
+    const size = Size(420, 900);
+    final center = portraitLandscapeVideoRect(size, 16 / 9, verticalOffset: 0)!;
+    final down = portraitLandscapeVideoRect(size, 16 / 9, verticalOffset: .15)!;
+    expect(center.center.dy, 450);
+    expect(down.center.dy, 585);
+    for (final offset in [-9.0, -.5, .5, 9.0, double.nan]) {
+      final rect = portraitLandscapeVideoRect(
+        size,
+        16 / 9,
+        verticalOffset: offset,
+      )!;
+      expect(rect.top, greaterThanOrEqualTo(96));
+      expect(rect.bottom, lessThanOrEqualTo(900));
+      expect(rect.size, center.size);
+    }
+  });
 
   test('safe insets and scaled header are reserved', () {
     final rect = portraitLandscapeVideoRect(
@@ -33,7 +61,7 @@ void main() {
     )!;
     expect(rect.left, 12);
     expect(rect.right, 402);
-    expect(rect.top, 44 + 128);
+    expect(rect.top, closeTo(44 + (822 - rect.height) / 2 - 822 * .15, .001));
     expect(rect.width / rect.height, closeTo(16 / 9, .0001));
   });
 
@@ -84,25 +112,29 @@ void main() {
       const frameKey = ValueKey('synthetic-video');
       const captionKey = ValueKey('synthetic-subtitle');
       final stateKey = GlobalKey();
-      Widget scene({bool enabled = true, double aspect = 16 / 9}) =>
-          MaterialApp(
-            home: Scaffold(
-              body: SafeArea(
-                child: PortraitVideoFrame(
-                  enabled: enabled,
-                  aspectRatio: aspect,
-                  child: Center(
-                    child: AspectRatio(
-                      aspectRatio: aspect,
-                      child: StatefulBuilder(
-                        key: stateKey,
-                        builder: (context, setState) => const ColoredBox(
-                          key: frameKey,
-                          color: Colors.blue,
-                          child: Align(
-                            alignment: Alignment.bottomCenter,
-                            child: Text('合成字幕', key: captionKey),
-                          ),
+      Widget scene({
+        bool enabled = true,
+        double aspect = 16 / 9,
+        double offset = -.15,
+      }) => MaterialApp(
+        home: PortraitVideoPosition(
+          offset: offset,
+          child: Scaffold(
+            body: SafeArea(
+              child: PortraitVideoFrame(
+                enabled: enabled,
+                aspectRatio: aspect,
+                child: Center(
+                  child: AspectRatio(
+                    aspectRatio: aspect,
+                    child: StatefulBuilder(
+                      key: stateKey,
+                      builder: (context, setState) => const ColoredBox(
+                        key: frameKey,
+                        color: Colors.blue,
+                        child: Align(
+                          alignment: Alignment.bottomCenter,
+                          child: Text('合成字幕', key: captionKey),
                         ),
                       ),
                     ),
@@ -110,13 +142,21 @@ void main() {
                 ),
               ),
             ),
-          );
+          ),
+        ),
+      );
       await tester.pumpWidget(scene());
       final state = stateKey.currentState;
       final rect = tester.getRect(find.byKey(frameKey));
-      expect(rect.top, 96);
+      expect(rect.center.dy, closeTo(450 - 900 * .15, .001));
       expect(rect.size.aspectRatio, closeTo(16 / 9, .0001));
       expect(tester.getRect(find.byKey(captionKey)).bottom, rect.bottom);
+      await tester.pumpWidget(scene(offset: .15));
+      expect(
+        tester.getRect(find.byKey(frameKey)).center.dy,
+        closeTo(585, .001),
+      );
+      expect(stateKey.currentState, same(state));
       await tester.pumpWidget(scene(enabled: false));
       expect(
         tester.getRect(find.byKey(frameKey)).center.dy,

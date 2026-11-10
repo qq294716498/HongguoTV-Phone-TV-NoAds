@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -175,7 +176,29 @@ func TestHongguoPlayerLiveRequestedEpisode(t *testing.T) {
 		if err != nil {
 			t.Fatalf("playback resolution: %v", err)
 		}
-		t.Logf("title=%s episode=1 variants=%d quality=%d duration=%s; no media/image download", title, len(media.Variants), media.Quality, media.Duration)
+		t.Logf("title=%s episode=1 variants=%d quality=%d duration=%s", title, len(media.Variants), media.Quality, media.Duration)
+		if os.Getenv("HONGGUO_LIVE_DECODE") == "1" {
+			stream, streamErr := newNativeStreamServer(d)
+			if streamErr != nil {
+				t.Fatal("local stream setup failed")
+			}
+			defer func() {
+				stream.server.Close()
+				stream.mu.Lock()
+				defer stream.mu.Unlock()
+				for _, session := range stream.sessions {
+					session.cancel()
+				}
+			}()
+			address, _ := stream.nativeOpen(media)
+			decodeCtx, stop := context.WithTimeout(ctx, 60*time.Second)
+			defer stop()
+			output, decodeErr := exec.CommandContext(decodeCtx, "ffmpeg", "-v", "error", "-xerror", "-threads", "2", "-i", address+"?cenc=clear", "-t", "8", "-map", "0:v:0", "-map", "0:a:0?", "-f", "null", "-").CombinedOutput()
+			if decodeErr != nil {
+				t.Fatalf("Android clear stream 8-second decode failed: errorType=%T diagnosticBytes=%d", decodeErr, len(output))
+			}
+			t.Log("Android clear stream: eight seconds audio/video software decode passed; not a physical Android MediaCodec test")
+		}
 		return
 	}
 	t.Fatal("requested season not identified in search response")

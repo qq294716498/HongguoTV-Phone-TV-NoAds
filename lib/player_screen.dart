@@ -235,6 +235,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   VideoEnhancementController? get _enhancementForUi =>
       _enhancement.supported ? _enhancement : null;
   PlaybackPreferences get _preferences => PlaybackPreferences(
+    portraitVideoOffset: widget.store.playbackPreferences.portraitVideoOffset,
     speed: _speed,
     quality: _requestedQuality,
     autoAdvance: _autoAdvance,
@@ -4424,20 +4425,27 @@ class _PlayerScreenState extends State<PlayerScreen>
         },
       ),
     );
-    return EpisodeSwipeSurface(
-      interactions: _interactions,
-      topAlignedLandscapeVideo: topAlignedLandscapeVideo,
-      enabled: _mobile && !_showFullscreen,
-      contentReady: !_loading && _error == null,
-      currentLabel:
-          '${_detail.drama.title}\n${episodeProgressLabel(_detail, _index)}',
-      previousLabel: _index > 0
-          ? '${_detail.drama.title}\n第 ${_detail.episodes[_index - 1].number} 集'
-          : '已经是第一集',
-      nextLabel: _index + 1 < _detail.episodes.length
-          ? '${_detail.drama.title}\n第 ${_detail.episodes[_index + 1].number} 集'
-          : '已经是最后一集',
-      child: pane,
+    return ListenableBuilder(
+      listenable: widget.store,
+      builder: (context, child) => PortraitVideoPosition(
+        offset: widget.store.playbackPreferences.portraitVideoOffset,
+        child: child!,
+      ),
+      child: EpisodeSwipeSurface(
+        interactions: _interactions,
+        topAlignedLandscapeVideo: topAlignedLandscapeVideo,
+        enabled: _mobile && !_showFullscreen,
+        contentReady: !_loading && _error == null,
+        currentLabel:
+            '${_detail.drama.title}\n${episodeProgressLabel(_detail, _index)}',
+        previousLabel: _index > 0
+            ? '${_detail.drama.title}\n第 ${_detail.episodes[_index - 1].number} 集'
+            : '已经是第一集',
+        nextLabel: _index + 1 < _detail.episodes.length
+            ? '${_detail.drama.title}\n第 ${_detail.episodes[_index + 1].number} 集'
+            : '已经是最后一集',
+        child: pane,
+      ),
     );
   }
 

@@ -63,6 +63,70 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _portraitVideoPosition() async {
+    var offset = widget.store.playbackPreferences.portraitVideoOffset;
+    final selected = await showDialog<double>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('竖屏画面位置'),
+          content: SizedBox(
+            width: 280,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('仅调整手机竖屏观看横视频时的位置，不改变画面比例。'),
+                const SizedBox(height: 12),
+                Text(
+                  offset == 0
+                      ? '居中'
+                      : '${offset < 0 ? '上移' : '下移'} ${(offset.abs() * 100).round()}%',
+                ),
+                const Text('上'),
+                SizedBox(
+                  height: 180,
+                  child: RotatedBox(
+                    quarterTurns: 1,
+                    child: Slider(
+                      key: const ValueKey('portrait-video-offset-slider'),
+                      value: offset,
+                      min: -.5,
+                      max: .5,
+                      divisions: 100,
+                      onChanged: (value) =>
+                          setDialogState(() => offset = value),
+                    ),
+                  ),
+                ),
+                const Text('下'),
+                TextButton(
+                  onPressed: () => setDialogState(() => offset = -.15),
+                  child: const Text('恢复默认（上移 15%）'),
+                ),
+              ],
+            ),
+          ),
+          scrollable: true,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, offset),
+              child: const Text('保存'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (selected == null || !mounted) return;
+    await saveUserChange(
+      context,
+      () => widget.store.setPortraitVideoOffset(selected),
+    );
+  }
+
   Future<void> _danmakuSettings() {
     final television = AppLayout.isTelevision(context);
     final deviceTelevision = AppLayout.isTelevisionDevice(context);
@@ -227,6 +291,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
             padding: const EdgeInsets.all(16),
             children: [
               const AppUpdateTile(),
+              if (defaultTargetPlatform == TargetPlatform.android &&
+                  !AppLayout.isTelevisionDevice(context) &&
+                  !AppLayout.isTelevision(context))
+                ListTile(
+                  key: const ValueKey('portrait-video-position-setting'),
+                  leading: const Icon(Icons.swap_vert_rounded),
+                  title: const Text('竖屏画面位置'),
+                  subtitle: const Text('上下滑动调整，保存后自动沿用'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: _busy ? null : _portraitVideoPosition,
+                ),
               if (defaultTargetPlatform == TargetPlatform.windows &&
                   !AppLayout.isTelevision(context))
                 SwitchListTile(

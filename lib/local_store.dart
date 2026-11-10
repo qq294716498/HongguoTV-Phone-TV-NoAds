@@ -686,6 +686,11 @@ class LocalStore extends ChangeNotifier {
     );
   }
 
+  Future<void> setPortraitVideoOffset(double value) =>
+      _updatePlaybackPreferences(
+        (current) => current.copyWith(portraitVideoOffset: value),
+      );
+
   Future<void> setWindowsVideoCompatibility(bool value) =>
       _updatePlaybackPreferences(
         (current) => current.copyWith(windowsVideoCompatibility: value),

@@ -374,6 +374,7 @@ class _PlayerControlsState extends State<PlayerControls> {
               ? portraitLandscapeVideoRect(
                   constraints.biggest,
                   widget.videoAspectRatio,
+                  verticalOffset: PortraitVideoPosition.of(context),
                   padding: MediaQuery.paddingOf(context),
                   textScaler: MediaQuery.textScalerOf(context),
                 )

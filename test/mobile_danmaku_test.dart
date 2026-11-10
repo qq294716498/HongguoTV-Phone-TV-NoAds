@@ -207,8 +207,16 @@ void main() {
         final rect = tester.getRect(
           find.byKey(ValueKey('danmaku-item-1001-0-$lane')),
         );
-        expect(rect.top, 96 + 8 + lane * 28);
-        expect(rect.bottom, lessThan(96 + 420 / (16 / 9) * .65));
+        expect(
+          rect.top,
+          closeTo((880 - 420 / (16 / 9)) / 2 - 880 * .15 + 8 + lane * 28, .001),
+        );
+        expect(
+          rect.bottom,
+          lessThan(
+            (880 - 420 / (16 / 9)) / 2 - 880 * .15 + 420 / (16 / 9) * .65,
+          ),
+        );
       }
       expect(find.byKey(const ValueKey('danmaku-item-1001-0-4')), findsNothing);
       await advance(tester, const Duration(seconds: 1));
