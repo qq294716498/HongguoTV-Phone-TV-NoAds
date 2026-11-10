@@ -58,6 +58,7 @@ type nativeDownloads struct {
 	engine             *nativeEngine
 	jobs               map[string]*nativeDownloadRecord
 	active             map[string]context.CancelFunc
+	finished           map[string]chan struct{}
 	closed             bool
 	moving             bool
 	mediaBusy          bool
@@ -282,6 +283,10 @@ func (manager *nativeDownloads) enqueueContext(ctx context.Context, input native
 		}
 		id := nativeDownloadID(input.Drama.ID, entry.Index)
 		if existing := manager.jobs[id]; existing != nil {
+			if existing.State == "removing" {
+				rollback()
+				return 0, errors.New("所选分集正在删除，请等待删除完成后重新下载")
+			}
 			if input.Force {
 				if _, changed := previous[id]; !changed {
 					previous[id] = *existing
@@ -426,6 +431,19 @@ func (manager *nativeDownloads) controlExpected(id, action, version string) erro
 			return err
 		}
 	}
+	if action == "remove" && manager.active[id] != nil {
+		job := manager.jobs[id]
+		done := manager.finished[id]
+		if done == nil {
+			return errors.New("所选分集正在删除，请稍后刷新重试")
+		}
+		manager.mu.Unlock()
+		<-done
+		manager.mu.Lock()
+		if manager.jobs[id] == job {
+			return errors.New(job.Error)
+		}
+	}
 	manager.scheduleLocked()
 	return nil
 }
@@ -458,6 +476,10 @@ func (manager *nativeDownloads) scheduleLocked() {
 			return
 		}
 		copy := next.nativeDownloadJob
+		if manager.finished == nil {
+			manager.finished = map[string]chan struct{}{}
+		}
+		manager.finished[next.ID] = make(chan struct{})
 		manager.workers.Add(1)
 		go manager.run(ctx, copy)
 	}
@@ -482,6 +504,10 @@ func (manager *nativeDownloads) run(ctx context.Context, job nativeDownloadJob) 
 	interrupted := ctx.Err() != nil
 	manager.mu.Lock()
 	defer manager.mu.Unlock()
+	if done := manager.finished[job.ID]; done != nil {
+		defer close(done)
+		delete(manager.finished, job.ID)
+	}
 	if cancel := manager.active[job.ID]; cancel != nil {
 		cancel()
 	}
@@ -510,8 +536,13 @@ func (manager *nativeDownloads) run(ctx context.Context, job nativeDownloadJob) 
 			record.Error = publicError(err).Error()
 		}
 	}
-	if saveErr := manager.saveLocked(); saveErr != nil && manager.jobs[job.ID] != nil {
-		record.State, record.Error = "failed", saveErr.Error()
+	if saveErr := manager.saveLocked(); saveErr != nil {
+		if manager.jobs[job.ID] == nil {
+			record.State, record.Error = "removing", "文件已删除，记录尚未清理，请重试"
+			manager.jobs[job.ID] = record
+		} else {
+			record.State, record.Error = "failed", saveErr.Error()
+		}
 	}
 	manager.scheduleLocked()
 }

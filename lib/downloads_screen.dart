@@ -48,6 +48,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
       _stopBatch = false;
   String? _error, _retryCommand;
   String _filter = 'all', _release = '', _operation = '';
+  int _refreshRequest = 0;
   bool get _allowed =>
       widget.store.profileEpoch == _epoch && widget.store.canDownload;
   List<DownloadCollection> get _collections => downloadCollections(
@@ -83,12 +84,13 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     super.dispose();
   }
 
-  Future<void> _refresh() async {
-    if (_refreshing || !_allowed) return;
+  Future<void> _refresh({bool afterMutation = false}) async {
+    if ((_refreshing && !afterMutation) || !_allowed) return;
+    final request = ++_refreshRequest;
     _refreshing = true;
     try {
       final jobs = await widget.repository.downloads();
-      if (mounted && _allowed) {
+      if (mounted && _allowed && request == _refreshRequest) {
         setState(() {
           _jobs = jobs;
           _selected.retainAll(jobs.map((job) => job.id));
@@ -96,10 +98,14 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
         });
       }
     } catch (error) {
-      if (mounted && _allowed) setState(() => _error = error.toString());
+      if (mounted && _allowed && request == _refreshRequest) {
+        setState(() => _error = error.toString());
+      }
     } finally {
-      _refreshing = false;
-      if (mounted) setState(() => _loading = false);
+      if (request == _refreshRequest) {
+        _refreshing = false;
+        if (mounted) setState(() => _loading = false);
+      }
     }
   }
 
@@ -201,7 +207,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
               : '已处理 $completed 项',
         );
       }
-      await _refresh();
+      await _refresh(afterMutation: true);
     } finally {
       if (mounted) {
         setState(() {
@@ -216,7 +222,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     await _updater.update(drama);
     if (mounted && _allowed) {
       _message(_updater.error ?? _updater.status);
-      await _refresh();
+      await _refresh(afterMutation: true);
     }
   }
 

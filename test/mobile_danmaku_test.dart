@@ -46,6 +46,7 @@ void main() {
     double? speed,
     double? opacity,
     bool television = false,
+    bool topAlignedLandscapeVideo = false,
   }) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = size;
@@ -61,6 +62,7 @@ void main() {
             aspectRatio: 16 / 9,
             mobile: !television,
             television: television,
+            topAlignedLandscapeVideo: topAlignedLandscapeVideo,
             speed: speed,
             opacity: opacity,
           ),
@@ -191,6 +193,33 @@ void main() {
       expect(text.style!.fontSize, 16);
       expect(text.style!.color!.a, closeTo(.95, .01));
       expect(x(tester), 420);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'top aligned landscape video keeps mobile lanes in its upper area',
+    (tester) async {
+      await mount(tester, topAlignedLandscapeVideo: true);
+      final state = tester.state(find.byType(DanmakuOverlay));
+      for (var lane = 0; lane < 4; lane++) {
+        final rect = tester.getRect(
+          find.byKey(ValueKey('danmaku-item-1001-0-$lane')),
+        );
+        expect(rect.top, 96 + 8 + lane * 28);
+        expect(rect.bottom, lessThan(96 + 420 / (16 / 9) * .65));
+      }
+      expect(find.byKey(const ValueKey('danmaku-item-1001-0-4')), findsNothing);
+      await advance(tester, const Duration(seconds: 1));
+      final before = x(tester);
+      await mount(tester);
+      expect(tester.state(find.byType(DanmakuOverlay)), same(state));
+      expect(x(tester), closeTo(before, .1));
+      expect(
+        tester.getRect(find.byKey(const ValueKey('danmaku-item-1001-0-0'))).top,
+        64,
+      );
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     },

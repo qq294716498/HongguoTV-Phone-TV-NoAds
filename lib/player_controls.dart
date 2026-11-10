@@ -11,6 +11,7 @@ import 'playback_preferences.dart';
 import 'windows_player_controls.dart';
 import 'player_device_status.dart';
 import 'player_interactions.dart';
+import 'portrait_video_frame.dart';
 import 'widgets.dart';
 import 'video_enhancement.dart';
 
@@ -56,6 +57,8 @@ class PlayerControls extends StatefulWidget {
     this.onPictureInPicture,
     this.enhancement,
     this.portraitFooter,
+    this.topAlignedLandscapeVideo = false,
+    this.videoAspectRatio = 9 / 16,
     this.quietEpisodeChange,
     this.onSelectSpeed,
     this.onSelectQuality,
@@ -107,6 +110,8 @@ class PlayerControls extends StatefulWidget {
   final Future<void> Function()? onPictureInPicture;
   final VideoEnhancementController? enhancement;
   final Widget? portraitFooter;
+  final bool topAlignedLandscapeVideo;
+  final double videoAspectRatio;
 
   @override
   State<PlayerControls> createState() => _PlayerControlsState();
@@ -364,152 +369,184 @@ class _PlayerControlsState extends State<PlayerControls> {
       onHover: (_) => _show(),
       cursor: visible ? SystemMouseCursors.basic : SystemMouseCursors.none,
       child: LayoutBuilder(
-        builder: (context, constraints) => Stack(
-          fit: StackFit.expand,
-          children: [
-            Listener(
-              key: const ValueKey('player-gesture-surface'),
-              behavior: HitTestBehavior.opaque,
-              onPointerDown: (event) {
-                if (_locked) return;
-                widget.onFocusSurface();
-                widget.interactions.pointerDown(
-                  event,
-                  swipeEnabled: widget.swipeEnabled,
-                  fullscreen: widget.fullscreen,
-                  reservedInsets: MediaQuery.viewPaddingOf(context),
-                  width: constraints.maxWidth,
-                  height: constraints.maxHeight,
-                );
-              },
-              onPointerMove: _locked ? null : widget.interactions.pointerMove,
-              onPointerUp: _locked ? null : widget.interactions.pointerUp,
-              onPointerCancel: widget.interactions.pointerCancel,
-              child: RawGestureDetector(
-                gestures: widget.swipeEnabled && widget.enabled && !_locked
-                    ? <Type, GestureRecognizerFactory>{
-                        LongPressGestureRecognizer:
-                            GestureRecognizerFactoryWithHandlers<
-                              LongPressGestureRecognizer
-                            >(
-                              () => LongPressGestureRecognizer(
-                                duration: const Duration(milliseconds: 400),
-                                supportedDevices: const {
-                                  PointerDeviceKind.touch,
+        builder: (context, constraints) {
+          final videoRect = widget.topAlignedLandscapeVideo
+              ? portraitLandscapeVideoRect(
+                  constraints.biggest,
+                  widget.videoAspectRatio,
+                  padding: MediaQuery.paddingOf(context),
+                  textScaler: MediaQuery.textScalerOf(context),
+                )
+              : null;
+          final showCenterPlayback =
+              !state.buffering &&
+              widget.enabled &&
+              (!widget.swipeEnabled || !state.playing) &&
+              constraints.maxHeight >= (widget.swipeEnabled ? 168 : 220);
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              Listener(
+                key: const ValueKey('player-gesture-surface'),
+                behavior: HitTestBehavior.opaque,
+                onPointerDown: (event) {
+                  if (_locked) return;
+                  widget.onFocusSurface();
+                  widget.interactions.pointerDown(
+                    event,
+                    swipeEnabled: widget.swipeEnabled,
+                    fullscreen: widget.fullscreen,
+                    reservedInsets: MediaQuery.viewPaddingOf(context),
+                    width: constraints.maxWidth,
+                    height: constraints.maxHeight,
+                  );
+                },
+                onPointerMove: _locked ? null : widget.interactions.pointerMove,
+                onPointerUp: _locked ? null : widget.interactions.pointerUp,
+                onPointerCancel: widget.interactions.pointerCancel,
+                child: RawGestureDetector(
+                  gestures: widget.swipeEnabled && widget.enabled && !_locked
+                      ? <Type, GestureRecognizerFactory>{
+                          LongPressGestureRecognizer:
+                              GestureRecognizerFactoryWithHandlers<
+                                LongPressGestureRecognizer
+                              >(
+                                () => LongPressGestureRecognizer(
+                                  duration: const Duration(milliseconds: 400),
+                                  supportedDevices: const {
+                                    PointerDeviceKind.touch,
+                                  },
+                                ),
+                                (recognizer) {
+                                  recognizer.onLongPress = () {};
                                 },
                               ),
-                              (recognizer) {
-                                recognizer.onLongPress = () {};
-                              },
-                            ),
+                        }
+                      : const <Type, GestureRecognizerFactory>{},
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _tap,
+                    onDoubleTapDown: (details) =>
+                        _doubleTapPosition = details.localPosition,
+                    onDoubleTap: () {
+                      if (_locked ||
+                          !widget.enabled ||
+                          widget.interactions.suppressTap) {
+                        return;
                       }
-                    : const <Type, GestureRecognizerFactory>{},
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: _tap,
-                  onDoubleTapDown: (details) =>
-                      _doubleTapPosition = details.localPosition,
-                  onDoubleTap: () {
-                    if (_locked ||
-                        !widget.enabled ||
-                        widget.interactions.suppressTap) {
-                      return;
-                    }
-                    final x =
-                        _doubleTapPosition?.dx ?? constraints.maxWidth / 2;
-                    if (widget.swipeEnabled && x < constraints.maxWidth * .3) {
-                      widget.interactions.seek(-15);
-                    } else if (widget.swipeEnabled &&
-                        x > constraints.maxWidth * .7) {
-                      widget.interactions.seek(15);
-                    } else {
-                      widget.onTogglePlayback();
-                    }
-                    _show();
-                  },
-                ),
-              ),
-            ),
-            if (state.buffering && widget.enabled && !quiet)
-              const IgnorePointer(
-                child: Center(child: CircularProgressIndicator()),
-              ),
-            IgnorePointer(
-              ignoring: !visible,
-              child: ExcludeFocus(
-                excluding: !visible,
-                child: AnimatedOpacity(
-                  key: const ValueKey('player-chrome'),
-                  opacity: visible ? 1 : 0,
-                  duration: const Duration(milliseconds: 180),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      const IgnorePointer(
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                Color(0xAA000000),
-                                Colors.transparent,
-                                Color(0xE6000000),
-                              ],
-                              stops: [0, .45, 1],
-                            ),
-                          ),
-                        ),
-                      ),
-                      Padding(
-                        padding: EdgeInsets.fromLTRB(
-                          8,
-                          _topChromeInset(),
-                          8,
-                          _bottomChromeInset(),
-                        ),
-                        child: Stack(
-                          children: [
-                            if (widget.fullscreen || widget.swipeEnabled)
-                              _topBar(visible: visible),
-                            if (!state.buffering &&
-                                widget.enabled &&
-                                (!widget.swipeEnabled || !state.playing) &&
-                                constraints.maxHeight >=
-                                    (widget.swipeEnabled ? 168 : 220))
-                              _centerPlayback(
-                                state.playing,
-                                showSkip: !widget.swipeEnabled,
-                              ),
-                            _sideDanmakuControl(),
-                            _bottomControls(
-                              constraints: constraints,
-                              volume: state.volume,
-                              duration: duration,
-                              position: position,
-                              buffered: buffered,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                      final x =
+                          _doubleTapPosition?.dx ?? constraints.maxWidth / 2;
+                      if (widget.swipeEnabled &&
+                          x < constraints.maxWidth * .3) {
+                        widget.interactions.seek(-15);
+                      } else if (widget.swipeEnabled &&
+                          x > constraints.maxWidth * .7) {
+                        widget.interactions.seek(15);
+                      } else {
+                        widget.onTogglePlayback();
+                      }
+                      _show();
+                    },
                   ),
                 ),
               ),
-            ),
-            _gestureFeedback(),
-            if (_locked)
-              Positioned(
-                top: _topChromeInset(),
-                right: 12,
-                child: _overlayIconButton(
-                  tooltip: '解锁屏幕',
-                  icon: Icons.lock_rounded,
-                  onPressed: _toggleLock,
+              if (state.buffering && widget.enabled && !quiet)
+                IgnorePointer(
+                  child: PortraitVideoFrame(
+                    enabled: widget.topAlignedLandscapeVideo,
+                    aspectRatio: widget.videoAspectRatio,
+                    child: const Center(child: CircularProgressIndicator()),
+                  ),
+                ),
+              IgnorePointer(
+                ignoring: !visible,
+                child: ExcludeFocus(
+                  excluding: !visible,
+                  child: AnimatedOpacity(
+                    key: const ValueKey('player-chrome'),
+                    opacity: visible ? 1 : 0,
+                    duration: const Duration(milliseconds: 180),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        const IgnorePointer(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  Color(0xAA000000),
+                                  Colors.transparent,
+                                  Color(0xE6000000),
+                                ],
+                                stops: [0, .45, 1],
+                              ),
+                            ),
+                          ),
+                        ),
+                        if (videoRect != null && showCenterPlayback)
+                          Positioned.fromRect(
+                            rect: videoRect,
+                            child: _centerPlayback(
+                              state.playing,
+                              showSkip: false,
+                            ),
+                          ),
+                        Padding(
+                          padding: EdgeInsets.fromLTRB(
+                            8,
+                            _topChromeInset(),
+                            8,
+                            _bottomChromeInset(),
+                          ),
+                          child: Stack(
+                            children: [
+                              if (widget.fullscreen || widget.swipeEnabled)
+                                _topBar(visible: visible),
+                              if (videoRect == null && showCenterPlayback)
+                                _centerPlayback(
+                                  state.playing,
+                                  showSkip: !widget.swipeEnabled,
+                                ),
+                              _sideDanmakuControl(),
+                              _bottomControls(
+                                constraints: constraints,
+                                volume: state.volume,
+                                duration: duration,
+                                position: position,
+                                buffered: buffered,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-          ],
-        ),
+              Transform.translate(
+                offset: Offset(
+                  0,
+                  videoRect == null
+                      ? 0
+                      : videoRect.center.dy - constraints.maxHeight / 2,
+                ),
+                child: _gestureFeedback(),
+              ),
+              if (_locked)
+                Positioned(
+                  top: _topChromeInset(),
+                  right: 12,
+                  child: _overlayIconButton(
+                    tooltip: '解锁屏幕',
+                    icon: Icons.lock_rounded,
+                    onPressed: _toggleLock,
+                  ),
+                ),
+            ],
+          );
+        },
       ),
     );
   }

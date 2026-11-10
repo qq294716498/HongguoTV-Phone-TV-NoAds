@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'player_interactions.dart';
+import 'portrait_video_frame.dart';
 
 class EpisodeSwipeSurface extends StatefulWidget {
   const EpisodeSwipeSurface({
@@ -14,6 +15,7 @@ class EpisodeSwipeSurface extends StatefulWidget {
     required this.nextLabel,
     this.currentLabel = '',
     this.contentReady,
+    this.topAlignedLandscapeVideo = false,
     required this.child,
   });
   final PlayerInteractions interactions;
@@ -22,6 +24,7 @@ class EpisodeSwipeSurface extends StatefulWidget {
   final String nextLabel;
   final String currentLabel;
   final bool? contentReady;
+  final bool topAlignedLandscapeVideo;
   final Widget child;
 
   @override
@@ -147,11 +150,15 @@ class _EpisodeSwipeSurfaceState extends State<EpisodeSwipeSurface>
     if (image == null) return _outgoingFallback();
     return ColoredBox(
       color: Colors.black,
-      child: RawImage(
-        key: const ValueKey('episode-swipe-outgoing-frame'),
-        image: image,
-        fit: BoxFit.contain,
-        filterQuality: FilterQuality.low,
+      child: PortraitVideoFrame(
+        enabled: widget.topAlignedLandscapeVideo,
+        aspectRatio: image.width / image.height,
+        child: RawImage(
+          key: const ValueKey('episode-swipe-outgoing-frame'),
+          image: image,
+          fit: BoxFit.contain,
+          filterQuality: FilterQuality.low,
+        ),
       ),
     );
   }

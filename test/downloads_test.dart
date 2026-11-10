@@ -7,6 +7,8 @@ import 'package:duanju_app/local_store.dart';
 import 'package:duanju_app/models.dart';
 import 'package:duanju_app/playback_loader.dart';
 import 'package:duanju_app/player_screen.dart';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -123,6 +125,17 @@ class DownloadNavigationObserver extends NavigatorObserver {
   @override
   void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
     pushed.add(route);
+  }
+}
+
+class DelayedDownloadRepository extends DownloadRepository {
+  final stale = Completer<List<DownloadJob>>();
+  int calls = 0;
+
+  @override
+  Future<List<DownloadJob>> downloads() {
+    calls++;
+    return calls == 2 ? stale.future : Future.value(List.of(jobs));
   }
 }
 
@@ -346,6 +359,44 @@ void main() {
     await tester.pumpAndSettle();
     await tester.pumpWidget(const SizedBox.shrink());
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('deletion refresh supersedes an older in-flight queue snapshot', (
+    tester,
+  ) async {
+    size(tester, const Size(390, 844));
+    final repository = DelayedDownloadRepository();
+    repository.jobs = [repository.job(1, 'completed')];
+    final oldJobs = List<DownloadJob>.of(repository.jobs);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(),
+        home: DownloadsScreen(repository: repository, store: await makeStore()),
+      ),
+    );
+    await tick(tester);
+    await tester.tap(find.text('测试短剧'));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 2));
+    expect(repository.calls, 2);
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const ValueKey('download-task-1')),
+        matching: find.byTooltip('分集操作'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('删除视频'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确认删除'));
+    await tester.pumpAndSettle();
+    expect(repository.calls, greaterThan(2));
+    expect(find.text('暂无符合条件的任务'), findsOneWidget);
+    repository.stale.complete(oldJobs);
+    await tester.pumpAndSettle();
+    expect(find.text('暂无符合条件的任务'), findsOneWidget);
+    expect(find.byKey(const ValueKey('download-task-1')), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   testWidgets('queue controls, filtering and deletion work on a narrow phone', (

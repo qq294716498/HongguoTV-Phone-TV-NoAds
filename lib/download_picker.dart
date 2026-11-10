@@ -50,6 +50,7 @@ class _DownloadPickerState extends State<DownloadPicker> {
   }
 
   void _toggle(Episode episode) {
+    if (_submitting) return;
     if (!_selected.contains(episode.number) && _selected.length >= 500) {
       ScaffoldMessenger.of(
         context,
@@ -217,7 +218,20 @@ class _DownloadPickerState extends State<DownloadPicker> {
                   selectedNumbers: _selected,
                   keyPrefix: 'download-episode',
                   compact: widget.embedded,
+                  preserveScrollOnResize: true,
                   onSelected: (index) => _toggle(episodes[index]),
+                  onSelectionChanged: _submitting
+                      ? null
+                      : (selected) {
+                          setState(() {
+                            _selected.clear();
+                            _selected.addAll(selected);
+                          });
+                        },
+                  onSelectionLimit: () =>
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('一次最多加入 500 集，请分批下载')),
+                      ),
                 ),
               ),
               Padding(

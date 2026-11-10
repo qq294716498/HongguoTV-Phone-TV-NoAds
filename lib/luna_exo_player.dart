@@ -17,6 +17,7 @@ import 'package:video_player/video_player.dart';
 
 import 'diary_service.dart';
 import 'playback_frame_hold.dart';
+import 'portrait_video_frame.dart';
 import 'playback_queue_contract.dart';
 import 'models.dart';
 
@@ -1884,11 +1885,13 @@ class LunaExoVideoView extends StatelessWidget {
     super.key,
     required this.player,
     this.fit = BoxFit.contain,
+    this.topAlignedLandscapeVideo = false,
     this.controls,
   });
 
   final LunaExoPlayer player;
   final BoxFit fit;
+  final bool topAlignedLandscapeVideo;
   final Widget Function(BuildContext)? controls;
 
   @override
@@ -1907,10 +1910,14 @@ class LunaExoVideoView extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             if (hasVideo)
-              Center(
-                child: AspectRatio(
-                  aspectRatio: ratio,
-                  child: VideoPlayer(c, key: ValueKey(c)),
+              PortraitVideoFrame(
+                enabled: topAlignedLandscapeVideo,
+                aspectRatio: ratio,
+                child: Center(
+                  child: AspectRatio(
+                    aspectRatio: ratio,
+                    child: VideoPlayer(c, key: ValueKey(c)),
+                  ),
                 ),
               )
             else

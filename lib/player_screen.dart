@@ -38,6 +38,7 @@ import 'playback_preloader.dart';
 import 'playback_recovery.dart';
 import 'playback_preferences.dart';
 import 'player_controls.dart';
+import 'portrait_video_frame.dart';
 import 'player_interactions.dart';
 import 'episode_swipe_surface.dart';
 import 'player_menu.dart';
@@ -3994,6 +3995,11 @@ class _PlayerScreenState extends State<PlayerScreen>
     final title =
         '${_detail.drama.title} · ${episodeProgressLabel(_detail, _index)}${_plan?.local == true ? ' · 本地' : ''}${_detail.episodes[_index].vip ? ' · VIP 试看' : ''}${(_plan?.routeIndex ?? 0) > 0 ? ' · 线路 ${_plan!.routeIndex + 1}' : ''}';
     final hideOverlayForPictureInPicture = _pictureInPictureVisible;
+    final topAlignedLandscapeVideo =
+        defaultTargetPlatform == TargetPlatform.android &&
+        !_televisionDevice &&
+        _portraitWatching &&
+        !hideOverlayForPictureInPicture;
     final Widget controls = hideOverlayForPictureInPicture
         ? const SizedBox.shrink()
         : _television
@@ -4048,6 +4054,8 @@ class _PlayerScreenState extends State<PlayerScreen>
             title: _detail.drama.title,
             episodeLabel: episodeProgressLabel(_detail, _index),
             portraitFooter: _portraitWatching ? _mobilePortraitFooter() : null,
+            topAlignedLandscapeVideo: topAlignedLandscapeVideo,
+            videoAspectRatio: _aspectRatio,
             onTogglePlayback: _togglePlayback,
             onForward: () => _seek(15, resumeAfterSeek: true),
             swipeEnabled: _mobile,
@@ -4126,7 +4134,11 @@ class _PlayerScreenState extends State<PlayerScreen>
                       ColoredBox(
                         key: const ValueKey('automatic-transition-frame'),
                         color: Colors.black,
-                        child: RawImage(image: image, fit: BoxFit.contain),
+                        child: PortraitVideoFrame(
+                          enabled: topAlignedLandscapeVideo,
+                          aspectRatio: image.width / image.height,
+                          child: RawImage(image: image, fit: BoxFit.contain),
+                        ),
                       ),
                     if (failure != null && !hideOverlayForPictureInPicture)
                       Align(
@@ -4145,6 +4157,7 @@ class _PlayerScreenState extends State<PlayerScreen>
           DanmakuOverlay(
             controller: _danmaku,
             currentVisible: !_hasRetainedFrame,
+            topAlignedLandscapeVideo: topAlignedLandscapeVideo,
             animationBehavior: AppLayout.isTelevisionDevice(context)
                 ? AnimationBehavior.preserve
                 : AnimationBehavior.normal,
@@ -4216,6 +4229,7 @@ class _PlayerScreenState extends State<PlayerScreen>
               else if (_player is LunaExoPlayer)
                 LunaExoVideoView(
                   player: _player,
+                  topAlignedLandscapeVideo: topAlignedLandscapeVideo,
                   fit: BoxFit.contain,
                   controls: (_) => layeredControls,
                 )
@@ -4412,6 +4426,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
     return EpisodeSwipeSurface(
       interactions: _interactions,
+      topAlignedLandscapeVideo: topAlignedLandscapeVideo,
       enabled: _mobile && !_showFullscreen,
       contentReady: !_loading && _error == null,
       currentLabel:
