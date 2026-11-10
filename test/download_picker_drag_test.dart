@@ -64,7 +64,17 @@ void main() {
       await tester.pump();
       await drag(2, 5);
       expect(find.text('已选 4'), findsOneWidget);
-      await tester.tap(find.text('51-100'));
+      expect(find.text('51-100'), findsNothing);
+      await tester.scrollUntilVisible(
+        cell(51),
+        120,
+        scrollable: find
+            .descendant(
+              of: find.byType(DownloadPicker),
+              matching: find.byType(Scrollable),
+            )
+            .last,
+      );
       await tester.pumpAndSettle();
       await tester.tap(cell(51));
       await tester.pump();

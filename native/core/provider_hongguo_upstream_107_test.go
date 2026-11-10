@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -154,6 +155,36 @@ func TestHongguoPlayerLiveRequestedEpisode(t *testing.T) {
 			var result map[string]any
 			json.Unmarshal(body, &result)
 			t.Logf("player HTTP=%d bytes=%d video_model_type=%T", response.StatusCode, len(body), nestedMap(result, "data")["video_model"])
+			data := nestedMap(result, "data")
+			model, _ := data["video_model"].(map[string]any)
+			if encoded, ok := data["video_model"].(string); ok {
+				if decoded, decodeErr := decodeHongguoBase64(encoded); decodeErr == nil {
+					encoded = string(decoded)
+				}
+				json.Unmarshal([]byte(encoded), &model)
+			}
+			rows := anyList(model["video_list"])
+			if entries, ok := model["video_list"].(map[string]any); ok {
+				for _, entry := range entries {
+					rows = append(rows, entry)
+				}
+			}
+			codecs := map[string]int{}
+			blockedGears := 0
+			for _, row := range rows {
+				variant, _ := row.(map[string]any)
+				codec := strings.ToLower(mapString(nestedMap(variant, "video_meta"), "codec_type"))
+				switch codec {
+				case "h264", "avc1", "hevc", "h265", "bytevc1", "bytevc2":
+				default:
+					codec = "other"
+				}
+				codecs[codec]++
+				if strings.Contains(strings.ToLower(mapString(variant, "gear_des_key")), "bytevc2") {
+					blockedGears++
+				}
+			}
+			t.Logf("model codec counts=%v bytevc2GearCount=%d", codecs, blockedGears)
 		}
 		return response, err
 	})
@@ -172,11 +203,18 @@ func TestHongguoPlayerLiveRequestedEpisode(t *testing.T) {
 		if err != nil || len(chapters) == 0 {
 			t.Fatalf("detail: %v", err)
 		}
-		media, err := d.resolveHongguoMedia(ctx, Task{DramaID: drama.ID, Chapter: chapters[0]})
+		episodeNumber := 1
+		if raw := os.Getenv("HONGGUO_LIVE_EPISODE_NUMBER"); raw != "" {
+			episodeNumber, err = strconv.Atoi(raw)
+			if err != nil || episodeNumber < 1 || episodeNumber > len(chapters) {
+				t.Fatal("invalid requested episode")
+			}
+		}
+		media, err := d.resolveHongguoMedia(ctx, Task{DramaID: drama.ID, Chapter: chapters[episodeNumber-1]})
 		if err != nil {
 			t.Fatalf("playback resolution: %v", err)
 		}
-		t.Logf("title=%s episode=1 variants=%d quality=%d duration=%s", title, len(media.Variants), media.Quality, media.Duration)
+		t.Logf("title=%s episode=%d variants=%d quality=%d duration=%s", title, episodeNumber, len(media.Variants), media.Quality, media.Duration)
 		if os.Getenv("HONGGUO_LIVE_DECODE") == "1" {
 			stream, streamErr := newNativeStreamServer(d)
 			if streamErr != nil {

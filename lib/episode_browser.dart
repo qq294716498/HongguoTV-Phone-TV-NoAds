@@ -247,6 +247,7 @@ class EpisodeBrowser extends StatefulWidget {
     this.keyPrefix = 'episode',
     this.title = '选集',
     this.compact = false,
+    this.unpaged = false,
     this.preserveScrollOnResize = false,
     this.denseDesktop = false,
     this.compactHeader = false,
@@ -260,6 +261,7 @@ class EpisodeBrowser extends StatefulWidget {
   final String keyPrefix;
   final String title;
   final bool compact;
+  final bool unpaged;
   final bool preserveScrollOnResize;
   final bool denseDesktop;
   final bool compactHeader;
@@ -362,7 +364,7 @@ class _EpisodeBrowserState extends State<EpisodeBrowser> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.compact) return _continuousGrid(context);
+    if (widget.compact || widget.unpaged) return _continuousGrid(context);
     final pageSize = _pageSize;
     _page = _page.clamp(0, max(0, (widget.episodes.length - 1) ~/ pageSize));
     final start = _page * pageSize;
@@ -593,9 +595,16 @@ class _EpisodeBrowserState extends State<EpisodeBrowser> {
         1,
         (value, episode) => max(value, episode.number.toString().length),
       );
-      final minimum = max(40.0, scale.scale(14) * digits * .62 + 22);
+      final minimum = max(
+        40.0,
+        scale.scale(14) * digits * .62 +
+            22 +
+            (widget.unpaged && widget.episodes.any((episode) => episode.vip)
+                ? 17
+                : 0),
+      );
       final columns = ((constraints.maxWidth - 12) / minimum).floor().clamp(
-        5,
+        widget.unpaged ? 1 : 5,
         television ? 12 : 10,
       );
       final extent = max(34.0, scale.scale(14) + 18);
@@ -626,7 +635,16 @@ class _EpisodeBrowserState extends State<EpisodeBrowser> {
       }
       return Column(
         children: [
-          _compactRangeSelector(target: target, pageCount: pageCount),
+          if (widget.unpaged)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text('选集 · ${widget.episodes.length} 集'),
+              ),
+            )
+          else
+            _compactRangeSelector(target: target, pageCount: pageCount),
           Expanded(
             child: _selectionGrid(
               episodes: widget.episodes,
