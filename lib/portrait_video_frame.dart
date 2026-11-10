@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 Rect? portraitLandscapeVideoRect(
   Size viewport,
   double aspectRatio, {
-  double verticalOffset = -.15,
+  double verticalOffset = -.08,
   EdgeInsets padding = EdgeInsets.zero,
   TextScaler textScaler = TextScaler.noScaling,
 }) {
@@ -34,7 +34,7 @@ Rect? portraitLandscapeVideoRect(
                 height *
                     (verticalOffset.isFinite
                         ? verticalOffset.clamp(-.5, .5)
-                        : -.15))
+                        : -.08))
             .clamp(math.min(centeredTop, header), height - size.height),
     size.width,
     size.height,
@@ -54,7 +54,7 @@ class PortraitVideoPosition extends InheritedWidget {
       context
           .dependOnInheritedWidgetOfExactType<PortraitVideoPosition>()
           ?.offset ??
-      -.15;
+      -.08;
 
   @override
   bool updateShouldNotify(PortraitVideoPosition oldWidget) =>

@@ -81,7 +81,7 @@ func TestHongguoSingleEpisodeRotationBoundedAndRestrictionsStop(t *testing.T) {
 				t.Fatal("unexpected success")
 			}
 			if status == 200 {
-				if registrations != 3 || requests != 5 || !errors.Is(err, errHongguoEmptyResponse) {
+				if registrations != 3 || requests != 4 || !errors.Is(err, errHongguoEmptyResponse) {
 					t.Fatalf("unbounded empty recovery: %d/%d %v", registrations, requests, err)
 				}
 			} else if registrations != 0 || requests != 1 {
@@ -91,11 +91,12 @@ func TestHongguoSingleEpisodeRotationBoundedAndRestrictionsStop(t *testing.T) {
 	}
 }
 
-func TestHongguoRotationBackoffPreservesEmptyResponseOnDeadline(t *testing.T) {
+func TestHongguoRotationPreservesEmptyResponseOnDeadline(t *testing.T) {
 	requests := 0
 	d := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
 		if r.URL.Path == "/service/2/device_register/" {
-			return sourceFixtureResponse(r, 200, `{"device_id":"3456789012345678","install_id":"4567890123456789"}`), nil
+			<-r.Context().Done()
+			return nil, r.Context().Err()
 		}
 		requests++
 		return sourceFixtureResponse(r, 200, ""), nil
@@ -119,6 +120,43 @@ func TestHongguoRetryAfterEmptyIsNotEligibleForPlayerRecovery(t *testing.T) {
 	_, err := d.resolveHongguoRegisteredMedia(context.Background(), "9001")
 	if err == nil || errors.Is(err, errHongguoEmptyResponse) {
 		t.Fatalf("upstream retry instruction marked auto-retryable: %v", err)
+	}
+}
+
+func TestHongguoByteVC2DoesNotRotateOrRetryValidModel(t *testing.T) {
+	requests := 0
+	d := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
+		if r.URL.Path != hongguoSingleVideoModelPath {
+			t.Fatal("unsupported codec triggered registration or another endpoint")
+		}
+		requests++
+		return sourceFixtureResponse(r, 200, `{"data":{"video_model":{"video_list":[{"main_url":"https://media.example.test/a.mp4","video_meta":{"codec_type":"bytevc2"}}]}}}`), nil
+	})
+	searchFixtureIdentity(d)
+	d.cfg.Retries = 3
+	_, err := d.resolveHongguoRegisteredMedia(context.Background(), "9001")
+	var selection *hongguoMediaSelectionError
+	if !errors.As(err, &selection) || selection.unsupportedCodec != 1 || requests != 1 {
+		t.Fatalf("unsupported model did not match upstream handling: %d %v", requests, err)
+	}
+}
+
+func TestHongguoEmptyRotationRegistrationFailureStopsRequest(t *testing.T) {
+	requests, registrations := 0, 0
+	d := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
+		if r.URL.Path == "/service/2/device_register/" {
+			registrations++
+			return sourceFixtureResponse(r, 200, `{"device_id":0,"install_id":0}`), nil
+		}
+		requests++
+		return sourceFixtureResponse(r, 200, ""), nil
+	})
+	searchFixtureIdentity(d)
+	d.cfg.Retries = 3
+	_, err := d.resolveHongguoRegisteredMedia(context.Background(), "9001")
+	var rejection hongguoRegisterRejection
+	if !errors.Is(err, errHongguoEmptyResponse) || !errors.As(err, &rejection) || registrations != 1 || requests != 1 {
+		t.Fatalf("registration failure must not retry stale device: %d/%d %v", registrations, requests, err)
 	}
 }
 

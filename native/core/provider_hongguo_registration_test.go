@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestHongguoRegisteredIdentitySharedAcrossAppRoutes(t *testing.T) {
@@ -47,7 +48,7 @@ func TestHongguoRegisteredIdentitySharedAcrossAppRoutes(t *testing.T) {
 	}
 }
 
-func TestHongguoFailedRegistrationBlocksAppRequestAndCanRetry(t *testing.T) {
+func TestHongguoFailedRegistrationPausesThenCanRetry(t *testing.T) {
 	registrations, requests := 0, 0
 	d := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
 		if r.URL.Path == "/service/2/device_register/" {
@@ -65,8 +66,30 @@ func TestHongguoFailedRegistrationBlocksAppRequestAndCanRetry(t *testing.T) {
 		t.Fatal("unregistered request escaped startup gate")
 	}
 	_, err = d.hongguoAppRequest(context.Background(), http.MethodPost, hongguoSearchAppPath, nil, nil)
+	if err == nil || requests != 0 || registrations != 1 {
+		t.Fatal("registration rejection did not pause subsequent attempts")
+	}
+	d.hongguoClient().deviceRotationPausedUntil = time.Now().Add(-time.Second)
+	_, err = d.hongguoAppRequest(context.Background(), http.MethodPost, hongguoSearchAppPath, nil, nil)
 	if err != nil || requests != 1 || registrations != 2 {
 		t.Fatalf("registration retry did not recover: %v", err)
+	}
+}
+
+func TestHongguoTransientRegistrationFailureCanRetry(t *testing.T) {
+	registrations := 0
+	d := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
+		registrations++
+		if registrations == 1 {
+			return nil, errors.New("fixture connection reset")
+		}
+		return sourceFixtureResponse(r, 200, `{"device_id":"12345","install_id":"23456"}`), nil
+	}, false)
+	if _, err := d.ensureHongguoDeviceIdentity(context.Background()); err == nil {
+		t.Fatal("transport error was lost")
+	}
+	if _, err := d.ensureHongguoDeviceIdentity(context.Background()); err != nil || registrations != 2 {
+		t.Fatalf("transient failure unexpectedly paused registration: %v", err)
 	}
 }
 

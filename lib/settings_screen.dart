@@ -100,8 +100,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const Text('下'),
                 TextButton(
-                  onPressed: () => setDialogState(() => offset = -.15),
-                  child: const Text('恢复默认（上移 15%）'),
+                  onPressed: () => setDialogState(() => offset = -.08),
+                  child: const Text('恢复默认（上移 8%）'),
                 ),
               ],
             ),

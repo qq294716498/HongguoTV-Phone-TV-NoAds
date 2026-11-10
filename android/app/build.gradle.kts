@@ -13,6 +13,7 @@ val dartDefines = providers.gradleProperty("dart-defines").orNull.orEmpty()
         decoded.substringBefore("=") to decoded.substringAfter("=", "")
     }
 val allSources = dartDefines["ALL_SOURCES"] == "true"
+val isolatedTest = dartDefines["ISOLATED_TEST"] == "true"
 
 val releaseKey = rootProject.file("key.properties")
 val releaseProperties = Properties()
@@ -33,13 +34,13 @@ android {
     buildFeatures { buildConfig = true }
 
     defaultConfig {
-        applicationId = "com.hongguo.tv"
-        buildConfigField("boolean", "UPDATER_ALL_SOURCES", allSources.toString())
+        applicationId = if (isolatedTest) "com.hongguo.tv.streamtest" else "com.hongguo.tv"
+        buildConfigField("boolean", "UPDATER_ALL_SOURCES", (allSources && !isolatedTest).toString())
         minSdk = 26
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        manifestPlaceholders["appLabel"] = if (flutter.versionName.contains("-test.")) "红果TV（测试）" else "红果TV"
+        manifestPlaceholders["appLabel"] = if (isolatedTest) "红果取流测试" else if (flutter.versionName.contains("-test.")) "红果TV（测试）" else "红果TV"
         manifestPlaceholders["appBanner"] = "@drawable/tv_banner_hongguo"
     }
 
@@ -60,7 +61,7 @@ android {
             applicationIdSuffix = ".debug"
         }
         release {
-            signingConfig = signingConfigs.getByName(if (releaseKey.exists()) "release" else "debug")
+            signingConfig = signingConfigs.getByName(if (releaseKey.exists() && !isolatedTest) "release" else "debug")
         }
     }
 

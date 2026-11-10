@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test(
-    'landscape image moves up fifteen percent without changing aspect ratio',
+    'landscape image moves up eight percent without changing aspect ratio',
     () {
       for (final viewport in [
         const Size(360, 800),
@@ -20,7 +20,7 @@ void main() {
           expect(
             rect.top,
             closeTo(
-              (centered - viewport.height * .15).clamp(
+              (centered - viewport.height * .08).clamp(
                 centered < 96 ? centered : 96,
                 viewport.height - rect.height,
               ),
@@ -61,7 +61,7 @@ void main() {
     )!;
     expect(rect.left, 12);
     expect(rect.right, 402);
-    expect(rect.top, closeTo(44 + (822 - rect.height) / 2 - 822 * .15, .001));
+    expect(rect.top, closeTo(44 + (822 - rect.height) / 2 - 822 * .08, .001));
     expect(rect.width / rect.height, closeTo(16 / 9, .0001));
   });
 
@@ -115,7 +115,7 @@ void main() {
       Widget scene({
         bool enabled = true,
         double aspect = 16 / 9,
-        double offset = -.15,
+        double offset = -.08,
       }) => MaterialApp(
         home: PortraitVideoPosition(
           offset: offset,
@@ -148,7 +148,7 @@ void main() {
       await tester.pumpWidget(scene());
       final state = stateKey.currentState;
       final rect = tester.getRect(find.byKey(frameKey));
-      expect(rect.center.dy, closeTo(450 - 900 * .15, .001));
+      expect(rect.center.dy, closeTo(450 - 900 * .08, .001));
       expect(rect.size.aspectRatio, closeTo(16 / 9, .0001));
       expect(tester.getRect(find.byKey(captionKey)).bottom, rect.bottom);
       await tester.pumpWidget(scene(offset: .15));

@@ -15,6 +15,8 @@ import (
 
 const hongguoDeviceRegisterURL = "https://log.snssdk.com/service/2/device_register/"
 
+type hongguoRegisterRejection struct{ error }
+
 func hongguoAppQuery(deviceID, installID string) url.Values {
 	return url.Values{
 		"aid": {"8662"}, "app_name": {"novelread"}, "version_code": {"73532"}, "version_name": {"7.3.5.32"},
@@ -64,17 +66,17 @@ func (downloader *Downloader) registerHongguoDevice(ctx context.Context) (string
 		return "", "", "", err
 	}
 	if response.StatusCode != http.StatusOK {
-		return "", "", "", fmt.Errorf("红果设备注册 HTTP %d", response.StatusCode)
+		return "", "", "", hongguoRegisterRejection{fmt.Errorf("红果设备注册 HTTP %d", response.StatusCode)}
 	}
 	var result map[string]any
 	decoder := json.NewDecoder(bytes.NewReader(content))
 	decoder.UseNumber()
 	if err := decoder.Decode(&result); err != nil {
-		return "", "", "", errors.New("红果设备注册返回格式异常")
+		return "", "", "", hongguoRegisterRejection{errors.New("红果设备注册返回格式异常")}
 	}
 	deviceID, installID := mapString(result, "device_id_str", "device_id"), mapString(result, "install_id_str", "install_id")
-	if !hongguoNumericID.MatchString(deviceID) || !hongguoNumericID.MatchString(installID) || deviceID == "0" || installID == "0" {
-		return "", "", "", errors.New("红果设备注册未返回设备号")
+	if !(hongguoDeviceIdentity{DeviceID: deviceID, InstallID: installID}).valid() {
+		return "", "", "", hongguoRegisterRejection{errors.New("红果设备注册未返回设备号")}
 	}
 	cookieRequest := &http.Request{Header: http.Header{}}
 	for _, cookie := range response.Cookies() {

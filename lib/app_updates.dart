@@ -527,7 +527,7 @@ class WindowsUpdatePlatform implements UpdatePlatform {
 class AppUpdates extends ChangeNotifier {
   AppUpdates({
     required this.preferences,
-    this.supportedEdition = allSourcesEnabled,
+    this.supportedEdition = publicUpdatesEnabled,
     UpdateTransport? transport,
     UpdatePlatform? platform,
     DateTime Function()? now,

@@ -82,12 +82,13 @@ func (d *Downloader) ensureHongguoDeviceIdentity(ctx context.Context, rejected .
 	}
 	rotate := len(rejected) > 0 && rejected[0] == client.deviceIdentity.DeviceID
 	if !client.deviceIdentity.valid() || rotate {
-		if rotate && time.Now().Before(client.deviceRotationPausedUntil) {
+		if time.Now().Before(client.deviceRotationPausedUntil) {
 			return hongguoDeviceIdentity{}, errors.New("红果设备注册暂不可用，请稍后重试")
 		}
 		deviceID, installID, cookie, err := d.registerHongguoDevice(ctx)
 		if err != nil {
-			if rotate && ctx.Err() == nil {
+			var rejection hongguoRegisterRejection
+			if errors.As(err, &rejection) && ctx.Err() == nil {
 				client.deviceRotationPausedUntil = time.Now().Add(10 * time.Minute)
 			}
 			return hongguoDeviceIdentity{}, err

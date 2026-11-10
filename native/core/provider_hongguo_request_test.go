@@ -5,11 +5,45 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestHongguoSinglePlaybackMatches107RequestContract(t *testing.T) {
+	wantQuery, err := url.ParseQuery("aid=8662&app_name=novelread&version_code=73532&version_name=7.3.5.32&manifest_version_code=73532&update_version_code=73532&channel=update_64&device_platform=android&os=android&ssmix=a&device_type=25053RT47C&device_brand=Redmi&language=zh&os_api=36&os_version=16&resolution=1280*2772&dpi=520&ac=wifi&device_id=1234567890123456&iid=2345678901234567")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
+		query := r.URL.Query()
+		if query.Get("_rticket") == "" {
+			t.Fatal("missing request timestamp")
+		}
+		query.Del("_rticket")
+		if !reflect.DeepEqual(query, wantQuery) {
+			t.Fatalf("single playback query differs from 107: %v", query)
+		}
+		for name, value := range map[string]string{"Accept": "application/json", "X-XS-From-Web": "0", "Sdk-Version": "2", "Content-Type": "application/json; charset=utf-8", "Cookie": "", "X-Helios": "", "X-Medusa": ""} {
+			if r.Header.Get(name) != value {
+				t.Errorf("unexpected %s", name)
+			}
+		}
+		body, err := io.ReadAll(r.Body)
+		if err != nil || string(body) != `{"biz_param":{"need_all_video_definition":true,"video_platform":3},"content_type":1,"video_id":"9001"}` {
+			t.Fatal("single playback payload differs from 107")
+		}
+		return sourceFixtureResponse(r, 200, hongguoRetryModelFixture), nil
+	})
+	searchFixtureIdentity(d)
+	if _, err := d.resolveHongguoRegisteredMedia(context.Background(), "9001"); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestHongguoEpisodeContentTypeSurvivesDetailAndSerialization(t *testing.T) {
 	response := map[string]any{"data": map[string]any{"video_data": map[string]any{

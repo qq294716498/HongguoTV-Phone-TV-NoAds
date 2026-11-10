@@ -12,7 +12,7 @@ const danmakuSpeeds = [.5, .75, 1.0, 1.15, 1.25, 1.5, 2.0];
 
 class PlaybackPreferences {
   const PlaybackPreferences({
-    this.portraitVideoOffset = -.15,
+    this.portraitVideoOffset = -.08,
     this.speed = 1,
     this.quality = 0,
     this.autoAdvance = true,
@@ -116,7 +116,7 @@ class PlaybackPreferences {
     return PlaybackPreferences(
       portraitVideoOffset: offset is num && offset.isFinite
           ? offset.toDouble().clamp(-.5, .5)
-          : -.15,
+          : -.08,
       speed: speed,
       quality: quality,
       autoAdvance: autoAdvance,

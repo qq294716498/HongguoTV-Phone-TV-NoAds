@@ -194,7 +194,7 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 		attempts = 2
 	}
 	emptyRetry := singlePlayback || playbackModel || searchRequest || path == "/novel/player/video_detail/v1/" || path == "/reading/distribution/category/landpage/v/"
-	if emptyRetry && attempts < 2 {
+	if emptyRetry && !singlePlayback && attempts < 2 {
 		attempts = 2
 	}
 	if playbackModel {
@@ -208,7 +208,10 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 		if err := ctx.Err(); err != nil {
 			return nil, errors.Join(lastErr, err)
 		}
-		if attempt > 0 || rotations > 0 {
+		if singlePlayback {
+			retryDelay = time.Duration(attempt) * time.Second
+		}
+		if attempt > 0 || !singlePlayback && rotations > 0 {
 			select {
 			case <-time.After(retryDelay):
 			case <-ctx.Done():
@@ -332,6 +335,8 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 					attempt--
 					retryDelay = time.Second
 					continue
+				} else {
+					return nil, errors.Join(lastErr, renewErr)
 				}
 			}
 			if emptyRetry && attempt+1 < attempts && response.Header.Get("Retry-After") == "" {

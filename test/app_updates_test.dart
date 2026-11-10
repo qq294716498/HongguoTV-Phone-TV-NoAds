@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:duanju_app/app_build.dart';
 import 'package:duanju_app/app_updates.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -110,6 +111,22 @@ class FakeUpdatePlatform implements UpdatePlatform {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test('isolated package defaults to no public update requests', () async {
+    SharedPreferences.setMockInitialValues({});
+    final transport = FakeUpdateTransport();
+    final updates = AppUpdates(
+      preferences: await SharedPreferences.getInstance(),
+      transport: transport,
+      platform: FakeUpdatePlatform('unused'),
+    );
+    expect(updates.supportedEdition, allSourcesEnabled && !isolatedTestBuild);
+    if (isolatedTestBuild) {
+      await updates.check(manual: true);
+      expect(transport.checks, 0);
+      expect(transport.downloads, 0);
+    }
+    updates.dispose();
+  });
   group('release policy', () {
     test('selects exact installed ABI and increments actual code', () {
       for (final abi in updateAbiOffsets.keys) {

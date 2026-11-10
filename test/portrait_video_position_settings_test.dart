@@ -17,7 +17,7 @@ void main() {
       final preferences = PlaybackPreferences.fromJson({
         'portraitVideoOffset': value,
       });
-      expect(preferences.portraitVideoOffset, -.15);
+      expect(preferences.portraitVideoOffset, -.08);
     }
     final preferences = PlaybackPreferences.fromJson({
       'portraitVideoOffset': .2,
@@ -63,12 +63,12 @@ void main() {
         find.byKey(const ValueKey('portrait-video-position-setting')),
       );
       await tester.pumpAndSettle();
-      expect(find.text('上移 15%'), findsOneWidget);
+      expect(find.text('上移 8%'), findsOneWidget);
       final slider = find.byKey(const ValueKey('portrait-video-offset-slider'));
       await tester.drag(slider, const Offset(0, 40));
       await tester.pumpAndSettle();
       final selected = tester.widget<Slider>(slider).value;
-      expect(selected, greaterThan(-.15));
+      expect(selected, greaterThan(-.08));
       await tester.tap(find.text('保存'));
       await tester.pumpAndSettle();
       SharedPreferences.resetStatic();
@@ -81,7 +81,7 @@ void main() {
         find.byKey(const ValueKey('portrait-video-position-setting')),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('恢复默认（上移 15%）'));
+      await tester.tap(find.text('恢复默认（上移 8%）'));
       await tester.tap(find.text('取消'));
       await tester.pumpAndSettle();
       expect(store.playbackPreferences.portraitVideoOffset, selected);
