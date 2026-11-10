@@ -907,7 +907,7 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(find.textContaining('第 2 季 · 第 51 集'), findsOneWidget);
+      expect(find.text('2 季 · 51/100'), findsOneWidget);
       final calls = repository.catalogCalls.length;
       await tester.pumpWidget(page(1));
       await tester.pumpAndSettle();

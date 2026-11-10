@@ -345,10 +345,26 @@ void main() {
         } else {
           expect(find.text('已追剧'), findsNothing);
           if (television) {
-            expect(find.byType(TelevisionSavedTile), findsOneWidget);
-            expect(tester.widget<TelevisionSavedTile>(tile).badge, isNull);
+            expect(
+              tester.widget<TelevisionSavedTile>(tile).subtitle,
+              '43 季 · 37/120',
+            );
+            expect(
+              tester.widget<TelevisionSavedTile>(tile).showEpisodeCount,
+              false,
+            );
           } else {
-            expect(tester.widget<DramaTile>(tile).badge, isNull);
+            expect(tester.widget<DramaTile>(tile).subtitle, '43 季 · 37/120');
+            expect(
+              find.descendant(of: tile, matching: find.text('共 120 集')),
+              findsNothing,
+            );
+          }
+          if (television) {
+            expect(find.byType(TelevisionSavedTile), findsOneWidget);
+            expect(tester.widget<TelevisionSavedTile>(tile).badge, '没找到下季');
+          } else {
+            expect(tester.widget<DramaTile>(tile).badge, '没找到下季');
           }
           await store.applySeasonCheck(
             followed: followedDrama,
@@ -378,9 +394,9 @@ void main() {
           );
           await tester.pumpAndSettle();
           if (television) {
-            expect(tester.widget<TelevisionSavedTile>(tile).badge, isNull);
+            expect(tester.widget<TelevisionSavedTile>(tile).badge, '没找到下季');
           } else {
-            expect(tester.widget<DramaTile>(tile).badge, isNull);
+            expect(tester.widget<DramaTile>(tile).badge, '没找到下季');
           }
         }
         if (television) {

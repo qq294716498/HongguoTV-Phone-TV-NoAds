@@ -104,12 +104,14 @@ class DramaCover extends StatelessWidget {
     required this.repository,
     this.radius = 14,
     this.showMetadata = true,
+    this.showEpisodeCount = true,
     this.vipTopInset = 8,
   });
   final Drama drama;
   final AppRepository repository;
   final double radius;
   final bool showMetadata;
+  final bool showEpisodeCount;
   final double vipTopInset;
   static bool imagesDisabled = const bool.fromEnvironment(
     'DISABLE_REMOTE_IMAGES',
@@ -163,7 +165,7 @@ class DramaCover extends StatelessWidget {
               ),
             ),
           ),
-          if (showMetadata && drama.episodes > 0)
+          if (showMetadata && showEpisodeCount && drama.episodes > 0)
             Positioned(
               left: 9,
               bottom: 9,
@@ -335,6 +337,28 @@ class _CachedCoverImageState extends State<CachedCoverImage> {
   );
 }
 
+class SeasonNotFoundBadge extends StatelessWidget {
+  const SeasonNotFoundBadge({super.key});
+
+  @override
+  Widget build(BuildContext context) => Align(
+    alignment: Alignment.topLeft,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE0E0E0),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: const Text(
+        '没找到下季',
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(color: Color(0xFF555555), fontSize: 11),
+      ),
+    ),
+  );
+}
+
 class DramaTile extends StatelessWidget {
   const DramaTile({
     super.key,
@@ -347,6 +371,7 @@ class DramaTile extends StatelessWidget {
     this.actions,
     this.badge,
     this.badgeRibbon = true,
+    this.showEpisodeCount = true,
     this.rank,
     this.selected,
     this.onMore,
@@ -361,6 +386,7 @@ class DramaTile extends StatelessWidget {
   final Widget? actions;
   final String? badge;
   final bool badgeRibbon;
+  final bool showEpisodeCount;
   final int? rank;
   final bool? selected;
   final VoidCallback? onMore;
@@ -385,7 +411,8 @@ class DramaTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final television = AppLayout.isTelevision(context);
-    final ribbon = badge != null && badge!.isNotEmpty && badgeRibbon;
+    final noNext = badge == '没找到下季';
+    final ribbon = badge != null && badge!.isNotEmpty && badgeRibbon && !noNext;
     final subduedRibbon = badge == '已追剧';
     final title = Text(
       drama.title,
@@ -408,8 +435,20 @@ class DramaTile extends StatelessWidget {
               DramaCover(
                 drama: drama,
                 repository: repository,
-                vipTopInset: ribbon ? 62 : 8,
+                vipTopInset: noNext
+                    ? MediaQuery.textScalerOf(context).scale(11) * 2.4 + 16
+                    : ribbon
+                    ? 62
+                    : 8,
+                showEpisodeCount: showEpisodeCount,
               ),
+              if (noNext)
+                const Positioned(
+                  top: 6,
+                  left: 6,
+                  right: 6,
+                  child: SeasonNotFoundBadge(),
+                ),
               if (rank != null && !ribbon)
                 Positioned(
                   left: 0,

@@ -99,8 +99,28 @@ void main() {
 
   setUp(() => now = DateTime.utc(2026, 10, 30, 12));
 
+  test('three tracked dramas use a single worker', () async {
+    final store = await create();
+    for (var index = 0; index < 3; index++) {
+      await store.toggleSeriesFavorite(
+        Drama(
+          id: 'hongguo:serial-$index',
+          source: 'hongguo',
+          title: '串行故事$index 第一季',
+          seriesGroupId: 'serial-$index',
+        ),
+      );
+    }
+    final repository = CheckRepository();
+    await follow(repository, store).refresh();
+    expect(repository.maximum, 1);
+    expect(store.trackedSeries.every(store.hasConfirmedNoNextSeason), isTrue);
+    now = now.add(const Duration(minutes: 11));
+    expect(store.trackedSeries.any(store.hasConfirmedNoNextSeason), isFalse);
+  });
+
   test(
-    'six cold empty checks use two workers and warm checks make no reads',
+    'six cold empty checks use three workers and warm checks make no reads',
     () async {
       final store = await create();
       for (var index = 0; index < 6; index++) {
@@ -120,7 +140,7 @@ void main() {
       expect(updates.failed, 0);
       expect(repository.calls, hasLength(18));
       expect(repository.calls.every((call) => !call.$2), isTrue);
-      expect(repository.maximum, 2);
+      expect(repository.maximum, 3);
       await updates.refresh();
       expect(updates.total, 0);
       expect(repository.calls, hasLength(18));
@@ -143,19 +163,29 @@ void main() {
       );
       await store.toggleSeriesFavorite(first);
       await store.toggleSeriesFavorite(slow);
+      for (var index = 0; index < 2; index++) {
+        await store.toggleSeriesFavorite(
+          Drama(
+            id: 'hongguo:extra-$index',
+            source: 'hongguo',
+            title: '额外故事$index 第一季',
+            seriesGroupId: '${300 + index}',
+          ),
+        );
+      }
       final repository = CheckRepository()
         ..items = [second]
         ..blockedPrefix = '慢合成故事'
         ..blocked = Completer<CatalogPage>();
       final updates = follow(repository, store);
       final pending = updates.refresh();
-      await until(() => updates.checked == 1);
+      await until(() => store.hasNextSeason(first));
       expect(updates.checking, isTrue);
       expect(store.hasNextSeason(first), isTrue);
       expect(store.hasNextSeason(slow), isFalse);
       repository.blocked!.complete(CatalogPage([]));
       await pending;
-      expect(updates.checked, 2);
+      expect(updates.checked, 4);
       expect(updates.failed, 0);
     },
   );
@@ -243,6 +273,7 @@ void main() {
       final updates = follow(repository, store);
       await updates.refresh();
       expect(updates.failed, 1);
+      expect(store.hasConfirmedNoNextSeason(first), isFalse);
       expect(repository.calls, hasLength(3));
       await updates.refresh();
       expect(repository.calls, hasLength(3));

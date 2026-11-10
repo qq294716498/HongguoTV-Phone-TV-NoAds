@@ -193,6 +193,7 @@ class TelevisionSavedTile extends StatelessWidget {
     this.onFocus,
     this.badge,
     this.hasNextSeason = false,
+    this.showEpisodeCount = true,
   });
 
   final Drama drama;
@@ -205,6 +206,7 @@ class TelevisionSavedTile extends StatelessWidget {
   final VoidCallback? onFocus;
   final String? badge;
   final bool hasNextSeason;
+  final bool showEpisodeCount;
 
   static double extentFor(BuildContext context) {
     final scaler = MediaQuery.textScalerOf(context);
@@ -236,7 +238,19 @@ class TelevisionSavedTile extends StatelessWidget {
                     repository: repository,
                     showMetadata: false,
                   ),
-                  Positioned(top: 0, right: 0, child: actions),
+                  if (badge == '没找到下季')
+                    const Positioned(
+                      top: 4,
+                      left: 4,
+                      right: 4,
+                      child: SeasonNotFoundBadge(),
+                    ),
+                  Positioned(
+                    top: badge == '没找到下季' ? null : 0,
+                    bottom: badge == '没找到下季' ? 0 : null,
+                    right: 0,
+                    child: actions,
+                  ),
                 ],
               ),
             ),
@@ -260,7 +274,7 @@ class TelevisionSavedTile extends StatelessWidget {
                   Text.rich(
                     TextSpan(
                       children: [
-                        if (badge != null)
+                        if (badge != null && badge != '没找到下季')
                           TextSpan(
                             text: '$badge · ',
                             style: TextStyle(
@@ -278,7 +292,7 @@ class TelevisionSavedTile extends StatelessWidget {
                               fontWeight: FontWeight.w700,
                             ),
                           ),
-                        if (drama.episodes > 0)
+                        if (showEpisodeCount && drama.episodes > 0)
                           TextSpan(text: '共 ${drama.episodes} 集 · '),
                         TextSpan(text: subtitle),
                       ],

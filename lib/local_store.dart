@@ -771,6 +771,18 @@ class LocalStore extends ChangeNotifier {
     return latest;
   }
 
+  bool hasConfirmedNoNextSeason(Drama drama) {
+    if (!allowsSource(drama.source)) return false;
+    final current = seriesWatch(drama)?.drama ?? drama;
+    final check = _seasonChecks[current.id];
+    return check != null &&
+        check.matches(current) &&
+        check.complete &&
+        check.nextId == null &&
+        check.retryAt == null &&
+        check.isFresh(_now());
+  }
+
   bool hasNextSeason(Drama drama) {
     if (!allowsSource(drama.source)) return false;
     final current = seriesWatch(drama)?.drama ?? drama;

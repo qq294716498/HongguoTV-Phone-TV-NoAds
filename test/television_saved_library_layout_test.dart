@@ -335,7 +335,7 @@ void main() {
           final paragraph = tester.renderObject<RenderParagraph>(
             find.descendant(of: metadata, matching: find.byType(RichText)),
           );
-          final count = RegExp(r'共\s*120\s*集').firstMatch(contents);
+          final count = RegExp(r'/120').firstMatch(contents);
           expect(count, isNotNull);
           expect(
             tester.getRect(metadata).left,

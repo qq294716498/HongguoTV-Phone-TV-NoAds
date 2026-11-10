@@ -26,8 +26,10 @@ class FollowUpdates extends ChangeNotifier {
 
   Future<void> refresh({bool force = false}) async {
     if (!_valid || checking) return;
-    final dramas = store.trackedSeries
+    final tracked = store.trackedSeries
         .where((drama) => drama.source == SourceSite.hongguo.id)
+        .toList();
+    final dramas = tracked
         .where(
           (drama) => store.shouldCheckNextSeason(_anchor(drama), force: force),
         )
@@ -110,7 +112,9 @@ class FollowUpdates extends ChangeNotifier {
     }
 
     try {
-      await Future.wait([worker(), worker()]);
+      await Future.wait(
+        List.generate(tracked.length > 3 ? 3 : 1, (_) => worker()),
+      );
     } finally {
       if (current()) {
         checking = false;
