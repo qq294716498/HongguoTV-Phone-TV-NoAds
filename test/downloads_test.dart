@@ -391,10 +391,10 @@ void main() {
     await tester.tap(find.text('确认删除'));
     await tester.pumpAndSettle();
     expect(repository.calls, greaterThan(2));
-    expect(find.text('暂无符合条件的任务'), findsOneWidget);
+    expect(find.text('还没有下载任务'), findsOneWidget);
     repository.stale.complete(oldJobs);
     await tester.pumpAndSettle();
-    expect(find.text('暂无符合条件的任务'), findsOneWidget);
+    expect(find.text('还没有下载任务'), findsOneWidget);
     expect(find.byKey(const ValueKey('download-task-1')), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });

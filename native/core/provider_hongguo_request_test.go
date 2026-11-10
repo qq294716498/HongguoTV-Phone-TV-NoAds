@@ -133,14 +133,14 @@ func TestHongguoPlaybackHTTPBackoffSurvivesFallback(t *testing.T) {
 			if !errors.As(err, &blocked) || blocked.status != status || time.Until(blocked.until) < 119*time.Second {
 				t.Fatalf("HTTP backoff identity or deadline was lost: %v", err)
 			}
-			if status == http.StatusTooManyRequests && calls != 1 || status == http.StatusForbidden && calls != 3 {
+			if status == http.StatusTooManyRequests && calls != 1 || status == http.StatusForbidden && calls != 2 {
 				t.Fatalf("unexpected fallback count after HTTP %d: %d", status, calls)
 			}
 		})
 	}
 }
 
-func TestHongguoSlowHTTPRoutesReachBackupWithinCallerBudget(t *testing.T) {
+func TestHongguoSlowAppReachesOfficialWebWithinCallerBudget(t *testing.T) {
 	appCalls, webCalls, apiCalls := 0, 0, 0
 	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
 		switch request.URL.Path {
@@ -150,8 +150,7 @@ func TestHongguoSlowHTTPRoutesReachBackupWithinCallerBudget(t *testing.T) {
 			return nil, request.Context().Err()
 		case "/player/12345/9001":
 			webCalls++
-			<-request.Context().Done()
-			return nil, request.Context().Err()
+			return sourceFixtureResponse(request, http.StatusOK, `<script>_ROUTER_DATA = {"loaderData":{"player_page":{"series_id":"12345","vid":"9001","video_player_info":{"main_url":"https://media.example.test/current.mp4"}}}};</script>`), nil
 		case "/api/hongguo/play":
 			apiCalls++
 			return sourceFixtureResponse(request, http.StatusOK, "{}"), nil
@@ -163,11 +162,11 @@ func TestHongguoSlowHTTPRoutesReachBackupWithinCallerBudget(t *testing.T) {
 	d.cfg.Retries = 2
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
-	_, err := d.resolveHongguoMedia(ctx, Task{
+	media, err := d.resolveHongguoMedia(ctx, Task{
 		DramaID: providerDramaID(sourceHongguo, "12345"),
 		Chapter: Chapter{VideoURL: "hongguo-cenc://9001", ContentType: 1004},
 	})
-	if err == nil || appCalls != 1 || webCalls != 1 || apiCalls != 1 || ctx.Err() != nil {
+	if err != nil || media.URL != "https://media.example.test/current.mp4" || appCalls != 1 || webCalls != 1 || apiCalls != 0 || ctx.Err() != nil {
 		t.Fatalf("slow routes consumed the caller budget: app=%d web=%d api=%d ctx=%v error=%v", appCalls, webCalls, apiCalls, ctx.Err(), err)
 	}
 }

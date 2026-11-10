@@ -224,9 +224,6 @@ func (d *Downloader) resolveHongguoMedia(ctx context.Context, task Task) (provid
 		{name: "网页取流失败", resolve: func(stage context.Context) (providerMedia, error) {
 			return d.resolveHongguoWebMedia(stage, seriesID, videoID)
 		}},
-		{name: "备用取流失败", resolve: func(stage context.Context) (providerMedia, error) {
-			return d.resolveHongguoPlaybackAPI(stage, seriesID, videoID)
-		}},
 	})
 }
 
