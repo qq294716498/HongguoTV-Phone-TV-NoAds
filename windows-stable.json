@@ -1,115 +1,17 @@
 {
   "schema": 1,
   "release": {
-    "tag_name": "windows-v0.1.49-84",
+    "tag_name": "windows-v0.1.51-87",
     "draft": false,
     "prerelease": false,
-    "body": "优化之前无法播放",
+    "body": "优化之前无法播放\n\n源码提交：https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/commit/5221ff5c3fefa2b23887b87c4ae175f307534736\n\nCI：https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/42962038419\n\n校验：SHA256SUMS.txt。",
     "assets": [
       {
-        "name": "Android-isolation.json",
-        "size": 6559,
-        "digest": "sha256:ebc07cdba8b4db0f51e6541a8026fcf1e025e28c21cce0257bed6c69e470401c",
+        "name": "HongguoTV-0.1.51-windows-x64.zip",
+        "size": 101741861,
+        "digest": "sha256:ee15cdfa4ef37a47842fd7e31d685bec11f154ea17b048e4dd1ae21a125462c6",
         "state": "uploaded",
-        "browser_download_url": "https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.49-84/Android-isolation.json"
-      },
-      {
-        "name": "HongguoTV-0.1.49-source.zip",
-        "size": 7990762,
-        "digest": "sha256:c5ad1c11813e2d81f0a017dd676ff14836eaa1ab06e447fb823fa65aa1c608d9",
-        "state": "uploaded",
-        "browser_download_url": "https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.49-84/HongguoTV-0.1.49-source.zip"
-      },
-      {
-        "name": "HongguoTV-0.1.49-windows-x64.zip",
-        "size": 101728342,
-        "digest": "sha256:e732a2ad945a500152754dfc2c44db6d5fcb1f34161d111bc190f479714a1eaa",
-        "state": "uploaded",
-        "browser_download_url": "https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.49-84/HongguoTV-0.1.49-windows-x64.zip"
-      },
-      {
-        "name": "SHA256SUMS.txt",
-        "size": 1309,
-        "digest": "sha256:7ac3dba071f04e46562f337ffc1c9d905013173679d366d539fc48191bdc7f6f",
-        "state": "uploaded",
-        "browser_download_url": "https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.49-84/SHA256SUMS.txt"
-      },
-      {
-        "name": "Source-and-checks.json",
-        "size": 1563,
-        "digest": "sha256:54a9c1b6d871669a466ad4ffbcbb46075b7e807d65ad5d935d7cf84e0ac105c6",
-        "state": "uploaded",
-        "browser_download_url": "https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.49-84/Source-and-checks.json"
-      },
-      {
-        "name": "Windows-app-autoplay-chain.json",
-        "size": 166188,
-        "digest": "sha256:b31acd8538605eb86c5f17dfa11807438ceb7237d23596df3473e576dd9f33a8",
-        "state": "uploaded",
-        "browser_download_url": "https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.49-84/Windows-app-autoplay-chain.json"
-      },
-      {
-        "name": "Windows-playback-queue.json",
-        "size": 7123,
-        "digest": "sha256:0eb5db7b22ce7f66dba2e07a56136f3d8bc8d02ee308ef344decbe00906ab6e1",
-        "state": "uploaded",
-        "browser_download_url": "https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.49-84/Windows-playback-queue.json"
-      },
-      {
-        "name": "Windows-previous-release.json",
-        "size": 49608,
-        "digest": "sha256:8446d14a5cf5d9fee88eb0c3e5ec989129bd09b1edc8e63569e804d04bcdd062",
-        "state": "uploaded",
-        "browser_download_url": "https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.49-84/Windows-previous-release.json"
-      },
-      {
-        "name": "Windows-signature.json",
-        "size": 79,
-        "digest": "sha256:1565054afdadb5345f01692ce1fae4a59aa1ff31493709ee64cc5020edccef81",
-        "state": "uploaded",
-        "browser_download_url": "https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.49-84/Windows-signature.json"
-      },
-      {
-        "name": "Windows-single-instance-native.json",
-        "size": 3604,
-        "digest": "sha256:f237d019180b98f1e80cb94350b9aba3a46df132ee0bd719eabe804f88a58263",
-        "state": "uploaded",
-        "browser_download_url": "https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.49-84/Windows-single-instance-native.json"
-      },
-      {
-        "name": "Windows-smoke.json",
-        "size": 1211,
-        "digest": "sha256:201a1adcd59a9c0902534e6098d2bc016f9f3e23faf8c46673847ee72497bf34",
-        "state": "uploaded",
-        "browser_download_url": "https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.49-84/Windows-smoke.json"
-      },
-      {
-        "name": "Windows-update-channel.json",
-        "size": 484,
-        "digest": "sha256:4467a53aecf2e12e8e35fe252ac6def9ea17e12d12ad9ab9e646c5a50a88057a",
-        "state": "uploaded",
-        "browser_download_url": "https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.49-84/Windows-update-channel.json"
-      },
-      {
-        "name": "Windows-update-check.json",
-        "size": 381,
-        "digest": "sha256:1c2db2a400476c61747671b90c94423900e5e3a096b0b978112f12ab54f548c1",
-        "state": "uploaded",
-        "browser_download_url": "https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.49-84/Windows-update-check.json"
-      },
-      {
-        "name": "Windows-update-transaction.json",
-        "size": 7977,
-        "digest": "sha256:2a027a982e83a060cd018466cc6769353e27c443de98bfb5c308eefd5c7e5daa",
-        "state": "uploaded",
-        "browser_download_url": "https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.49-84/Windows-update-transaction.json"
-      },
-      {
-        "name": "Windows-validation.json",
-        "size": 55109,
-        "digest": "sha256:a1d4822b5549cc556b373e2762dfe51357dce81fde4b0dd9cdf1130ad932817b",
-        "state": "uploaded",
-        "browser_download_url": "https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.49-84/Windows-validation.json"
+        "browser_download_url": "https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.51-87/HongguoTV-0.1.51-windows-x64.zip"
       }
     ]
   }
