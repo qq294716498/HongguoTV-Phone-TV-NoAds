@@ -4,7 +4,7 @@
     "tag_name": "windows-v0.1.49-84",
     "draft": false,
     "prerelease": false,
-    "body": "优化之前无法播放\n\n源码提交：https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/commit/ed4c541c56e3afaf326c7f9d312157db99746d61\n\nCI：https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/42939467092\n\n校验：SHA256SUMS.txt。",
+    "body": "优化之前无法播放",
     "assets": [
       {
         "name": "HongguoTV-0.1.49-windows-x64.zip",
