@@ -1,4 +1,6 @@
 # 红果TV · 手机 / Android TV / Windows / macOS
+企鹅且可以群：636504313 分享下载文件 和快速交流bug
+
 
 基于 [guoapp](https://github.com/zhoufuweigg/guoapp) 的非官方独立客户端。手机与 Android TV 共用 Android 应用，另提供 Windows x64 与 macOS 通用客户端；支持浏览、搜索、播放、弹幕、追剧和下载。
 
