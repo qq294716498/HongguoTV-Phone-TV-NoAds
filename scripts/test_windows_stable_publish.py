@@ -12,16 +12,16 @@ import publish_windows_stable as publish
 
 class WindowsReleaseNotesTests(unittest.TestCase):
     def test_notes_match_requested_summary(self):
-        self.assertEqual(publish.release_description('0.1.49'), '优化之前无法播放\n')
+        self.assertEqual(publish.release_description('0.1.50'), '优化之前无法播放\n')
 
 
     def test_fallback_manifest_never_caches_pending_or_premature_verified_notes(self):
-        tag = 'windows-v0.1.49-84'
+        tag = 'windows-v0.1.50-86'
         package = b'synthetic package'
         checksum = hashlib.sha256(package).hexdigest()
-        asset = dict(name='HongguoTV-0.1.49-windows-x64.zip', size=len(package), digest='sha256:' + checksum,
-                     state='uploaded', browser_download_url=f'https://github.com/{publish.repository}/releases/download/{tag}/HongguoTV-0.1.49-windows-x64.zip')
-        body = 'Windows 0.1.49：恢复修复；未签名；真机仍未实测。\n\n' + publish.pending_publication_note
+        asset = dict(name='HongguoTV-0.1.50-windows-x64.zip', size=len(package), digest='sha256:' + checksum,
+                     state='uploaded', browser_download_url=f'https://github.com/{publish.repository}/releases/download/{tag}/HongguoTV-0.1.50-windows-x64.zip')
+        body = 'Windows 0.1.50：恢复修复；未签名；真机仍未实测。\n\n' + publish.pending_publication_note
         current = dict(tag_name=tag, draft=False, prerelease=False, body=body, assets=[asset])
         previous = {'sha': 'previous', 'content': base64.b64encode(json.dumps(
             {'schema': 1, 'release': {'tag_name': 'windows-v0.1.22-47'}}).encode()).decode()}
@@ -31,7 +31,7 @@ class WindowsReleaseNotesTests(unittest.TestCase):
                 mock.patch.object(publish.subprocess, 'run', return_value=mock.Mock(returncode=0, stdout=json.dumps(previous))), \
                 mock.patch.dict(publish.os.environ, {'RUNNER_TEMP': 'synthetic-temp'}), \
                 mock.patch.object(Path, 'write_text') as written, mock.patch.object(publish, 'write_json'):
-            publish.publish_channel(tag, '0.1.49', '84')
+            publish.publish_channel(tag, '0.1.50', '86')
             payload = json.loads(written.call_args.args[0])
             manifest = json.loads(base64.b64decode(payload['content']))
             self.assertIn('未签名；真机仍未实测', manifest['release']['body'])
@@ -39,8 +39,8 @@ class WindowsReleaseNotesTests(unittest.TestCase):
             self.assertNotIn(publish.verified_publication_note, manifest['release']['body'])
 
     def test_final_notes_mark_verified_channel_and_preserve_unsigned_limits(self):
-        tag = 'windows-v0.1.49-84'
-        body = '0.1.49+84\n假全屏与取源恢复修复。\nWindows x64 仍未签名；真实站源仍未实测。\n' + publish.pending_publication_note
+        tag = 'windows-v0.1.50-86'
+        body = '0.1.50+86\n假全屏与取源恢复修复。\nWindows x64 仍未签名；真实站源仍未实测。\n' + publish.pending_publication_note
         final = body.replace(publish.pending_publication_note, publish.verified_publication_note)
         current = dict(tag_name=tag, draft=False, prerelease=False, target_commitish='current', body=body)
         with mock.patch.object(publish, 'github', side_effect=[json.dumps(current), json.dumps({**current, 'body': final})]) as reads, \
@@ -55,7 +55,7 @@ class WindowsReleaseNotesTests(unittest.TestCase):
             self.assertIn('仍未签名；真实站源仍未实测', final)
 
     def test_final_notes_cannot_modify_old_or_unverified_release(self):
-        tag = 'windows-v0.1.49-84'
+        tag = 'windows-v0.1.50-86'
         current = dict(tag_name=tag, draft=False, prerelease=False, target_commitish='current', body=publish.pending_publication_note)
         cases = [('tag_name', 'windows-v0.1.22-47'), ('draft', True), ('prerelease', True),
                  ('target_commitish', 'old'), ('body', 'no publication status')]
@@ -69,7 +69,7 @@ class WindowsReleaseNotesTests(unittest.TestCase):
                 edits.assert_not_called()
 
     def test_failed_android_isolation_never_marks_notes_complete(self):
-        with mock.patch.object(Path, 'read_text', return_value='version: 0.1.49+84\n'), \
+        with mock.patch.object(Path, 'read_text', return_value='version: 0.1.50+86\n'), \
                 mock.patch.object(publish.os, 'chdir'), \
                 mock.patch.object(publish, 'read_json', return_value={'before': {'tag': 'app-v0.1.22-47'}}), \
                 mock.patch.object(publish, 'metadata', return_value={'tag': 'app-v0.1.20-45'}), \
@@ -89,8 +89,8 @@ class WindowsStablePublishTests(unittest.TestCase):
         self.root = Path(temporary.name)
         self.output = self.root / 'dist/windows'
         self.output.mkdir(parents=True)
-        (self.root / 'pubspec.yaml').write_text('version: 0.1.49+84\n')
-        self.package = self.output / 'HongguoTV-0.1.49-windows-x64.zip'
+        (self.root / 'pubspec.yaml').write_text('version: 0.1.50+86\n')
+        self.package = self.output / 'HongguoTV-0.1.50-windows-x64.zip'
         self.package.write_bytes(b'synthetic package')
         self.smoke = {name: True for name in [
             'ok', 'nativeCore', 'preferences', 'bundledAssets', 'ffprobe', 'remux',
@@ -98,12 +98,12 @@ class WindowsStablePublishTests(unittest.TestCase):
             'fullscreen', 'miniReuseResizeRestore', 'miniNativeCaptionHidden', 'miniNativeResizeBorder', 'normalNativeCaptionRestored', 'nativeTrayHidden', 'trayPausesOnClose', 'trayRestoreStaysPaused',
             'nativeTrayRestored', 'nativeTrayQuit', 'playerUiDetached', 'playerDisposedBeforeExit', 'windowBrandIcon', 'trayBrandIcon', 'firstLaunchNoticeVisible', 'mediaKitPlayback', 'cleanPath',
             'nonAsciiPath', 'differentWorkingDirectory', 'javaEnvironmentRemoved', 'normalAppStartup', 'remoteImagesDisabled']}
-        self.smoke.update(processExitCode=0, version='0.1.49', build=84, nativeTrayToggles=2)
+        self.smoke.update(processExitCode=0, version='0.1.50', build=86, nativeTrayToggles=2)
         self.write('Windows-smoke.json', self.smoke)
-        self.write('Windows-validation.json', {'ok': True, 'architecture': 'x64', 'build': 84,
-                   'version': '0.1.49', 'bytes': self.package.stat().st_size, 'brandIconsVerified': True, 'identityAssetsVerified': True, 'sha256': hashlib.sha256(self.package.read_bytes()).hexdigest()})
+        self.write('Windows-validation.json', {'ok': True, 'architecture': 'x64', 'build': 86,
+                   'version': '0.1.50', 'bytes': self.package.stat().st_size, 'brandIconsVerified': True, 'identityAssetsVerified': True, 'sha256': hashlib.sha256(self.package.read_bytes()).hexdigest()})
         self.write('Windows-signature.json', {'status': 'NotSigned', 'signed': False})
-        self.transactions = {'ok': True, 'version': '0.1.49', 'build': 84, 'cases': [{'case': name, 'ok': True, 'build': 84, 'oldBuild': 48, 'startupAcknowledged': True} for name in [
+        self.transactions = {'ok': True, 'version': '0.1.50', 'build': 86, 'cases': [{'case': name, 'ok': True, 'build': 86, 'oldBuild': 48, 'startupAcknowledged': True} for name in [
             'success', 'crash', 'hang', 'busy', 'tamper', 'version', 'semantic', 'architecture',
             'unowned', 'junction', 'second-instance', 'cross-directory-client', 'cancel-before-ready', 'cancel-after-ready', 'no-handoff', 'stop-unconfirmed', 'real-client-startup-ack', 'real-client-cleanup-retry']]}
         cleanup = next(item for item in self.transactions['cases'] if item['case'] == 'real-client-cleanup-retry')
@@ -135,7 +135,7 @@ class WindowsStablePublishTests(unittest.TestCase):
         self.write('Windows-single-instance-native.json', self.single_instance)
         self.playback_queue = {
             'ok': True, 'nativeExecuted': True, 'playerCount': 1,
-            'version': '0.1.49', 'build': 84, 'sourceCommit': 'current', 'workflowRun': '100',
+            'version': '0.1.50', 'build': 86, 'sourceCommit': 'current', 'workflowRun': '100',
             'cases': [{'case': name, 'ok': True, 'samePlayer': True,
                        'nativeHandleBefore': 12345, 'nativeHandleAfter': 12345}
                       for name in ['natural', 'manual-paused', 'suspend-resume', 'failed-fallback']],
@@ -144,7 +144,7 @@ class WindowsStablePublishTests(unittest.TestCase):
         self.autoplay_chain = {
             'ok': True, 'nativeExecuted': True, 'playerCount': 1, 'playerOpenCount': 1,
             'samePlayer': True, 'nativeQueueVerified': True, 'nativeHandle': 12345,
-            'version': '0.1.49', 'build': 84, 'sourceCommit': 'current', 'workflowRun': '100',
+            'version': '0.1.50', 'build': 86, 'sourceCommit': 'current', 'workflowRun': '100',
             'firstFrameMeasured': False, 'physicalAudioVideoContinuityMeasured': False,
             'episodes': [{'episode': episode, 'ok': True, 'observedAtOneSecond': True,
                           'noEarlyAdvance': True, 'title': 'synthetic', 'episodeLabel': str(episode),
@@ -197,7 +197,7 @@ class WindowsStablePublishTests(unittest.TestCase):
             for field, value in [('cleanupVerified', False), ('backupRemoved', False),
                                  ('downloadRemoved', False), ('transactionRemoved', False),
                                  ('retryAfterRestart', False), ('retryAfterRestart', None),
-                                 ('build', 62), ('oldBuild', 84)]:
+                                 ('build', 62), ('oldBuild', 86)]:
                 changed = {**cleanup, field: value}
                 cases = [changed if item['case'] == cleanup['case'] else item for item in self.transactions['cases']]
                 self.write('Windows-update-transaction.json', {**self.transactions, 'cases': cases})
@@ -332,11 +332,11 @@ class WindowsStablePublishTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'approved stable baseline'):
                 self.stage()
             self.assertEqual(commands.call_args_list, [mock.call(
-                ['gh', 'release', 'view', 'windows-v0.1.49-84'],
+                ['gh', 'release', 'view', 'windows-v0.1.50-86'],
                 stdout=publish.subprocess.DEVNULL, stderr=publish.subprocess.DEVNULL)])
 
     def test_fallback_channel_requires_actual_public_bytes_before_any_mutation(self):
-        tag = 'windows-v0.1.49-84'
+        tag = 'windows-v0.1.50-86'
         asset = {'name': self.package.name, 'size': self.package.stat().st_size,
                  'digest': 'sha256:' + hashlib.sha256(self.package.read_bytes()).hexdigest(),
                  'browser_download_url': f'https://github.com/{publish.repository}/releases/download/{tag}/{self.package.name}',
@@ -346,24 +346,24 @@ class WindowsStablePublishTests(unittest.TestCase):
                 mock.patch.object(publish.urllib.request, 'urlopen', return_value=io.BytesIO(b'tampered')), \
                 mock.patch.object(publish.subprocess, 'run') as mutations:
             with self.assertRaisesRegex(ValueError, 'checksum'):
-                publish.publish_channel(tag, '0.1.49', '84')
+                publish.publish_channel(tag, '0.1.50', '86')
             self.assertEqual(github.call_count, 1)
             mutations.assert_not_called()
 
     def test_fallback_channel_never_replaces_a_newer_build(self):
-        tag = 'windows-v0.1.49-84'
+        tag = 'windows-v0.1.50-86'
         asset = {'name': self.package.name, 'size': self.package.stat().st_size,
                  'digest': 'sha256:' + hashlib.sha256(self.package.read_bytes()).hexdigest(),
                  'browser_download_url': f'https://github.com/{publish.repository}/releases/download/{tag}/{self.package.name}',
                  'state': 'uploaded'}
         release = {'tag_name': tag, 'draft': False, 'prerelease': False, 'body': 'release', 'assets': [asset]}
         existing = {'sha': 'previous', 'content': base64.b64encode(json.dumps(
-            {'schema': 1, 'release': {**release, 'tag_name': 'windows-v0.1.50-85'}}).encode()).decode()}
+            {'schema': 1, 'release': {**release, 'tag_name': 'windows-v0.1.51-87'}}).encode()).decode()}
         with mock.patch.object(publish, 'github', return_value=json.dumps(release)) as github, \
                 mock.patch.object(publish.urllib.request, 'urlopen', return_value=io.BytesIO(self.package.read_bytes())), \
                 mock.patch.object(publish.subprocess, 'run', return_value=mock.Mock(returncode=0, stdout=json.dumps(existing))):
             with self.assertRaisesRegex(ValueError, 'newer'):
-                publish.publish_channel(tag, '0.1.49', '84')
+                publish.publish_channel(tag, '0.1.50', '86')
             self.assertEqual(github.call_count, 1)
 
 
