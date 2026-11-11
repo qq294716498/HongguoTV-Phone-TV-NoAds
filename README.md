@@ -12,6 +12,8 @@
 
 按用户要求仅保存本地修改，不打包、不推送、不发布；正式版本仍为 0.1.51。用户 Windows PS1 保持原样，不纳入本次提交。
 
+追加修复下载成功提示常驻：当前 Flutter 的 SnackBar 带 action 时默认 `persist=true`，播放器和详情页的“查看”提示因此不超时。两个入口均显式设为非持久、4 秒后关闭，并提供关闭按钮；重复加入下载先清理旧提示队列，保留查看任务入口。13 项下载回归通过，覆盖手动关闭、超时消失、连续加入后的查看跳转／返回不残留，以及原有下载和 TV 遥控流程；三文件静态检查无问题。仍为本地候选，未重新打包或发布。
+
 ## 0.1.51+87（Android / Windows 正式发布已核验）
 
 正式源码固定为 `5221ff5c3fefa2b23887b87c4ae175f307534736`。[Android CI](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/42962038438) 与 [Windows CI](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/42962038419) 均成功，默认／全站源 Flutter 回归、Go race、Python 检查和静态检查通过。Windows 原生画面、单播放器队列、完整四集自动续播及真实客户端升级／回滚／文件锁后重启清理全部通过；一次测试抢在 finalizing 标记后的异步文件删除之前断言失败，保持原门禁重跑后通过，未修改生产清理逻辑或跳过断言。

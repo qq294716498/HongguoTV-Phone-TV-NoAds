@@ -281,6 +281,19 @@ void main() {
           find.text(added == 0 ? '所选集数已在下载列表中' : '已加入 2 集，已有任务自动跳过'),
           findsOneWidget,
         );
+        if (added > 0) {
+          await tester.tap(
+            find.descendant(
+              of: find.byType(SnackBar),
+              matching: find.byIcon(Icons.close),
+            ),
+          );
+          await tester.pumpAndSettle();
+        } else {
+          await tester.pump(const Duration(seconds: 5));
+          await tester.pumpAndSettle();
+        }
+        expect(find.byType(SnackBar), findsNothing);
         expect(tester.takeException(), isNull);
       },
     );
@@ -341,6 +354,25 @@ void main() {
       await tester.pumpAndSettle();
       expect(repository.selected, [1, 2]);
       expect(repository.quality, 720);
+      expect(find.byType(SnackBar), findsOneWidget);
+      await tester.tap(find.text('下载').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('enqueue-downloads')));
+      await tester.pumpAndSettle();
+      expect(find.byType(SnackBar), findsOneWidget);
+      await tester.tapAt(const Offset(10, 200));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(of: find.byType(SnackBar), matching: find.text('查看')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(DownloadsScreen), findsOneWidget);
+      expect(find.byType(SnackBar), findsNothing);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+      expect(find.byType(SnackBar), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
       await tick(tester);
       expect(player.disposed, isTrue);
