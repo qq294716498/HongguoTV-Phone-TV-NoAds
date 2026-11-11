@@ -70,6 +70,7 @@ class FollowUpdates extends ChangeNotifier {
             isCurrent: stillCurrent,
             trustKnownNext: false,
             requirePlayableDetail: false,
+            revalidateKnownNext: true,
             force: force,
           );
           if (!current()) return;

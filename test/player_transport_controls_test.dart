@@ -23,6 +23,8 @@ class TransportFixture {
   var enabled = true;
   var hasNext = true;
   var nextCalls = 0;
+  var previousCalls = 0;
+  var hasPrevious = true;
   var forwardCalls = 0;
   var toggleCalls = 0;
   var unmounted = false;
@@ -96,7 +98,7 @@ class TransportFixture {
                     episodeLabel: '第 1 集',
                     onFullscreen: () {},
                     onBack: () {},
-                    onPrevious: null,
+                    onPrevious: hasPrevious ? () => previousCalls++ : null,
                     onNext: hasNext ? () => nextCalls++ : null,
                     onTogglePlayback: () {
                       toggleCalls++;
@@ -150,6 +152,25 @@ void main() {
   setUp(mockPlayerDevice);
   final forward = find.byKey(const ValueKey('player-mobile-forward'));
   final next = find.byKey(const ValueKey('player-mobile-next'));
+
+  testWidgets('mobile previous sits left of speed and respects first episode', (
+    tester,
+  ) async {
+    final fixture = TransportFixture();
+    await fixture.mount(tester, size: const Size(390, 844), fullscreen: false);
+    final previous = find.byKey(const ValueKey('player-mobile-previous'));
+    expect(
+      tester.getCenter(previous).dx,
+      lessThan(tester.getCenter(find.byKey(const ValueKey('player-speed'))).dx),
+    );
+    await tester.tap(previous);
+    expect(fixture.previousCalls, 1);
+    fixture.rebuild(() => fixture.hasPrevious = false);
+    await tester.pump();
+    await tester.tap(previous);
+    expect(fixture.previousCalls, 1);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
   testWidgets(
     'desktop forward button seeks fifteen seconds and resumes playback',

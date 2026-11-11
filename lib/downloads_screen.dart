@@ -436,61 +436,157 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
         .where((job) => _selected.contains(job.id))
         .length;
     final expanded = _expanded.contains(collection.drama.id);
+    final progress =
+        collection.jobs.fold<double>(
+          0,
+          (total, job) =>
+              total + (job.completed ? 1 : job.progress.clamp(0, 1)),
+        ) /
+        collection.jobs.length;
     return Card(
-      child: ListTile(
-        leading: _selecting
-            ? Checkbox(
-                tristate: true,
-                value: count == 0
-                    ? false
-                    : count == collection.jobs.length
-                    ? true
-                    : null,
-                onChanged: _busy ? null : (_) => _select(collection.jobs),
-              )
-            : Icon(expanded ? Icons.folder_open_rounded : Icons.folder_rounded),
-        title: Text(
-          collection.drama.title,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-        subtitle: Text(
-          '${collection.completed}/${collection.jobs.length} 集已下载 · ${storageSize(collection.bytes)}'
-          '${collection.active > 0 ? ' · ${collection.active} 项进行中' : ''}${collection.failed > 0 ? ' · ${collection.failed} 项失败' : ''}',
-        ),
-        onTap: () => setState(() {
-          if (!_expanded.remove(collection.drama.id)) {
-            _expanded.add(collection.drama.id);
-          }
-        }),
-        trailing: PopupMenuButton<String>(
-          tooltip: '${collection.drama.title} · 合集操作',
-          enabled: !_busy,
-          onSelected: (value) {
-            if (value == 'update') {
-              _update(collection.drama);
-            } else if (value == 'select') {
-              _select(collection.jobs);
-            } else {
-              _batch(value, collection.jobs);
-            }
-          },
-          itemBuilder: (_) => [
-            PopupMenuItem(
-              value: 'update',
-              enabled: !_updater.busy,
-              child: const Text('更新本剧 · 补充新增与缺失'),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          InkWell(
+            onTap: () => setState(() {
+              if (!_expanded.remove(collection.drama.id)) {
+                _expanded.add(collection.drama.id);
+              }
+            }),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (_selecting)
+                    Checkbox(
+                      tristate: true,
+                      value: count == 0
+                          ? false
+                          : count == collection.jobs.length
+                          ? true
+                          : null,
+                      onChanged: _busy ? null : (_) => _select(collection.jobs),
+                    ),
+                  SizedBox(
+                    width: 64,
+                    height: 88,
+                    child: DramaCover(
+                      drama: collection.drama,
+                      repository: widget.repository,
+                      radius: 8,
+                      showMetadata: false,
+                      showEpisodeCount: false,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          collection.drama.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '${collection.completed}/${collection.jobs.length} 集已下载 · ${storageSize(collection.bytes)}',
+                        ),
+                        if (collection.active > 0 || collection.failed > 0)
+                          Text(
+                            [
+                              if (collection.active > 0)
+                                '${collection.active} 项进行中',
+                              if (collection.failed > 0)
+                                '${collection.failed} 项失败',
+                            ].join(' · '),
+                          ),
+                        const SizedBox(height: 8),
+                        LinearProgressIndicator(value: progress, minHeight: 3),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
-            const PopupMenuItem(value: 'select', child: Text('选择本合集')),
-            const PopupMenuItem(value: 'pause', child: Text('暂停本合集')),
-            const PopupMenuItem(value: 'resume', child: Text('继续 / 重试本合集')),
-            const PopupMenuItem(value: 'archive', child: Text('清理已完成任务，保留视频')),
-            if (_filter == 'archived')
-              const PopupMenuItem(value: 'restore', child: Text('恢复到任务列表')),
-            const PopupMenuItem(value: 'remove', child: Text('取消任务并删除视频')),
-          ],
-        ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 4, 4),
+            child: Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 4,
+              children: [
+                TextButton.icon(
+                  onPressed: () => setState(() {
+                    if (!_expanded.remove(collection.drama.id)) {
+                      _expanded.add(collection.drama.id);
+                    }
+                  }),
+                  icon: Icon(expanded ? Icons.expand_less : Icons.expand_more),
+                  label: Text(expanded ? '收起剧集' : '查看剧集'),
+                ),
+                if (!_selecting && collection.active > 0)
+                  TextButton.icon(
+                    onPressed: _busy
+                        ? null
+                        : () => _batch('pause', collection.jobs),
+                    icon: const Icon(Icons.pause_rounded),
+                    label: const Text('暂停'),
+                  )
+                else if (!_selecting &&
+                    collection.jobs.any((job) => job.resumable))
+                  TextButton.icon(
+                    onPressed: _busy
+                        ? null
+                        : () => _batch('resume', collection.jobs),
+                    icon: const Icon(Icons.play_arrow_rounded),
+                    label: const Text('继续 / 重试'),
+                  ),
+                PopupMenuButton<String>(
+                  tooltip: '${collection.drama.title} · 合集操作',
+                  enabled: !_busy,
+                  onSelected: (value) {
+                    if (value == 'update') {
+                      _update(collection.drama);
+                    } else if (value == 'select') {
+                      _select(collection.jobs);
+                    } else {
+                      _batch(value, collection.jobs);
+                    }
+                  },
+                  itemBuilder: (_) => [
+                    PopupMenuItem(
+                      value: 'update',
+                      enabled: !_updater.busy,
+                      child: const Text('更新本剧 · 补充新增与缺失'),
+                    ),
+                    const PopupMenuItem(value: 'select', child: Text('选择本合集')),
+                    const PopupMenuItem(value: 'pause', child: Text('暂停本合集')),
+                    const PopupMenuItem(
+                      value: 'resume',
+                      child: Text('继续 / 重试本合集'),
+                    ),
+                    const PopupMenuItem(
+                      value: 'archive',
+                      child: Text('清理已完成任务，保留视频'),
+                    ),
+                    if (_filter == 'archived')
+                      const PopupMenuItem(
+                        value: 'restore',
+                        child: Text('恢复到任务列表'),
+                      ),
+                    const PopupMenuItem(
+                      value: 'remove',
+                      child: Text('取消任务并删除视频'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

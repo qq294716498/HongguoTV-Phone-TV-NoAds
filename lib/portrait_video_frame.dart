@@ -104,8 +104,8 @@ List<double> portraitDanmakuLaneTops(
 ) {
   final safeTop = padding.top + 8;
   final safeBottom = height - padding.bottom - 8;
-  final above = ((picture.top - safeTop) / rowHeight).floor().clamp(0, 4);
-  final remaining = 4 - above;
+  final above = ((picture.top - safeTop) / rowHeight).floor().clamp(0, 5);
+  final remaining = 5 - above;
   final belowStart = math.max(
     safeTop,
     math.min(picture.bottom, safeBottom - remaining * rowHeight),

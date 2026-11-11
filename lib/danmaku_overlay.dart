@@ -56,7 +56,7 @@ List<DanmakuFlight> planDanmaku(
   if (!width.isFinite || width <= 0 || rows < 1 || lifetimeMs <= 0) {
     return const [];
   }
-  final lanes = List<DanmakuFlight?>.filled(rows.clamp(1, 4), null);
+  final lanes = List<DanmakuFlight?>.filled(rows.clamp(1, 5), null);
   final sorted = items.toList()..sort((a, b) => a.timeMs.compareTo(b.timeMs));
   final seen = <String>{};
   final flights = <DanmakuFlight>[];
@@ -571,7 +571,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
                 : ((height * (widget.television ? .18 : .38) - topInset) /
                           rowHeight)
                       .floor()
-                      .clamp(0, _mobile ? 4 : (widget.television ? 2 : 3));
+                      .clamp(0, _mobile ? 5 : (widget.television ? 2 : 3));
             final style = TextStyle(
               fontSize: fontSize,
               fontWeight: FontWeight.w400,

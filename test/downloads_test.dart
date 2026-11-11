@@ -2,6 +2,7 @@ import 'package:duanju_app/app_layout.dart';
 import 'package:duanju_app/core_bridge.dart';
 import 'package:duanju_app/detail_screen.dart';
 import 'package:duanju_app/downloads_screen.dart';
+import 'package:duanju_app/widgets.dart';
 import 'package:duanju_app/home_screen.dart';
 import 'package:duanju_app/local_store.dart';
 import 'package:duanju_app/models.dart';
@@ -168,6 +169,34 @@ void main() {
       await tester.pump(const Duration(milliseconds: 10));
     }
   }
+
+  testWidgets('download covers and direct controls fit narrow enlarged text', (
+    tester,
+  ) async {
+    size(tester, const Size(320, 760));
+    final repository = DownloadRepository()..jobs = [];
+    repository.jobs = [repository.job(1, 'downloading')];
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: const TextScaler.linear(1.4)),
+          child: child!,
+        ),
+        home: DownloadsScreen(repository: repository, store: await makeStore()),
+      ),
+    );
+    await tick(tester);
+    expect(find.byType(DramaCover), findsOneWidget);
+    final pause = find.widgetWithText(TextButton, '暂停');
+    await tester.ensureVisible(pause);
+    await tester.tap(pause);
+    await tick(tester);
+    expect(repository.commands, ['pause:1']);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
   test(
     'local-only loader never falls through to online; explicit online bypasses it',
@@ -415,6 +444,8 @@ void main() {
       ),
     );
     await tick(tester);
+    expect(find.byType(DramaCover), findsOneWidget);
+    expect(find.widgetWithText(TextButton, '暂停'), findsOneWidget);
     await tester.tap(find.text('测试短剧'));
     await tick(tester);
     Future<void> action(String id, String label) async {
@@ -425,7 +456,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text(label));
+      await tester.tap(find.widgetWithText(PopupMenuItem<String>, label));
       await tester.pumpAndSettle();
     }
 

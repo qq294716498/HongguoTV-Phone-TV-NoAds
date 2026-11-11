@@ -178,17 +178,17 @@ void main() {
   );
 
   testWidgets(
-    'mobile uses four top lanes above a letterboxed landscape video',
+    'mobile uses five top lanes above a letterboxed landscape video',
     (tester) async {
       await mount(tester);
-      for (var lane = 0; lane < 4; lane++) {
+      for (var lane = 0; lane < 5; lane++) {
         final rect = tester.getRect(
           find.byKey(ValueKey('danmaku-item-1001-0-$lane')),
         );
         expect(rect.top, (880 - 420 / (16 / 9)) / 2 - (lane + 1) * 28);
         expect(rect.bottom, lessThanOrEqualTo((880 - 420 / (16 / 9)) / 2));
       }
-      expect(find.byKey(const ValueKey('danmaku-item-1001-0-4')), findsNothing);
+      expect(find.byKey(const ValueKey('danmaku-item-1001-0-5')), findsNothing);
       final text = tester.widget<Text>(find.text('合成弹幕 0'));
       expect(text.style!.fontSize, 16);
       expect(text.style!.color!.a, closeTo(.95, .01));
@@ -203,7 +203,7 @@ void main() {
   ) async {
     await mount(tester, topAlignedLandscapeVideo: true);
     final state = tester.state(find.byType(DanmakuOverlay));
-    for (var lane = 0; lane < 4; lane++) {
+    for (var lane = 0; lane < 5; lane++) {
       final rect = tester.getRect(
         find.byKey(ValueKey('danmaku-item-1001-0-$lane')),
       );
@@ -216,7 +216,7 @@ void main() {
         lessThan((880 - 420 / (16 / 9)) / 2 - 880 * .08 + 420 / (16 / 9) * .65),
       );
     }
-    expect(find.byKey(const ValueKey('danmaku-item-1001-0-4')), findsNothing);
+    expect(find.byKey(const ValueKey('danmaku-item-1001-0-5')), findsNothing);
     await advance(tester, const Duration(seconds: 1));
     final before = x(tester);
     await mount(tester);

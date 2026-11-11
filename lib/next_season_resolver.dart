@@ -43,6 +43,7 @@ class NextSeasonResolver {
     bool trustKnownNext = true,
     bool force = false,
     bool requirePlayableDetail = true,
+    bool revalidateKnownNext = false,
   }) async {
     if (anchor.source != SourceSite.hongguo.id ||
         normalizedSearchText(anchor.title).isEmpty) {
@@ -281,6 +282,42 @@ class NextSeasonResolver {
 
     try {
       checkCurrent();
+      if (revalidateKnownNext &&
+          !force &&
+          !requirePlayableDetail &&
+          anchor.seriesGroupId.isNotEmpty) {
+        final prior = knownDramas
+            .where(
+              (drama) =>
+                  consecutive(drama) &&
+                  drama.seriesGroupId == anchor.seriesGroupId,
+            )
+            .toList();
+        if (prior.length == 1) {
+          try {
+            final fresh = await bounded(
+              () => session.metadata(
+                Drama(
+                  id: prior.single.id,
+                  source: prior.single.source,
+                  title: '',
+                ),
+              ),
+            );
+            if (fresh != null &&
+                fresh.id == prior.single.id &&
+                fresh.source == anchor.source &&
+                consecutive(fresh) &&
+                fresh.seriesGroupId == anchor.seriesGroupId &&
+                fresh.episodes > 0) {
+              candidates[fresh.id] = fresh;
+              return result(next: fresh);
+            }
+          } catch (error) {
+            failed(error);
+          }
+        }
+      }
       final known = await verifiedNext();
       if (known != null) return known;
       final generated = hongguoNextSeasonQueries(anchor);

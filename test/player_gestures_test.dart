@@ -340,7 +340,7 @@ void main() {
         expect(pictureInPicture.right, lessThanOrEqualTo(size.width));
         expect(
           speed.center.dy,
-          size.width < 348 ? greaterThan(b.center.dy) : b.center.dy,
+          size.width < 396 ? greaterThan(b.center.dy) : b.center.dy,
         );
         expect(tester.getRect(toggle).bottom, lessThan(100));
         final header = tester.widget<Text>(

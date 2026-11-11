@@ -11,7 +11,7 @@ void main() {
         28,
         const EdgeInsets.only(top: 24),
       ),
-      [62, 34, 310, 338],
+      [62, 34, 310, 338, 366],
     );
     expect(
       portraitDanmakuLaneTops(
@@ -20,7 +20,7 @@ void main() {
         28,
         EdgeInsets.zero,
       ),
-      [272, 244, 216, 188],
+      [272, 244, 216, 188, 160],
     );
   });
   test('full height portrait keeps rows inside safe bottom', () {
@@ -30,6 +30,6 @@ void main() {
       32,
       const EdgeInsets.only(top: 24, bottom: 20),
     );
-    expect(tops, [644, 676, 708, 740]);
+    expect(tops, [612, 644, 676, 708, 740]);
   });
 }

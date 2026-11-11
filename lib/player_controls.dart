@@ -1145,6 +1145,17 @@ class _PlayerControlsState extends State<PlayerControls> {
                 }
               : null,
         ),
+      _toolIcon(
+        key: const ValueKey('player-mobile-previous'),
+        tooltip: '上一集',
+        icon: Icons.skip_previous_rounded,
+        onPressed: widget.enabled && widget.onPrevious != null
+            ? () {
+                widget.onPrevious!();
+                _show();
+              }
+            : null,
+      ),
       _speedChoice(),
       _qualityChoice(),
       if (widget.onPush != null)
