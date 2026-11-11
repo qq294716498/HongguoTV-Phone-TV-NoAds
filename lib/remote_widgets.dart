@@ -248,6 +248,8 @@ class RemoteGrid extends StatefulWidget {
     this.spacing = 14,
     this.padding = const EdgeInsets.all(18),
     this.footer,
+    this.onPastLastRow,
+    this.onBeforeFirstRow,
     this.initialIndex = 0,
     this.autofocus = false,
   });
@@ -258,6 +260,8 @@ class RemoteGrid extends StatefulWidget {
   final EdgeInsets padding;
   final ScrollController? controller;
   final Widget? footer;
+  final ValueChanged<int>? onPastLastRow;
+  final ValueChanged<int>? onBeforeFirstRow;
   final int initialIndex;
   final bool autofocus;
   final Widget Function(BuildContext, int, FocusNode, VoidCallback) itemBuilder;
@@ -374,6 +378,10 @@ class _RemoteGridState extends State<RemoteGrid> {
     if (key == LogicalKeyboardKey.arrowDown) {
       final lastRow = (widget.itemKeys.length - 1) ~/ widget.columns;
       if (index ~/ widget.columns == lastRow) {
+        if (widget.onPastLastRow != null) {
+          widget.onPastLastRow!(index % widget.columns);
+          return KeyEventResult.handled;
+        }
         if (widget.footer != null) {
           final generation = ++_generation;
           _target = null;
@@ -414,6 +422,10 @@ class _RemoteGridState extends State<RemoteGrid> {
       next = (index + widget.columns).clamp(0, widget.itemKeys.length - 1);
     } else if (key == LogicalKeyboardKey.arrowUp) {
       if (index < widget.columns) {
+        if (widget.onBeforeFirstRow != null) {
+          widget.onBeforeFirstRow!(index % widget.columns);
+          return KeyEventResult.handled;
+        }
         if (_scroll.hasClients && _scroll.offset > 1.0) {
           _scroll.animateTo(
             0.0,

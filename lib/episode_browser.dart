@@ -509,6 +509,36 @@ class _EpisodeBrowserState extends State<EpisodeBrowser> {
                 padding: padding,
                 child: RemoteGrid(
                   key: ValueKey('episode-page-$_page-$_located'),
+                  onPastLastRow:
+                      television && start + pageSize < widget.episodes.length
+                      ? (column) {
+                          if (_page != start ~/ pageSize) return;
+                          setState(() {
+                            _page++;
+                            _located = widget
+                                .episodes[min(
+                                  start + pageSize + column,
+                                  widget.episodes.length - 1,
+                                )]
+                                .number;
+                          });
+                        }
+                      : null,
+                  onBeforeFirstRow: television && start > 0
+                      ? (column) {
+                          if (_page != start ~/ pageSize) return;
+                          setState(() {
+                            _page--;
+                            final lastRowStart =
+                                ((pageSize - 1) ~/ columns) * columns;
+                            _located = widget
+                                .episodes[start -
+                                    pageSize +
+                                    min(lastRowStart + column, pageSize - 1)]
+                                .number;
+                          });
+                        }
+                      : null,
                   controller: _scroll,
                   autofocus: television && _located != null,
                   initialIndex: target,
