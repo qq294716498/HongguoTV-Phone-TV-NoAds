@@ -51,6 +51,12 @@ class SessionTransport {
       await Future<void>.delayed(Duration.zero);
     }
     expect(reads.length, count);
+    for (final read in reads) {
+      expect(
+        read.input['background'] == true,
+        read.session.contains(':season-'),
+      );
+    }
   }
 }
 

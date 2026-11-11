@@ -1,4 +1,5 @@
 import 'package:duanju_app/app_build.dart';
+import 'package:duanju_app/models.dart';
 import 'package:duanju_app/local_store.dart';
 import 'package:duanju_app/source_gate_dialog.dart';
 import 'package:duanju_app/source_gate_taps.dart';
@@ -35,6 +36,17 @@ void main() {
     // 未启用密码锁时无处输入密码，需要先在弹窗里启用。
     await expectLater(store.unlockSources('666'), throwsStateError);
     expect(store.sourcesUnlocked, isFalse);
+  });
+
+  test('Beabox appears alongside Huangguo only after unlocking', () async {
+    final store = await create();
+    expect(store.sources.any((site) => site.id == 'beabox'), isFalse);
+    await store.enableSourceGate('666');
+    final groups = SourceGroup.fromSources(store.sources);
+    expect(groups.any((group) => group.id == 'beabox'), allSourcesEnabled);
+    expect(groups.any((group) => group.id == 'huangguo'), allSourcesEnabled);
+    store.lockSources();
+    expect(store.sources.any((site) => site.id == 'beabox'), isFalse);
   });
 
   test('enabling the gate hides restricted sources and unlocks once', () async {

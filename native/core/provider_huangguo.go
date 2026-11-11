@@ -267,6 +267,9 @@ func (d *Downloader) fetchHuangguoAIChapters(ctx context.Context, sourceID strin
 }
 
 func (d *Downloader) fetchHuangguoAIDetail(ctx context.Context, sourceID string) (Drama, []Chapter, error) {
+	if hongguoNumericID.MatchString(strings.TrimPrefix(sourceID, "detail/")) {
+		return d.hghubDetail(ctx, strings.TrimPrefix(sourceID, "detail/"))
+	}
 	sourceID = strings.Trim(strings.TrimSpace(sourceID), "/")
 	sourceID = strings.TrimPrefix(sourceID, "detail/")
 	if sourceID == "" {

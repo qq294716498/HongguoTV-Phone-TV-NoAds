@@ -83,7 +83,7 @@ def main():
         raise ValueError('Built source does not match the workflow commit')
     report = {
         'version': package_version, 'sourceCommit': commit, 'testBuild': True,
-        'allSources': True, 'baselineCommit': 'd8075eb8f207f750ea36084837601c7d4c4c218b',
+        'allSources': True, 'baselineCommit': 'ed4c541c56e3afaf326c7f9d312157db99746d61',
         'publicReleaseCreated': False, 'updatesPublished': False, 'apks': results,
         'realDeviceAvSyncVerified': False, 'realDevicePlaybackVerified': False,
     }

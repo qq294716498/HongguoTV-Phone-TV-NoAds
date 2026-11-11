@@ -261,11 +261,12 @@ func TestNativeHongguoStalledCursorKeepsPartialItems(t *testing.T) {
 func TestNativeCatalogPreservesLargeLibraryAndPage501(t *testing.T) {
 	var requested string
 	engine := catalogFixtureEngine(t, func(request *http.Request) (*http.Response, error) {
+		request = hghubFixtureRequest(t, request)
 		if request.URL.Path != "/api/videos/category/ai-duanju" {
 			return nil, errors.New("only synthetic catalog metadata is allowed")
 		}
 		requested = request.URL.Query().Get("page")
-		return sourceFixtureResponse(request, 200, `{"data":[{"id":"6001","title":"第6001部"}]}`), nil
+		return sourceFixtureResponse(request, 200, `{"status":1,"data":{"items":[{"id":"6001","title":"第6001部"}],"pagination":{"pages":501}}}`), nil
 	})
 	items := make([]nativeDrama, 6000)
 	for index := range items {
@@ -490,5 +491,27 @@ func TestNativeSourceRecordSaveFailureAndRetryDuringBackoff(t *testing.T) {
 	restarted = reopenCatalogEngine(t, engine.directory, nil)
 	if restarted.sourceStatus(sourceHongguo).Health.Sample != "新诊断" {
 		t.Fatal("oversized records replaced the previous saved report")
+	}
+}
+
+func TestDetailMetadataUnchangedAvoidsCatalogRewrite(t *testing.T) {
+	engine, err := newNativeEngine(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(engine.downloads.close)
+	drama := mergeNativeDrama(nativeDrama{}, nativeDrama{ID: "hongguo:123", Source: sourceHongguo, Title: "合成短剧", Episodes: 200})
+	engine.catalogs[sourceHongguo] = []nativeDrama{drama}
+	invalid := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(invalid, []byte("fixture"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	engine.directory = invalid
+	if err := engine.saveDetailMetadata(drama); err != nil {
+		t.Fatalf("unchanged detail tried to persist entire catalog: %v", err)
+	}
+	drama.Title = "更新名称"
+	if err := engine.saveDetailMetadata(drama); err == nil {
+		t.Fatal("changed metadata must still attempt persistence")
 	}
 }

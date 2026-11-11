@@ -12,6 +12,7 @@ import (
 
 func TestNativeCategoryPaginationStaysIndependent(t *testing.T) {
 	engine := sourceFixtureEngine(t, func(request *http.Request) (*http.Response, error) {
+		request = hghubFixtureRequest(t, request)
 		if !strings.HasPrefix(request.URL.Path, "/api/videos/category/ai-") {
 			return nil, errors.New("only catalog JSON is permitted")
 		}
@@ -25,7 +26,7 @@ func TestNativeCategoryPaginationStaysIndependent(t *testing.T) {
 		for index := range rows {
 			rows[index] = map[string]any{"id": fmt.Sprintf("%s-%s-%d", category, page, index), "title": "合成分类剧集"}
 		}
-		body, _ := json.Marshal(map[string]any{"data": rows})
+		body, _ := json.Marshal(hghubFixtureRows(rows, 2))
 		return sourceFixtureResponse(request, 200, string(body)), nil
 	})
 	for _, input := range []nativeInput{

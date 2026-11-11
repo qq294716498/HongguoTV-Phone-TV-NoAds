@@ -119,6 +119,9 @@ func (d *Downloader) providerURLCandidates(raw string) []string {
 
 func (d *Downloader) resolveProviderMedia(ctx context.Context, task Task) (providerMedia, error) {
 	chapter := task.Chapter
+	if strings.HasPrefix(chapter.VideoURL, "hghub://") {
+		return d.resolveHGHub(ctx, task)
+	}
 	chapter.Source = canonicalProviderSource(chapter.Source)
 	if chapter.Source == "" {
 		chapter.Source = sourceFromDramaID(task.DramaID)

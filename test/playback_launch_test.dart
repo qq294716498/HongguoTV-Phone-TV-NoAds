@@ -12,6 +12,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'fixtures.dart';
 
+class SlowMetadataStore extends LocalStore {
+  SlowMetadataStore(super.preferences);
+  final saved = Completer<void>();
+  @override
+  Future<void> refreshDrama(Drama drama) => saved.future;
+}
+
 class PendingDetailRepository extends FixtureRepository {
   final pending = <Completer<DramaDetail>>[];
 
@@ -46,9 +53,10 @@ void main() {
   late BuildContext origin;
   final launches = <Future<void>>[];
 
-  Future<void> mount(WidgetTester tester) async {
+  Future<void> mount(WidgetTester tester, {bool slowSave = false}) async {
     SharedPreferences.setMockInitialValues({});
-    store = LocalStore(await SharedPreferences.getInstance());
+    final prefs = await SharedPreferences.getInstance();
+    store = slowSave ? SlowMetadataStore(prefs) : LocalStore(prefs);
     repository = PendingDetailRepository();
     observer = LaunchObserver();
     launches.clear();
@@ -101,6 +109,17 @@ void main() {
     store.dispose();
     expect(tester.takeException(), isNull);
   }
+
+  testWidgets('metadata persistence does not block entering the player', (
+    tester,
+  ) async {
+    await mount(tester, slowSave: true);
+    launch();
+    repository.complete(0);
+    expect(await players(tester), hasLength(1));
+    (store as SlowMetadataStore).saved.complete();
+    await clean(tester);
+  });
 
   testWidgets('slow detail requests accept one launch and push one player', (
     tester,

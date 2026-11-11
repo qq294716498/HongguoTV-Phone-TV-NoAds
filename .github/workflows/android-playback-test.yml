@@ -2,7 +2,7 @@ name: Android private stream diagnostic APK
 
 on:
   push:
-    branches: [test/upstream-playback-0.1.49]
+    branches: [test/playback-layout-0.1.50]
 
 permissions:
   contents: read
@@ -29,7 +29,7 @@ jobs:
           from pathlib import Path
           import re
           version = re.search(r'^version:\s*(\S+)', Path('pubspec.yaml').read_text(), re.M).group(1)
-          if version != '0.1.49-test.9+83':
+          if version != '0.1.50-test.1+85':
               raise SystemExit('This workflow only builds the approved private test version')
           PY
       - uses: actions/setup-java@v4

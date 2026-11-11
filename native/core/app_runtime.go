@@ -103,6 +103,7 @@ type nativeDrama struct {
 }
 
 type nativeInput struct {
+	Background       bool                    `json:"background,omitempty"`
 	LAN              json.RawMessage         `json:"lan"`
 	ExpectedVersions map[string]string       `json:"expectedVersions"`
 	SystemProxy      nativeSystemProxy       `json:"systemProxy"`
@@ -406,6 +407,9 @@ func nativeDispatch(input nativeInput) (any, error) {
 		}
 		defer finish()
 		ctx = work
+		if input.Background {
+			ctx = context.WithValue(ctx, backgroundCatalogKey{}, true)
+		}
 	}
 	switch input.Action {
 	case "registerDevice":
@@ -608,6 +612,17 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 		result.HasMore = more
 		return result, nil
 	}
+	if query != "" && source == sourceHuangguoAI {
+		items, more, err := d.hghubCatalog(ctx, page, "", query)
+		if err != nil {
+			return result, err
+		}
+		for _, drama := range items {
+			result.Items = append(result.Items, nativeNormalize(drama))
+		}
+		result.HasMore = more
+		return result, nil
+	}
 	if query != "" && source == sourceBeabox {
 		items, more, err := d.fetchBeaboxCatalogPage(ctx, page, "", query)
 		if err != nil {
@@ -717,7 +732,7 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 			result.HasMore = len(rows) >= 30
 		}
 	case sourceHuangguoAI:
-		items, result.HasMore, err = d.fetchHuangguoAICatalogPage(ctx, page, category)
+		items, result.HasMore, err = d.hghubCatalog(ctx, page, category, "")
 	case sourceHuangju:
 		items, result.HasMore, err = d.fetchHuangjuCatalogPage(ctx, page, category, "")
 	case sourceYeguo:

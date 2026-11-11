@@ -310,6 +310,7 @@ class _NativeSeasonLookupSession extends SeasonLookupSession {
     return CatalogPage.fromJson(
       await owner._read('${_scope}catalog', {
         'action': 'catalog',
+        'background': true,
         'source': source,
         'page': page,
         'query': query,
@@ -323,6 +324,7 @@ class _NativeSeasonLookupSession extends SeasonLookupSession {
     _validateDrama(drama);
     final result = await owner._read('${_scope}metadata', {
       'action': 'seasonMetadata',
+      'background': true,
       'drama': drama.toJson(),
     });
     final fresh = Drama.fromJson(
@@ -339,6 +341,7 @@ class _NativeSeasonLookupSession extends SeasonLookupSession {
     _validateDrama(drama);
     final result = await owner._read('${_scope}detail', {
       'action': 'detail',
+      'background': true,
       'drama': drama.toJson(),
     });
     final fresh = DramaDetail.fromJson(result);

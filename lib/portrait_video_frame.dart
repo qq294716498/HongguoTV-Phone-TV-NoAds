@@ -95,3 +95,26 @@ class PortraitVideoFrame extends StatelessWidget {
     },
   );
 }
+
+List<double> portraitDanmakuLaneTops(
+  Rect picture,
+  double height,
+  double rowHeight,
+  EdgeInsets padding,
+) {
+  final safeTop = padding.top + 8;
+  final safeBottom = height - padding.bottom - 8;
+  final above = ((picture.top - safeTop) / rowHeight).floor().clamp(0, 4);
+  final remaining = 4 - above;
+  final belowStart = math.max(
+    safeTop,
+    math.min(picture.bottom, safeBottom - remaining * rowHeight),
+  );
+  return [
+    for (var lane = 0; lane < above; lane++)
+      picture.top - (lane + 1) * rowHeight,
+    for (var lane = 0; lane < remaining; lane++)
+      if (belowStart + (lane + 1) * rowHeight <= safeBottom)
+        belowStart + lane * rowHeight,
+  ];
+}

@@ -212,9 +212,11 @@ func TestNativeCatalogCacheFreshnessPagingAndRefresh(t *testing.T) {
 	for _, category := range nativeAICategories {
 		paths["/api/videos/category/"+category.ID] = true
 	}
-	requestsPerPage := int32(len(paths))
+	requestsPerPage := int32(1)
+	paths["/api/videos"] = true
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
+		r = hghubFixtureRequest(t, r)
 		if !paths[r.URL.Path] {
 			t.Error("test must only request synthetic catalog metadata", r.URL.Path)
 			w.WriteHeader(http.StatusNotFound)
@@ -229,7 +231,7 @@ func TestNativeCatalogCacheFreshnessPagingAndRefresh(t *testing.T) {
 		for index := range count {
 			rows = append(rows, map[string]any{"id": strconv.Itoa(page*100 + index), "title": fmt.Sprintf("合成剧集%d", page*100+index), "cover": "https://example.test/synthetic-cover"})
 		}
-		json.NewEncoder(w).Encode(map[string]any{"data": rows})
+		json.NewEncoder(w).Encode(hghubFixtureRows(rows, 2))
 	}))
 	defer upstream.Close()
 	directory := t.TempDir()

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'core_bridge.dart';
+import 'diary_service.dart';
 import 'follow_state.dart';
 import 'local_store.dart';
 import 'models.dart';
@@ -90,7 +91,12 @@ Future<void> openPlaybackDirectly(
         }
       }),
     );
+    final clock = Stopwatch()..start();
+    DiaryService.add('[Launch] detail start source=${drama.source}');
     final detail = await repository.detail(drama);
+    DiaryService.add(
+      '[Launch] detail ready elapsedMs=${clock.elapsedMilliseconds} episodes=${detail.episodes.length}',
+    );
     if (!context.mounted || !active()) return;
     final mergedDrama = repository.catalogUpdates
         .current(drama)
@@ -102,7 +108,7 @@ Future<void> openPlaybackDirectly(
       hasMoreEpisodes: detail.hasMoreEpisodes,
     );
     repository.catalogUpdates.publish(mergedDrama, retryCover: true);
-    await saveUserChange(context, () => store.refreshDrama(mergedDrama));
+    unawaited(saveUserChange(context, () => store.refreshDrama(mergedDrama)));
     if (!context.mounted || !active()) return;
     if (merged.episodes.isEmpty) throw AppFailure('暂时没有可播放的集数');
     final watched = store.watched(mergedDrama.id);
@@ -207,7 +213,12 @@ class _PlaybackLaunchScreenState extends State<PlaybackLaunchScreen> {
     final generation = ++_generation;
     setState(() => _error = null);
     try {
+      final clock = Stopwatch()..start();
+      DiaryService.add('[Launch] detail start source=${widget.drama.source}');
       final detail = await widget.repository.detail(widget.drama);
+      DiaryService.add(
+        '[Launch] detail ready elapsedMs=${clock.elapsedMilliseconds} episodes=${detail.episodes.length}',
+      );
       if (!mounted ||
           generation != _generation ||
           _profileEpoch != widget.store.profileEpoch) {
@@ -223,7 +234,9 @@ class _PlaybackLaunchScreenState extends State<PlaybackLaunchScreen> {
         hasMoreEpisodes: detail.hasMoreEpisodes,
       );
       widget.repository.catalogUpdates.publish(drama, retryCover: true);
-      await saveUserChange(context, () => widget.store.refreshDrama(drama));
+      unawaited(
+        saveUserChange(context, () => widget.store.refreshDrama(drama)),
+      );
       if (!mounted ||
           generation != _generation ||
           _profileEpoch != widget.store.profileEpoch) {

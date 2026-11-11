@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"time"
 )
@@ -299,8 +300,11 @@ func (engine *nativeEngine) saveDetailMetadata(drama nativeDrama) error {
 	for _, items := range engine.catalogs {
 		for index := range items {
 			if items[index].ID == drama.ID {
-				items[index] = mergeNativeDrama(items[index], drama)
-				changed = true
+				merged := mergeNativeDrama(items[index], drama)
+				if !reflect.DeepEqual(items[index], merged) {
+					items[index] = merged
+					changed = true
+				}
 			}
 		}
 	}

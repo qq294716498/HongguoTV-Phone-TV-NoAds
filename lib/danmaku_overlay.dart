@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
 import 'danmaku_controller.dart';
+import 'portrait_video_frame.dart';
 import 'danmaku_emoji_render.dart';
 import 'danmaku_exit_motion.dart';
 import 'danmaku_models.dart';
@@ -171,7 +172,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
   int? _endedPlanRevision;
   int _exitIdentity = 0;
   Rect _viewport = Rect.zero;
-  double _topInset = 0;
+  List<double> _laneTops = const [];
   double _rowHeight = 0;
 
   bool get _mobile => widget.mobile && !widget.television;
@@ -248,6 +249,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
       if (_retiring.length >= maxDanmakuFlights) break;
       final state = key.currentState;
       if (state == null ||
+          state.widget.flight.lane >= _laneTops.length ||
           state.x >= _viewport.width ||
           state.x + state.widget.flight.width <= 0) {
         continue;
@@ -264,7 +266,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
           ),
           startedAt: _exitElapsed,
           viewport: _viewport,
-          top: _topInset + motion.flight.lane * _rowHeight,
+          top: _laneTops[motion.flight.lane],
           height: _rowHeight,
           content: RepaintBoundary(
             child: DanmakuEmojiText(
@@ -535,11 +537,41 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
               context,
             ).clamp(maxScaleFactor: 1.15);
             final rowHeight = scaler.scale(fontSize) * (_mobile ? 1.75 : 1.5);
-            final rows =
-                ((height * (widget.television ? .18 : .38) - topInset) /
-                        rowHeight)
-                    .floor()
-                    .clamp(0, _mobile ? 4 : (widget.television ? 2 : 3));
+            final portrait = _mobile && height > width;
+            final videoRect = widget.topAlignedLandscapeVideo
+                ? portraitLandscapeVideoRect(
+                    constraints.biggest,
+                    aspect,
+                    verticalOffset: PortraitVideoPosition.of(context),
+                    padding: MediaQuery.paddingOf(context),
+                    textScaler: MediaQuery.textScalerOf(context),
+                  )
+                : null;
+            final fitted = applyBoxFit(
+              BoxFit.contain,
+              Size(aspect, 1),
+              constraints.biggest,
+            ).destination;
+            final picture =
+                videoRect ??
+                Rect.fromLTWH(
+                  (width - fitted.width) / 2,
+                  (height - fitted.height) / 2,
+                  fitted.width,
+                  fitted.height,
+                );
+            final portraitTops = portraitDanmakuLaneTops(
+              picture,
+              height,
+              rowHeight,
+              MediaQuery.paddingOf(context),
+            );
+            final rows = portrait
+                ? portraitTops.length
+                : ((height * (widget.television ? .18 : .38) - topInset) /
+                          rowHeight)
+                      .floor()
+                      .clamp(0, _mobile ? 4 : (widget.television ? 2 : 3));
             final style = TextStyle(
               fontSize: fontSize,
               fontWeight: FontWeight.w400,
@@ -565,7 +597,13 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
               width,
               height,
             );
-            _topInset = topInset;
+            final laneTops = portrait
+                ? portraitTops
+                : [
+                    for (var lane = 0; lane < rows; lane++)
+                      topInset + lane * rowHeight,
+                  ];
+            _laneTops = laneTops;
             _rowHeight = rowHeight;
             final live = Positioned.fromRect(
               rect: _viewport,
@@ -669,7 +707,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
                             Positioned(
                               key: ValueKey('danmaku-item-${flight.item.id}'),
                               left: 0,
-                              top: topInset + flight.lane * rowHeight,
+                              top: laneTops[flight.lane],
                               width: flight.width,
                               height: rowHeight,
                               child: _DanmakuMotion(

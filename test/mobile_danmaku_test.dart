@@ -185,8 +185,8 @@ void main() {
         final rect = tester.getRect(
           find.byKey(ValueKey('danmaku-item-1001-0-$lane')),
         );
-        expect(rect.top, 8 + lane * 28);
-        expect(rect.bottom, lessThan((880 - 420 / (16 / 9)) / 2));
+        expect(rect.top, (880 - 420 / (16 / 9)) / 2 - (lane + 1) * 28);
+        expect(rect.bottom, lessThanOrEqualTo((880 - 420 / (16 / 9)) / 2));
       }
       expect(find.byKey(const ValueKey('danmaku-item-1001-0-4')), findsNothing);
       final text = tester.widget<Text>(find.text('合成弹幕 0'));
@@ -198,37 +198,37 @@ void main() {
     },
   );
 
-  testWidgets(
-    'portrait lanes stay at the screen top independently of video placement',
-    (tester) async {
-      await mount(tester, topAlignedLandscapeVideo: true);
-      final state = tester.state(find.byType(DanmakuOverlay));
-      for (var lane = 0; lane < 4; lane++) {
-        final rect = tester.getRect(
-          find.byKey(ValueKey('danmaku-item-1001-0-$lane')),
-        );
-        expect(rect.top, closeTo(8 + lane * 28, .001));
-        expect(
-          rect.bottom,
-          lessThan(
-            (880 - 420 / (16 / 9)) / 2 - 880 * .08 + 420 / (16 / 9) * .65,
-          ),
-        );
-      }
-      expect(find.byKey(const ValueKey('danmaku-item-1001-0-4')), findsNothing);
-      await advance(tester, const Duration(seconds: 1));
-      final before = x(tester);
-      await mount(tester);
-      expect(tester.state(find.byType(DanmakuOverlay)), same(state));
-      expect(x(tester), closeTo(before, .1));
-      expect(
-        tester.getRect(find.byKey(const ValueKey('danmaku-item-1001-0-0'))).top,
-        8,
+  testWidgets('portrait lanes extend upwards from shifted video boundary', (
+    tester,
+  ) async {
+    await mount(tester, topAlignedLandscapeVideo: true);
+    final state = tester.state(find.byType(DanmakuOverlay));
+    for (var lane = 0; lane < 4; lane++) {
+      final rect = tester.getRect(
+        find.byKey(ValueKey('danmaku-item-1001-0-$lane')),
       );
-      expect(tester.takeException(), isNull);
-      await tester.pumpWidget(const SizedBox.shrink());
-    },
-  );
+      expect(
+        rect.top,
+        closeTo((880 - 420 / (16 / 9)) / 2 - 880 * .08 - (lane + 1) * 28, .001),
+      );
+      expect(
+        rect.bottom,
+        lessThan((880 - 420 / (16 / 9)) / 2 - 880 * .08 + 420 / (16 / 9) * .65),
+      );
+    }
+    expect(find.byKey(const ValueKey('danmaku-item-1001-0-4')), findsNothing);
+    await advance(tester, const Duration(seconds: 1));
+    final before = x(tester);
+    await mount(tester);
+    expect(tester.state(find.byType(DanmakuOverlay)), same(state));
+    expect(x(tester), closeTo(before, .1));
+    expect(
+      tester.getRect(find.byKey(const ValueKey('danmaku-item-1001-0-0'))).top,
+      (880 - 420 / (16 / 9)) / 2 - 28,
+    );
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
   testWidgets(
     'mobile long and short flights stay at real-time speed during 2x and seek',
