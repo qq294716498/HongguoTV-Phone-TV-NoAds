@@ -263,6 +263,41 @@ void main() {
     expect(tester.takeException(), isNull);
   }
 
+  testWidgets(
+    'periodic saves stay quiet and exit refreshes the same saved position',
+    (tester) async {
+      final repository = RouteRepository();
+      final player = ScriptedPlayer();
+      await mount(
+        tester,
+        repository,
+        player,
+        healthClock: () => DateTime(2026, 11, 11),
+      );
+      final store = tester
+          .widget<PlayerScreen>(find.byType(PlayerScreen))
+          .store;
+      var notifications = 0;
+      store.addListener(() => notifications++);
+      await tester.pump(const Duration(seconds: 5));
+      await settleOperations(tester);
+      await store.flushPendingWrites();
+      expect(store.watched(FixtureRepository.free.id)?.position, 7);
+      notifications = 0;
+      await player.seek(const Duration(seconds: 12));
+      await tester.pump(const Duration(seconds: 5));
+      await settleOperations(tester);
+      await store.flushPendingWrites();
+      expect(store.watched(FixtureRepository.free.id)?.position, 12);
+      expect(notifications, 0);
+      await unmount(tester, player);
+      await store.flushPendingWrites();
+      expect(notifications, 1);
+      expect(store.watched(FixtureRepository.free.id)?.position, 12);
+      store.dispose();
+    },
+  );
+
   testWidgets('empty source response does not suggest a lower resolution', (
     tester,
   ) async {

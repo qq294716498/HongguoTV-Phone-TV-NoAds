@@ -1039,10 +1039,11 @@ class LocalStore extends ChangeNotifier {
     });
   }
 
-  Future<void> saveWatch(WatchEntry entry) {
+  Future<void> saveWatch(WatchEntry entry, {bool quiet = false}) {
     final epoch = _epoch;
     return _queue(() async {
       if (!allowsSource(entry.drama.source) || epoch != _epoch) return;
+      final latest = _history.values.firstOrNull;
       final previous = _history[entry.drama.id]?.drama;
       final current = previous == null
           ? entry
@@ -1065,6 +1066,18 @@ class LocalStore extends ChangeNotifier {
           current.drama,
         );
       }
+      final changed =
+          !quiet ||
+          latest == null ||
+          latest.drama.id != current.drama.id ||
+          latest.episode != current.episode ||
+          jsonEncode(latest.drama.toJson()) !=
+              jsonEncode(current.drama.toJson()) ||
+          (following != null &&
+              (jsonEncode(following.toJson()) !=
+                      jsonEncode(states[entry.drama.id]!.toJson()) ||
+                  jsonEncode(_favorites[entry.drama.id]!.toJson()) !=
+                      jsonEncode(favorites[entry.drama.id]!.toJson())));
       await _commit({
         _key('history'): jsonEncode(
           sorted.take(300).map((entry) => entry.toJson()).toList(),
@@ -1077,7 +1090,7 @@ class LocalStore extends ChangeNotifier {
         },
       }, syncUrgent: false);
       _loadLibrary();
-      _notify();
+      if (changed) _notify();
     });
   }
 

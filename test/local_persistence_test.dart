@@ -60,6 +60,92 @@ void main() {
   }
 
   test(
+    'quiet progress persists and updates sync without rebuilding unchanged history',
+    () async {
+      final (store, platform) = await create();
+      var notifications = 0;
+      store.addListener(() => notifications++);
+      var second = 0;
+      Future<void> save(Drama item, {int episode = 1, bool quiet = true}) =>
+          store.saveWatch(
+            WatchEntry(
+              drama: item,
+              episode: episode,
+              position: (++second).toDouble(),
+              duration: 100,
+              updatedAt: DateTime(2026, 11, 11, 0, 0, second),
+            ),
+            quiet: quiet,
+          );
+      await save(drama);
+      expect(notifications, 1);
+      final revision = store.lanRevision;
+      await save(drama);
+      expect(notifications, 1);
+      expect(store.lanRevision, greaterThan(revision));
+      expect(store.watched(drama.id)?.position, 2);
+      expect((await restart(platform)).watched(drama.id)?.position, 2);
+      await save(drama, episode: 2);
+      expect(notifications, 2);
+      await save(next);
+      expect(notifications, 3);
+      await save(drama, episode: 2);
+      expect(notifications, 4);
+      await save(drama, episode: 2, quiet: false);
+      expect(notifications, 5);
+      platform.failure = 'false';
+      await expectLater(save(drama, episode: 2), throwsStateError);
+      expect(notifications, 5);
+      expect(store.watched(drama.id)?.position, 6);
+      expect((await restart(platform)).watched(drama.id)?.position, 6);
+    },
+  );
+
+  test(
+    'quiet progress still announces metadata and followed completion changes',
+    () async {
+      final (store, _) = await create();
+      const item = Drama(
+        id: 'hongguo:quiet',
+        source: 'hongguo',
+        title: '样例',
+        episodes: 2,
+      );
+      await store.toggleFavorite(item);
+      var notifications = 0;
+      store.addListener(() => notifications++);
+      Future<void> save(Drama drama, double position) => store.saveWatch(
+        WatchEntry(
+          drama: drama,
+          episode: 2,
+          position: position,
+          duration: 100,
+          updatedAt: DateTime(
+            2026,
+            11,
+            11,
+          ).add(Duration(seconds: position.toInt())),
+        ),
+        quiet: true,
+      );
+      await save(item, 10);
+      expect(notifications, 1);
+      await save(item, 20);
+      expect(notifications, 1);
+      await save(item, 100);
+      expect(notifications, 2);
+      const renamed = Drama(
+        id: 'hongguo:quiet',
+        source: 'hongguo',
+        title: '样例新标题',
+        episodes: 2,
+      );
+      await save(renamed, 100);
+      expect(notifications, 3);
+    },
+  );
+
+  test(
     'danmaku speed migrates safely and survives restart and backup',
     () async {
       final old = PlaybackPreferences.fromJson({'speed': 1.5});

@@ -142,6 +142,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   bool _handoffOwned = true;
   double? _lanFirstPosition;
   String? _savedProgressKey;
+  bool _savedQuietly = false;
   final _health = PlaybackHealth();
   Timer? _saveTimer;
   Timer? _windowsVolumeTimer;
@@ -585,7 +586,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
     _saveTimer = Timer.periodic(
       const Duration(seconds: 5),
-      (_) => _saveProgress(),
+      (_) => _saveProgress(quiet: true),
     );
     _healthTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       _syncScreenOn();
@@ -2345,6 +2346,7 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Future<void> _saveProgress({
     bool flush = false,
+    bool quiet = false,
     DramaDetail? snapshotDetail,
     int? snapshotIndex,
     Duration? snapshotPosition,
@@ -2382,7 +2384,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     final store = widget.store;
     final progressKey =
         '${widget.mediaId ?? openedDetail.drama.id}:$openedIndex:$position:$duration';
-    if (_savedProgressKey == progressKey && _saveWarning == null) {
+    if (_savedProgressKey == progressKey &&
+        _saveWarning == null &&
+        (quiet || !_savedQuietly)) {
       if (flush && widget.mediaId == null) LanController.current?.flush();
       return;
     }
@@ -2397,7 +2401,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       final pending = _progressWrites.catchError((Object _) {}).then((_) async {
         if (store.profileEpoch != _profileEpoch) return;
         if (widget.mediaId == null) {
-          await store.saveWatch(entry);
+          await store.saveWatch(entry, quiet: quiet);
           if (flush) LanController.current?.flush();
         } else {
           await store.saveMediaWatch(widget.mediaId!, entry);
@@ -2406,6 +2410,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       _progressWrites = pending;
       await pending;
       _savedProgressKey = progressKey;
+      _savedQuietly = quiet;
       if (mounted && !_closed && _saveWarning != null) {
         setState(() => _saveWarning = null);
       }

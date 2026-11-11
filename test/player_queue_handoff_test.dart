@@ -314,13 +314,13 @@ class _HeldWatchStore extends LocalStore {
   final releaseWrite = Completer<void>();
 
   @override
-  Future<void> saveWatch(WatchEntry entry) async {
+  Future<void> saveWatch(WatchEntry entry, {bool quiet = false}) async {
     if (holdTailWrite && entry.episode == 1 && entry.position == 119) {
       holdTailWrite = false;
       writeStarted.complete();
       await releaseWrite.future;
     }
-    await super.saveWatch(entry);
+    await super.saveWatch(entry, quiet: quiet);
   }
 }
 

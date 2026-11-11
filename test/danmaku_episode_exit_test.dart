@@ -133,6 +133,52 @@ Offset _textOrigin(WidgetTester tester, Finder motion) => tester.getTopLeft(
 );
 
 void main() {
+  for (final mode in ['mobile', 'tv']) {
+    testWidgets(
+      '$mode live and retiring motion share one ticker without frame builds',
+      (tester) async {
+        final harness = _ExitHarness(mode);
+        await harness.mount(tester);
+        final live = find.byKey(const ValueKey('danmaku-motion-shared'));
+        final before = _textOrigin(tester, live).dx;
+        final previousHook = debugOnRebuildDirtyWidget;
+        var builds = 0;
+        debugOnRebuildDirtyWidget = (element, builtOnce) {
+          previousHook?.call(element, builtOnce);
+          if (element.findAncestorWidgetOfExactType<DanmakuOverlay>() != null) {
+            builds++;
+          }
+        };
+        try {
+          for (var frame = 0; frame < 12; frame++) {
+            await harness.advance(tester, const Duration(milliseconds: 16));
+            expect(tester.binding.transientCallbackCount, 1);
+          }
+          expect(builds, 0);
+          expect(_textOrigin(tester, live).dx, lessThan(before));
+          harness.controller.setPlan(null);
+          await harness.select('B');
+          await tester.pump();
+          final retiring = _exitText('A flight');
+          expect(retiring, findsOneWidget);
+          final exitBefore = _textOrigin(tester, retiring).dx;
+          builds = 0;
+          for (var frame = 0; frame < 12; frame++) {
+            await harness.advance(tester, const Duration(milliseconds: 16));
+            expect(tester.binding.transientCallbackCount, 1);
+          }
+          expect(builds, 0);
+          expect(_textOrigin(tester, retiring).dx, lessThan(exitBefore));
+        } finally {
+          debugOnRebuildDirtyWidget = previousHook;
+        }
+        await tester.pumpWidget(const SizedBox.shrink());
+        expect(tester.binding.transientCallbackCount, 0);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   for (final mode in ['mobile', 'tv', 'legacy']) {
     for (final speed in [1.0, 1.5]) {
       testWidgets(
