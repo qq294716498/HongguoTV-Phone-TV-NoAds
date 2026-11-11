@@ -69,6 +69,7 @@ class FollowUpdates extends ChangeNotifier {
             knownDramas: store.seriesDramasFor(drama),
             isCurrent: stillCurrent,
             trustKnownNext: false,
+            requirePlayableDetail: false,
             force: force,
           );
           if (!current()) return;

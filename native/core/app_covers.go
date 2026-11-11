@@ -242,6 +242,9 @@ func (cache *nativeCoverCache) download(ctx context.Context, address, referer st
 }
 
 func nativeDecodeCover(data []byte) []byte {
+	if image, ok := nativeDecodeTextCover(data); ok {
+		return image
+	}
 	if nativeIsCoverImage(data) {
 		return data
 	}

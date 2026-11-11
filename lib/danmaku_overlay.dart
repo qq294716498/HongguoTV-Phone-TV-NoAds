@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
 import 'danmaku_controller.dart';
-import 'portrait_video_frame.dart';
 import 'danmaku_emoji_render.dart';
 import 'danmaku_exit_motion.dart';
 import 'danmaku_models.dart';
@@ -503,31 +502,18 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
             final aspect = widget.aspectRatio.isFinite && widget.aspectRatio > 0
                 ? widget.aspectRatio
                 : 16 / 9;
-            final videoRect = _mobile && widget.topAlignedLandscapeVideo
-                ? portraitLandscapeVideoRect(
-                    constraints.biggest,
-                    aspect,
-                    verticalOffset: PortraitVideoPosition.of(context),
-                    padding: MediaQuery.paddingOf(context),
-                    textScaler: MediaQuery.textScalerOf(context),
-                  )
-                : null;
-            final width =
-                videoRect?.width ??
-                (_mobile
-                    ? constraints.maxWidth
-                    : math.min(
-                        constraints.maxWidth,
-                        constraints.maxHeight * aspect,
-                      ));
-            final height =
-                videoRect?.height ??
-                (_mobile
-                    ? constraints.maxHeight
-                    : math.min(
-                        constraints.maxHeight,
-                        constraints.maxWidth / aspect,
-                      ));
+            final width = _mobile
+                ? constraints.maxWidth
+                : math.min(
+                    constraints.maxWidth,
+                    constraints.maxHeight * aspect,
+                  );
+            final height = _mobile
+                ? constraints.maxHeight
+                : math.min(
+                    constraints.maxHeight,
+                    constraints.maxWidth / aspect,
+                  );
             final fontSize = _mobile
                 ? 16.0
                 : widget.television
@@ -538,10 +524,10 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
             final lifetimeMs = widget.television
                 ? 32000
                 : (danmakuLifetimeMs / danmakuBaselineSpeed).round();
-            final topInset = videoRect != null
-                ? 8.0
-                : _mobile
-                ? 64.0
+            final topInset = _mobile
+                ? (height > width
+                      ? MediaQuery.paddingOf(context).top + 8.0
+                      : 64.0)
                 : widget.television
                 ? 12.0
                 : 8.0;
@@ -550,13 +536,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
             ).clamp(maxScaleFactor: 1.15);
             final rowHeight = scaler.scale(fontSize) * (_mobile ? 1.75 : 1.5);
             final rows =
-                ((height *
-                                (videoRect != null
-                                    ? .65
-                                    : widget.television
-                                    ? .18
-                                    : .38) -
-                            topInset) /
+                ((height * (widget.television ? .18 : .38) - topInset) /
                         rowHeight)
                     .floor()
                     .clamp(0, _mobile ? 4 : (widget.television ? 2 : 3));
@@ -579,14 +559,12 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
                 ),
               ],
             );
-            _viewport =
-                videoRect ??
-                Rect.fromLTWH(
-                  (constraints.maxWidth - width) / 2,
-                  (constraints.maxHeight - height) / 2,
-                  width,
-                  height,
-                );
+            _viewport = Rect.fromLTWH(
+              (constraints.maxWidth - width) / 2,
+              (constraints.maxHeight - height) / 2,
+              width,
+              height,
+            );
             _topInset = topInset;
             _rowHeight = rowHeight;
             final live = Positioned.fromRect(

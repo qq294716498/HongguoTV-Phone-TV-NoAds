@@ -185,7 +185,7 @@ void main() {
         final rect = tester.getRect(
           find.byKey(ValueKey('danmaku-item-1001-0-$lane')),
         );
-        expect(rect.top, 64 + lane * 28);
+        expect(rect.top, 8 + lane * 28);
         expect(rect.bottom, lessThan((880 - 420 / (16 / 9)) / 2));
       }
       expect(find.byKey(const ValueKey('danmaku-item-1001-0-4')), findsNothing);
@@ -199,7 +199,7 @@ void main() {
   );
 
   testWidgets(
-    'top aligned landscape video keeps mobile lanes in its upper area',
+    'portrait lanes stay at the screen top independently of video placement',
     (tester) async {
       await mount(tester, topAlignedLandscapeVideo: true);
       final state = tester.state(find.byType(DanmakuOverlay));
@@ -207,10 +207,7 @@ void main() {
         final rect = tester.getRect(
           find.byKey(ValueKey('danmaku-item-1001-0-$lane')),
         );
-        expect(
-          rect.top,
-          closeTo((880 - 420 / (16 / 9)) / 2 - 880 * .08 + 8 + lane * 28, .001),
-        );
+        expect(rect.top, closeTo(8 + lane * 28, .001));
         expect(
           rect.bottom,
           lessThan(
@@ -226,7 +223,7 @@ void main() {
       expect(x(tester), closeTo(before, .1));
       expect(
         tester.getRect(find.byKey(const ValueKey('danmaku-item-1001-0-0'))).top,
-        64,
+        8,
       );
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());

@@ -100,6 +100,38 @@ class TrackedLookupSession extends SeasonLookupSession {
 }
 
 void main() {
+  test('checks first pages before paging a weaker query', () async {
+    final repository = LookupRepository();
+    repository.onCatalog = (query, page) async {
+      if (repository.queries.length == 1) return CatalogPage([], hasMore: true);
+      return CatalogPage([next]);
+    };
+    final result = await NextSeasonResolver(
+      repository,
+    ).lookup(anchor, knownDramas: [], isCurrent: () => true);
+    expect(result.next?.id, next.id);
+    expect(repository.queries.map((call) => call.$2), [1, 1]);
+  });
+
+  test(
+    'follow checks avoid full episode detail after verified metadata',
+    () async {
+      final repository = LookupRepository();
+      final ready = Drama.fromJson({...next.toJson(), 'episodes': 40});
+      repository.onCatalog = (query, page) async => CatalogPage([ready]);
+      final result = await NextSeasonResolver(repository).lookup(
+        anchor,
+        knownDramas: [],
+        isCurrent: () => true,
+        requirePlayableDetail: false,
+      );
+      expect(result.next?.id, next.id);
+      expect(repository.detailIds, isEmpty);
+      expect(result.detail, isNull);
+      expect(repository.queries, hasLength(1));
+    },
+  );
+
   TestWidgetsFlutterBinding.ensureInitialized();
 
   Future<NextSeasonLookupResult> lookup(

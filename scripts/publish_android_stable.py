@@ -14,15 +14,15 @@ root = Path(__file__).resolve().parents[1]
 output = root / 'dist/android'
 repository = 'qq294716498/HongguoTV-Phone-TV-NoAds'
 certificate = '55c3c3395a00e56e99b8bfd580b14c99618da74db19692a2e42606eb05c47ba9'
-windows_tag = 'windows-v0.1.48-74'
-windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48', 'windows-v0.1.24-49', 'windows-v0.1.25-50', 'windows-v0.1.29-54', 'windows-v0.1.30-55', 'windows-v0.1.31-56', 'windows-v0.1.32-57', 'windows-v0.1.34-59', 'windows-v0.1.38-63', 'windows-v0.1.39-64', 'windows-v0.1.43-68', 'windows-v0.1.46-71', windows_tag)
-previous_android_tag = 'app-v0.1.46-71'
-previous_android_commit = '6799ab8b0fb317e73d6dd3c49da860bdc0880f55'
+windows_tag = 'windows-v0.1.49-84'
+windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48', 'windows-v0.1.24-49', 'windows-v0.1.25-50', 'windows-v0.1.29-54', 'windows-v0.1.30-55', 'windows-v0.1.31-56', 'windows-v0.1.32-57', 'windows-v0.1.34-59', 'windows-v0.1.38-63', 'windows-v0.1.39-64', 'windows-v0.1.43-68', 'windows-v0.1.46-71', 'windows-v0.1.48-74', windows_tag)
+previous_android_tag = 'app-v0.1.48-74'
+previous_android_commit = 'ca5a75106b2b7c2efb9ec0b180992fdf48bb941d'
 pending_publication_note = '公开发布核验进行中：尚未完成三 ABI 公网下载、签名复核及 Android / Windows 升级通道隔离检查。'
 verified_publication_note = '公开发布核验已完成：三 ABI 公网下载、SHA-256、正式证书与版本复核通过；Android Latest 和 Windows 升级通道隔离、旧版本资产保持检查通过。'
 windows_verified_publication_note = '公开发布核验已完成：Windows 公网 ZIP 下载与 SHA-256、正式升级通道和 API 限流回退检查通过；Android Latest 隔离及旧版本资产保持检查通过。'
 offsets = {'arm64-v8a': 2000, 'armeabi-v7a': 1000, 'x86_64': 4000}
-release_branch = 'release/windows-android-0.1.48-74'
+release_branch = 'release/windows-android-0.1.49-84'
 approved_source = 'ffe63c54f530bc97cc7a7fd62f2c5c10b81e60fa'
 release_only_paths = frozenset({
     'README.md', '.github/workflows/android-stable.yml',
@@ -55,16 +55,7 @@ def github(*arguments):
 
 
 def release_description(version):
-    return (
-        f'红果TV Android {version} · 手机 / Android TV\n\n'
-        '- 切换下一集时，已在屏上的旧弹幕沿原方向短时平滑加速退场；旧弹幕不重新排入新集时间轴，视频切换不等待弹幕动画。暂停、连续快速切集、关闭弹幕和退出页面按独立生命周期处理。\n'
-        '- 隐藏播放控件不再随进度和缓冲位置反复重建；弹幕跳过完全重复通知，轨道可用后再测量新文字。保留弹幕功能、运动规则与默认设置，不通过关闭弹幕、无缝续播或降低清晰度掩盖故障。\n'
-        '- 播放日记增加原生实际倍速、音调、音频解码器、欠载和时间线信息；累计计数标明播放器生命周期，不将其当成实际声画偏移。倍速设置失败不再假报成功，错误信息脱敏，迟到命令不覆盖新设置。\n'
-        '- 同一追剧记录的续播同步优先保留最高季、同季最高集，选取完整进度；同季同集采用最近修改。手动及自动同步共用规则，两端需升级；主动清空和取消追剧仍生效，不强行归并不同版本或无法可靠识别的季数。\n'
-        '- 正式构建号 74 高于测试版 0.1.48-test.1+73，三 ABI 继续使用 com.hongguo.tv 和既有正式证书，支持从对应架构的测试版覆盖升级并保留数据。最低 Android 8.0 保持。\n'
-        '- 保留连续自动续播的媒体代次与片尾校验、唯一播放器队列及安全暂停预取、灰白“已追剧”角标、TV 多行布局、全季封面搜索和遥控长按定位。\n'
-        '\n用户已反馈测试版 0.1.48-test.1+73 在其设备恢复音画同步；该反馈不代表所有设备或片源。构建、默认及全站源回归、Android 原生 JVM 和三 ABI 签名完整性检查由发布门禁验证，详细结果见随附报告；不保证所有设备绝对平滑或物理音画零间隙。\n'
-    )
+    return '优化之前无法播放\n'
 
 
 def release(tag):
@@ -73,7 +64,7 @@ def release(tag):
 
 def finalize_release_notes(tag):
     published = release(tag)
-    if tag != 'app-v0.1.48-74' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
+    if tag != 'app-v0.1.49-84' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
         raise ValueError('Only the current verified Android stable release notes may be finalized')
     body = published['body']
     if body.count(pending_publication_note) != 1:
@@ -165,8 +156,8 @@ def main():
     os.chdir(root)
     version, raw_build = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(), re.M).group(1).split('+')
     build = int(raw_build)
-    if version != '0.1.48' or build != 74:
-        raise ValueError('This workflow only publishes Android 0.1.48+74')
+    if version != '0.1.49' or build != 84:
+        raise ValueError('This workflow only publishes Android 0.1.49+84')
     validate_release_source(os.environ['GITHUB_SHA'])
     tag = f'app-v{version}-{build}'
     phase = sys.argv[1]
@@ -194,7 +185,7 @@ def main():
                 raise ValueError('A newer or reserved Android build already exists')
         validate_android_player_report(read('Android-player-tests.json'), version, build, os.environ['GITHUB_SHA'])
         write('Release-before.json', {'android': snapshot(latest), 'windows': validated_windows_snapshots(os.environ['GITHUB_SHA'])})
-        subprocess.run([sys.executable, 'scripts/finish_task.py', '--message', 'Android 0.1.48 弹幕切集平滑退场、播放性能与真实诊断、最高季最高集同步；三ABI原签名和原生回归通过，用户私测反馈不代表全部设备'], check=True)
+        subprocess.run([sys.executable, 'scripts/finish_task.py', '--message', 'Android 0.1.49 弹幕切集平滑退场、播放性能与真实诊断、最高季最高集同步；三ABI原签名和原生回归通过，用户私测反馈不代表全部设备'], check=True)
         subprocess.run([sys.executable, 'scripts/sync_source.py', '--check'], check=True)
         source = max(root.parent.glob('真果·鉴-*.zip'), key=lambda p: p.stat().st_mtime_ns)
         source_package = output / f'HongguoTV-{version}-source.zip'

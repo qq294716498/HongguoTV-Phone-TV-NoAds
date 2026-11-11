@@ -2,7 +2,15 @@
 
 基于 [guoapp](https://github.com/zhoufuweigg/guoapp) 的非官方独立客户端。手机与 Android TV 共用 Android 应用，另提供 Windows x64 与 macOS 通用客户端；支持浏览、搜索、播放、弹幕、追剧和下载。
 
-## 0.1.49-test.9+83（ByteVC2 选择与兼容取流，本地未打包候选）
+## 0.1.49+84（正式发布候选）
+
+用户已确认 test.9 在其手机恢复目标剧集播放，并授权正式发布 Android、Windows、macOS。手机竖屏弹幕改为屏幕安全区顶部加 8 像素，不再跟随视频上移偏好；横屏与桌面显示规则保持。追剧下季检查优先轮询各定向查询第一页，已有可信相邻季和集数时不再等待完整选集详情；超过三部时最多三项并发，播放入口仍完整核验。笔盒源沿用 Xanerix/guoapp fa7d9486 的分类、搜索、详情与播放解析，保留现有受限站源解锁规则，不因请求拒绝轮换域名。
+
+本地集中验证：全站源 Flutter 1292 项通过、7 跳过，唯一旧站源数量断言修正后相关 14 项复验通过；全站源 Go 竞态回归通过；Python 135 项通过、19 跳过。分析无 error/warning。笔盒实际元数据请求返回 37 个分类、20 条目录记录（1.64 秒），未获取站源图片或执行真实视频播放。新增源的播放解析采用隔离响应测试；实体手机、TV、Windows GPU 与 Mac 真机未验收。macOS 保持既有精简站源构建。正式构建与公开下载核验尚未完成，不能视为已发布。公开版本说明按用户要求仅写“优化之前无法播放”。
+
+## 0.1.49-test.9+83（ByteVC2 选择与兼容取流，GitHub 测试候选）
+
+本轮用户已授权 GitHub 测试打包。仅推送 test/upstream-playback-0.1.49 分支，不更新 main、正式 Release 或自动更新。首次 CI 42929919064 因 app_layout.dart 的备用显示版本仍为 test.8 被测试拦截；已修正为 test.9 / 83，局部测试通过。当前源码提交 89a7f0abbcaa0bd6b00ba798275e72f23a6e3bae，CI 42930896201 两组 Flutter 分别 1288 / 1291 项通过（10 / 7 跳过）、两组原生 Go 竞态检查及 Android JVM 播放器回归通过。CI 全部成功，两个测试 APK 已上传，原签名证书、包名 com.hongguo.tv、版本、ABI、CRC 和 zip 对齐核验通过。ARM64 versionCode=2083，38,641,835 字节，SHA-256 d1a494ea69eae18b3d19c4b9731d52bcb41d20fc6a82b70291e344b994052e74，artifact 13817176647；ARMv7 versionCode=1083，47,237,875 字节，SHA-256 9a1d7c8b7477c881fa8e8291dacfb1fc17f02ff7823eb17162c447dd7e668b2d，artifact 13816249060。下载入口 https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/42930896201 ，构件保留至 2026-11-18，需登录 GitHub。未创建正式 Release，未更新自动更新入口；上述为 CI 包内检查，实体手机的目标剧集播放仍待用户验收。
 
 修正实际 codec_type 为 HEVC、档位描述 gear_des_key 含 bytevc2 时被误过滤的问题；同时识别顶层和 video_meta 编码字段以及 bvc2 别名。单集注册入口与多集备用入口共用选择路径，直接可播时不追加请求；只有全部档位明确为 ByteVC2，且服务返回可信 fallback_api，才在原始备用模型后最多尝试 codec_type=1、codec_type=0&force_codec=h264 两组兼容查询。保留其他查询参数原始编码，不重新注册、不篡改签名、不引入转码。兼容返回必须与原备用模型的媒体 ID 和完整时长一致，信息缺失、取消、HTTP 拒绝、Retry-After、业务错误或非编码故障均停止；仍全部 ByteVC2 时如实失败。补充备用模型顶层 spade_a 密钥处理，保留顶层返回中的 fallback_api 与身份信息。
 

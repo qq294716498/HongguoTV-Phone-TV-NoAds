@@ -14,10 +14,10 @@ BUILD_RUN = 0
 BUILD_COMMIT = ''
 SHA256 = ''
 RUNTIME_BASELINE = ''
-VERSION, BUILD = '0.1.48', 74
-TAG = 'macos-v0.1.48-74'
-PACKAGE = 'HongguoTV-0.1.48-macos-universal.zip'
-PROTECTED_TAGS = ('app-v0.1.48-74', 'windows-v0.1.48-74', 'macos-v0.1.34-59',
+VERSION, BUILD = '0.1.49', 84
+TAG = 'macos-v0.1.49-84'
+PACKAGE = 'HongguoTV-0.1.49-macos-universal.zip'
+PROTECTED_TAGS = ('app-v0.1.49-84', 'windows-v0.1.49-84', 'macos-v0.1.48-74', 'macos-v0.1.34-59',
                   'app-v0.1.46-71', 'windows-v0.1.46-71')
 JOBS = {'build', 'smoke (macos-15)', 'smoke (macos-15-intel)',
         'playback (macos-15)', 'playback (macos-15-intel)'}
@@ -282,25 +282,7 @@ def require_pins():
 
 
 def notes():
-    return f'''红果TV macOS {VERSION} · Apple 芯片 / Intel 通用版
-
-续播同步优先保留最高季、同季最高集；同季同集采用最近记录，保留本机主动重看、拖动和明确清空。不同版本或季数证据不足时不强行合并。
-
-切集时，屏上旧弹幕短暂平滑加速离屏，新集使用独立时间轴，不把旧内容重新排入新集，也不等待弹幕退场才播放。减少控件和弹幕的重复更新及无效测量，保留弹幕、单播放器和默认解码策略。
-
-包含此前的连续自动切集修复、灰白“已追剧”配色及多季浏览改进。Android 测试用户反馈其设备音画同步恢复，仅代表该设备；Mac 不能据此视为已经完成实体音画验收。
-
-两种架构分别完成三次普通 / 加密合成媒体启动自检及四集真实 PlayerScreen 自动续播检查，验证公共 / 原生时钟、交接身份、观看记录与单播放器。完整 Flutter 回归、静态检查和 Go race 通过；实际数量见附件报告。使用 Skia Metal，最低 macOS 13。
-
-下载 ZIP，解压后将 HongguoTV.app 移至“应用程序”。仅有 ad-hoc 本地签名，未做 Apple Developer ID 签名和公证。首次打开可能需要在“系统设置 → 隐私与安全性”允许。真实 Mac 硬件输出、上游内容播放及长期音画连续性仍待实机验收；云端合成测试不能替代实机验证。Mac 暂无应用内自动安装更新。
-
-{PENDING_NOTE}
-
-Android Latest、Windows 正式版及静态更新通道、旧 Mac 0.1.34 发布均保持不变。
-构建提交：{BUILD_COMMIT}
-发布源码：{source_commit()}
-构建 CI：https://github.com/{REPO}/actions/runs/{BUILD_RUN}
-'''
+    return f'优化之前无法播放\n\n{PENDING_NOTE}\n'
 
 
 def verify_public(output):

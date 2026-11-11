@@ -42,6 +42,7 @@ class NextSeasonResolver {
     required bool Function() isCurrent,
     bool trustKnownNext = true,
     bool force = false,
+    bool requirePlayableDetail = true,
   }) async {
     if (anchor.source != SourceSite.hongguo.id ||
         normalizedSearchText(anchor.title).isEmpty) {
@@ -254,6 +255,9 @@ class NextSeasonResolver {
         matches = [narrowed];
       }
       var candidate = matches.single;
+      if (!requirePlayableDetail && candidate.episodes > 0) {
+        return result(next: candidate);
+      }
       candidate = await withDetail(candidate);
       candidates[candidate.id] = candidate;
       final detail = details[candidate.id];
@@ -296,9 +300,9 @@ class NextSeasonResolver {
         ...targeted,
         broad,
       }.where((query) => normalizedSearchText(query).isNotEmpty);
-      for (final query in queries) {
-        var exhausted = false;
-        for (var page = 1; page <= 3; page++) {
+      final pending = queries.toSet();
+      for (var page = 1; page <= 3 && pending.isNotEmpty; page++) {
+        for (final query in pending.toList()) {
           checkCurrent();
           CatalogPage response;
           try {
@@ -312,7 +316,8 @@ class NextSeasonResolver {
             );
           } catch (error) {
             failed(error);
-            break;
+            pending.remove(query);
+            continue;
           }
           for (final fresh in response.items) {
             if (fresh.source != anchor.source) continue;
@@ -330,13 +335,12 @@ class NextSeasonResolver {
           final found = await verifiedNext();
           if (found != null) return found;
           if (!response.hasMore) {
-            exhausted = true;
-            break;
+            pending.remove(query);
           }
-          if (response.warning.isNotEmpty) break;
+          if (response.warning.isNotEmpty) pending.remove(query);
         }
-        if (!exhausted) incomplete = true;
       }
+      if (pending.isNotEmpty) incomplete = true;
       checkCurrent();
       return result(complete: !incomplete);
     } finally {
