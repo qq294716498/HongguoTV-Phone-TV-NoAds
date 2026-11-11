@@ -530,7 +530,7 @@ void main() {
       focusRemote(tester, card(1));
       await tester.pumpAndSettle();
       for (var step = 0; step < 12; step++) {
-        await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
         await tester.pumpAndSettle();
       }
       expect(card(13), findsOneWidget);
@@ -540,12 +540,12 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.select);
       await tester.pumpAndSettle();
       expect(details(13), findsOneWidget);
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
       await tester.pumpAndSettle();
       expect(
         focusedWithin(details(13)),
         true,
-        reason: 'Down enters the episode controls',
+        reason: 'Right enters the episode controls',
       );
       bool episodeFocused() => tester
           .widgetList<RemoteEpisodeButton>(find.byType(RemoteEpisodeButton))
@@ -559,8 +559,12 @@ void main() {
         true,
         reason: 'episode controls provide a Down path to episode buttons',
       );
-      for (var step = 0; step < 3 && !remoteFocused(tester, card(13)); step++) {
-        await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      for (
+        var step = 0;
+        step < 14 && !remoteFocused(tester, card(13));
+        step++
+      ) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
         await tester.pumpAndSettle();
       }
       expect(remoteFocused(tester, card(13)), true);
@@ -579,13 +583,13 @@ void main() {
       focusRemote(tester, card(1));
       await tester.pumpAndSettle();
       for (var step = 0; step < 3 && !focusedWithin(details(1)); step++) {
-        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
         await tester.pumpAndSettle();
       }
       expect(
         focusedWithin(details(1)),
         true,
-        reason: 'Down links the season column to episode controls',
+        reason: 'Right links the season column to episode controls',
       );
       for (var step = 0; step < 3; step++) {
         if (FocusManager.instance.primaryFocus?.debugLabel?.startsWith(
@@ -594,7 +598,7 @@ void main() {
             false) {
           break;
         }
-        await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
         await tester.pumpAndSettle();
       }
       expect(
@@ -868,6 +872,15 @@ void main() {
           isNotEmpty,
           reason: 'at least one complete episode target',
         );
+        if (spec.$3) {
+          final rows = fullEpisodes
+              .map(
+                (element) =>
+                    tester.getRect(find.byWidget(element.widget)).top.round(),
+              )
+              .toSet();
+          expect(rows.length, greaterThanOrEqualTo(3));
+        }
         final firstEpisodeRect = tester.getRect(
           find.byWidget(fullEpisodes.first.widget),
         );

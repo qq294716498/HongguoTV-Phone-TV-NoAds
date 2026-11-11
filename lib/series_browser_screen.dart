@@ -52,6 +52,7 @@ class _SeriesBrowserScreenState extends State<SeriesBrowserScreen> {
   bool _choosing = false;
   final _search = TextEditingController();
   final _seasonStrip = GlobalKey<SeriesSeasonStripState>();
+  final _episodeFocus = FocusScopeNode(debugLabel: 'all-seasons-episodes');
   Timer? _searchDelay;
   String _filter = '';
 
@@ -205,6 +206,7 @@ class _SeriesBrowserScreenState extends State<SeriesBrowserScreen> {
     _catalog.dispose();
     _searchDelay?.cancel();
     _search.dispose();
+    _episodeFocus.dispose();
     _detailSequence++;
     super.dispose();
   }
@@ -282,7 +284,7 @@ class _SeriesBrowserScreenState extends State<SeriesBrowserScreen> {
     icon: const Icon(Icons.refresh_rounded),
   );
 
-  Widget _seasonList({required bool narrowHeader}) {
+  Widget _seasonList({required bool narrowHeader, bool vertical = false}) {
     final entries = _catalog.entries;
     final visible = entries.where(_matches).toList();
     final television = AppLayout.isTelevision(context);
@@ -297,10 +299,31 @@ class _SeriesBrowserScreenState extends State<SeriesBrowserScreen> {
         .where((entry) => entry.drama.id == _selected.id)
         .firstOrNull;
     final hidden = visible.every((entry) => entry.drama.id != _selected.id);
+    final seasons = visible.isEmpty
+        ? const Center(child: Text('本系列中未找到匹配的季'))
+        : SeriesSeasonStrip(
+            key: _seasonStrip,
+            entries: visible,
+            selectedId: _selected.id,
+            repository: widget.repository,
+            autofocus: television,
+            vertical: vertical,
+            onEnterEpisodes: () {
+              final target = _episodeFocus.traversalDescendants
+                  .where((node) => node.canRequestFocus && !node.skipTraversal)
+                  .firstOrNull;
+              target?.requestFocus();
+            },
+            onSelected: (drama) {
+              if (_selected.id != drama.id || _detailError != null) {
+                unawaited(_selectSeason(drama));
+              }
+            },
+          );
     return Column(
       key: const ValueKey('all-seasons-panel'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
+      mainAxisSize: vertical ? MainAxisSize.max : MainAxisSize.min,
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 4, 8, 2),
@@ -335,27 +358,10 @@ class _SeriesBrowserScreenState extends State<SeriesBrowserScreen> {
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
-        if (visible.isEmpty)
-          SizedBox(
-            height: stripHeight,
-            child: const Center(child: Text('本系列中未找到匹配的季')),
-          )
+        if (vertical)
+          Expanded(child: seasons)
         else
-          SizedBox(
-            height: stripHeight,
-            child: SeriesSeasonStrip(
-              key: _seasonStrip,
-              entries: visible,
-              selectedId: _selected.id,
-              repository: widget.repository,
-              autofocus: television,
-              onSelected: (drama) {
-                if (_selected.id != drama.id || _detailError != null) {
-                  unawaited(_selectSeason(drama));
-                }
-              },
-            ),
-          ),
+          SizedBox(height: stripHeight, child: seasons),
         if (_catalog.loading)
           const Padding(
             padding: EdgeInsets.only(top: 4),
@@ -448,7 +454,7 @@ class _SeriesBrowserScreenState extends State<SeriesBrowserScreen> {
           child: EpisodeBrowser(
             key: ValueKey('all-season-episodes-${detail.drama.id}'),
             keyPrefix: 'all-season-episode',
-            denseDesktop: true,
+            denseDesktop: !AppLayout.isTelevision(context),
             episodes: detail.episodes,
             currentNumber: current,
             onSelected: (index) => _chooseEpisode(index),
@@ -493,11 +499,50 @@ class _SeriesBrowserScreenState extends State<SeriesBrowserScreen> {
                 child: LayoutBuilder(
                   builder: (context, constraints) {
                     final availableHeight = constraints.maxHeight + keyboard;
+                    final television = AppLayout.isTelevision(context);
                     final split =
                         constraints.maxWidth >= 700 &&
                         (availableHeight < 400 ||
                             availableHeight < 520 && scaler.scale(17) > 22);
-                    final content = split
+                    final content = television
+                        ? Row(
+                            key: const ValueKey('all-seasons-tv-split'),
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              SizedBox(
+                                width: (constraints.maxWidth * .3).clamp(
+                                  230.0,
+                                  340.0,
+                                ),
+                                child: _seasonList(
+                                  narrowHeader: narrow,
+                                  vertical: true,
+                                ),
+                              ),
+                              const VerticalDivider(width: 1),
+                              Expanded(
+                                child: FocusScope(
+                                  node: _episodeFocus,
+                                  child: Focus(
+                                    canRequestFocus: false,
+                                    onKeyEvent: (_, event) {
+                                      if ((event is KeyDownEvent ||
+                                              event is KeyRepeatEvent) &&
+                                          event.logicalKey ==
+                                              LogicalKeyboardKey.arrowLeft) {
+                                        _seasonStrip.currentState
+                                            ?.focusSelection();
+                                        return KeyEventResult.handled;
+                                      }
+                                      return KeyEventResult.ignored;
+                                    },
+                                    child: _episodes(),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          )
+                        : split
                         ? Row(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [

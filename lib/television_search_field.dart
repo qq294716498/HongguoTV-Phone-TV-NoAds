@@ -210,7 +210,7 @@ class _TelevisionSearchEditorState extends State<_TelevisionSearchEditor>
               ? field.decoration.copyWith(
                   enabledBorder: border.copyWith(
                     borderSide: BorderSide(
-                      color: theme.colorScheme.primary,
+                      color: theme.colorScheme.onSurface,
                       width: 3,
                     ),
                   ),

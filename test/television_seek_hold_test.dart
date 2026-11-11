@@ -152,6 +152,13 @@ void main() {
       expect(fixture.seeks, [const Duration(seconds: 330)]);
       expect(fixture.player.state.playing, true);
       expect(find.byKey(const ValueKey('tv-control-panel')), findsNothing);
+      await fixture.player.pause();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('tv-control-panel')), findsNothing);
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('tv-control-panel')), findsOneWidget);
+      expect(fixture.player.state.playing, false);
       await fixture.dispose(tester);
     },
   );
@@ -167,7 +174,7 @@ void main() {
       expect(fixture.player.state.playing, true);
       await tester.pump(const Duration(seconds: 3));
       expect(fixture.seeks, hasLength(1));
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('tv-control-panel')), findsOneWidget);
       expect(FocusManager.instance.primaryFocus?.debugLabel, 'tv-player-play');
@@ -193,7 +200,7 @@ void main() {
     final fixture = SeekHoldFixture();
     await fixture.mount(tester);
     await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('tv-control-panel')), findsOneWidget);
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'tv-player-play');
@@ -212,7 +219,7 @@ void main() {
     (tester) async {
       final fixture = SeekHoldFixture();
       await fixture.mount(tester, playing: false);
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.pumpAndSettle();
       for (final key in [
         LogicalKeyboardKey.mediaFastForward,

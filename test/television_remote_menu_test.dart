@@ -85,6 +85,10 @@ void main() {
       expect(find.byKey(const ValueKey('tv-seek-preview')), findsOneWidget);
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
       await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('tv-control-panel')), findsNothing);
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.pumpAndSettle();
+      expect(player.state.playing, false);
       expect(
         tester.getSize(find.byKey(const ValueKey('tv-control-panel'))).height,
         lessThan(190),

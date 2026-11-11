@@ -19,6 +19,8 @@ class SeriesSeasonStrip extends StatefulWidget {
     required this.repository,
     required this.onSelected,
     this.autofocus = false,
+    this.vertical = false,
+    this.onEnterEpisodes,
   });
 
   final List<HongguoSeriesEntry> entries;
@@ -26,6 +28,8 @@ class SeriesSeasonStrip extends StatefulWidget {
   final AppRepository repository;
   final ValueChanged<Drama> onSelected;
   final bool autofocus;
+  final bool vertical;
+  final VoidCallback? onEnterEpisodes;
 
   @override
   State<SeriesSeasonStrip> createState() => SeriesSeasonStripState();
@@ -130,9 +134,21 @@ class SeriesSeasonStripState extends State<SeriesSeasonStrip> {
     final index = widget.entries.indexWhere(
       (entry) => entry.drama.id == current,
     );
-    final offset = event.logicalKey == LogicalKeyboardKey.arrowRight
+    if (widget.vertical && event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      _generation++;
+      widget.onEnterEpisodes?.call();
+      return KeyEventResult.handled;
+    }
+    final offset =
+        event.logicalKey ==
+            (widget.vertical
+                ? LogicalKeyboardKey.arrowDown
+                : LogicalKeyboardKey.arrowRight)
         ? 1
-        : event.logicalKey == LogicalKeyboardKey.arrowLeft
+        : event.logicalKey ==
+              (widget.vertical
+                  ? LogicalKeyboardKey.arrowUp
+                  : LogicalKeyboardKey.arrowLeft)
         ? -1
         : 0;
     if (offset == 0 || index < 0) {
@@ -198,15 +214,19 @@ class SeriesSeasonStripState extends State<SeriesSeasonStrip> {
       final labelSize = television ? 17.0 : 15.0;
       final labelHeight = (scaler.scale(labelSize) * 1.3).ceilToDouble();
       final countHeight = (scaler.scale(13) * 1.3).ceilToDouble();
-      final coverHeight = math.max(
-        56.0,
-        constraints.maxHeight - labelHeight - countHeight - 22,
-      );
+      final coverHeight = widget.vertical
+          ? 96.0
+          : math.max(
+              56.0,
+              constraints.maxHeight - labelHeight - countHeight - 22,
+            );
       final width = math.max(
         coverHeight * 2 / 3 + 16,
         scaler.scale(labelSize) * 5 + 16,
       );
-      _extent = width + 8;
+      _extent = widget.vertical
+          ? math.max(124, labelHeight + countHeight + 36)
+          : width + 8;
       final colors = Theme.of(context).colorScheme;
       return Focus(
         canRequestFocus: false,
@@ -215,15 +235,81 @@ class SeriesSeasonStripState extends State<SeriesSeasonStrip> {
         child: ListView.builder(
           key: const ValueKey('all-season-cover-scroll'),
           controller: _scroll,
-          scrollDirection: Axis.horizontal,
+          scrollDirection: widget.vertical ? Axis.vertical : Axis.horizontal,
           itemExtent: _extent,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+          padding: widget.vertical
+              ? const EdgeInsets.all(12)
+              : const EdgeInsets.symmetric(horizontal: 12),
           itemCount: widget.entries.length,
           itemBuilder: (context, index) {
             final entry = widget.entries[index];
             final selected = entry.drama.id == widget.selectedId;
+            final cover = SizedBox(
+              height: coverHeight,
+              width: coverHeight * 2 / 3,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  DramaCover(
+                    key: ValueKey('all-season-cover-${entry.drama.id}'),
+                    drama: entry.drama,
+                    repository: widget.repository,
+                    radius: 8,
+                    showMetadata: false,
+                  ),
+                  if (selected)
+                    Align(
+                      alignment: Alignment.topRight,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: colors.primary,
+                          borderRadius: BorderRadius.circular(7),
+                        ),
+                        child: Icon(
+                          Icons.check_rounded,
+                          size: 16,
+                          color: colors.onPrimary,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            );
+            final labels = <Widget>[
+              SizedBox(
+                height: labelHeight,
+                child: Text(
+                  entry.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: labelSize,
+                    height: 1.3,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    color: selected ? colors.primary : colors.onSurface,
+                  ),
+                ),
+              ),
+              SizedBox(
+                height: countHeight,
+                child: Text(
+                  entry.drama.episodes > 0
+                      ? '共 ${entry.drama.episodes} 集'
+                      : '集数待更新',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13,
+                    height: 1.3,
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ];
             return Padding(
-              padding: const EdgeInsets.only(right: 8),
+              padding: widget.vertical
+                  ? const EdgeInsets.only(bottom: 8)
+                  : const EdgeInsets.only(right: 8),
               child: Tooltip(
                 message: entry.drama.title,
                 child: RemoteTarget(
@@ -240,75 +326,27 @@ class SeriesSeasonStripState extends State<SeriesSeasonStrip> {
                   padding: const EdgeInsets.all(6),
                   borderWidth: television ? 3 : 2,
                   onPressed: () => widget.onSelected(entry.drama),
-                  child: Column(
-                    children: [
-                      SizedBox(
-                        height: coverHeight,
-                        width: coverHeight * 2 / 3,
-                        child: Stack(
-                          fit: StackFit.expand,
+                  child: widget.vertical
+                      ? Row(
                           children: [
-                            DramaCover(
-                              key: ValueKey(
-                                'all-season-cover-${entry.drama.id}',
+                            cover,
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: labels,
                               ),
-                              drama: entry.drama,
-                              repository: widget.repository,
-                              radius: 8,
-                              showMetadata: false,
                             ),
-                            if (selected)
-                              Align(
-                                alignment: Alignment.topRight,
-                                child: DecoratedBox(
-                                  decoration: BoxDecoration(
-                                    color: colors.primary,
-                                    borderRadius: BorderRadius.circular(7),
-                                  ),
-                                  child: Icon(
-                                    Icons.check_rounded,
-                                    size: 16,
-                                    color: colors.onPrimary,
-                                  ),
-                                ),
-                              ),
+                          ],
+                        )
+                      : Column(
+                          children: [
+                            cover,
+                            const SizedBox(height: 4),
+                            ...labels,
                           ],
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      SizedBox(
-                        height: labelHeight,
-                        child: Text(
-                          entry.label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: labelSize,
-                            height: 1.3,
-                            fontWeight: selected
-                                ? FontWeight.w700
-                                : FontWeight.w500,
-                            color: selected ? colors.primary : colors.onSurface,
-                          ),
-                        ),
-                      ),
-                      SizedBox(
-                        height: countHeight,
-                        child: Text(
-                          entry.drama.episodes > 0
-                              ? '共 ${entry.drama.episodes} 集'
-                              : '集数待更新',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 13,
-                            height: 1.3,
-                            color: colors.onSurfaceVariant,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
               ),
             );

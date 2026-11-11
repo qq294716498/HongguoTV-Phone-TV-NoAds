@@ -13,12 +13,13 @@ ThemeData televisionTheme(ThemeData theme) {
   final colors = theme.colorScheme;
   final focusSide = WidgetStateProperty.resolveWith<BorderSide?>(
     (states) => states.contains(WidgetState.focused)
-        ? BorderSide(color: colors.primary, width: 3)
+        ? BorderSide(color: colors.onSurface, width: 3)
         : null,
   );
   final focusBackground = WidgetStateProperty.resolveWith<Color?>(
-    (states) =>
-        states.contains(WidgetState.focused) ? colors.primaryContainer : null,
+    (states) => states.contains(WidgetState.focused)
+        ? colors.surfaceContainerHighest
+        : null,
   );
   final button = ButtonStyle(
     side: focusSide,
@@ -38,7 +39,7 @@ ThemeData televisionTheme(ThemeData theme) {
     inputDecorationTheme: theme.inputDecorationTheme.copyWith(
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide(color: colors.primary, width: 3),
+        borderSide: BorderSide(color: colors.onSurface, width: 3),
       ),
     ),
   );

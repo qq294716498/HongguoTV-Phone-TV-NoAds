@@ -600,13 +600,13 @@ void main() {
           tester
               .widget<EpisodeBrowser>(find.byType(EpisodeBrowser))
               .denseDesktop,
-          true,
+          !spec.$2,
         );
         final first = find.byKey(const ValueKey('all-season-episode-1'));
         final rect = tester.getRect(first);
-        expect(rect.width, lessThan(84));
+        expect(rect.width, lessThan(spec.$2 ? 140 : 84));
         expect(rect.height, greaterThanOrEqualTo(44));
-        expect(rect.height, lessThanOrEqualTo(48));
+        expect(rect.height, lessThanOrEqualTo(spec.$2 ? 64 : 48));
         expect(tester.widget<RemoteEpisodeButton>(first).current, true);
         final label = find.descendant(of: first, matching: find.text('1'));
         expect(tester.getCenter(label).dx, closeTo(rect.center.dx, 1));
@@ -755,7 +755,7 @@ void main() {
     final season = find.byKey(ValueKey('all-season-${firstSeason.id}'));
     tester.widget<RemoteTarget>(season).focusNode!.requestFocus();
     await tester.pump();
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pumpAndSettle();
     expect(

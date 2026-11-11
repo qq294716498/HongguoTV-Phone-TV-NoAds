@@ -253,8 +253,7 @@ void main() {
       await settle(tester);
       expect(find.byKey(const ValueKey('tv-play-pause')), findsNothing);
       await press(tester, LogicalKeyboardKey.select);
-      expect(player.state.playing, isFalse);
-      await press(tester, LogicalKeyboardKey.select);
+      expect(player.state.playing, isTrue);
       await tester.pump(const Duration(seconds: 6));
       await settle(tester);
       await press(tester, LogicalKeyboardKey.arrowRight);
@@ -262,7 +261,7 @@ void main() {
       await press(tester, LogicalKeyboardKey.arrowLeft);
       await press(tester, LogicalKeyboardKey.arrowLeft);
       expect(player.state.position, Duration.zero);
-      await press(tester, LogicalKeyboardKey.arrowUp);
+      await press(tester, LogicalKeyboardKey.arrowDown);
       expect(FocusManager.instance.primaryFocus?.debugLabel, 'tv-player-play');
       await press(tester, LogicalKeyboardKey.arrowUp);
       expect(
@@ -313,7 +312,7 @@ void main() {
         FocusManager.instance.primaryFocus?.debugLabel,
         'tv-player-surface',
       );
-      await press(tester, LogicalKeyboardKey.arrowUp);
+      await press(tester, LogicalKeyboardKey.arrowDown);
       focusRemote(tester, find.byKey(const ValueKey('tv-settings')));
       await settle(tester);
       await player.seek(const Duration(seconds: 28));

@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 
 import 'package:flutter/services.dart';
 
+import 'app_layout.dart';
+
 Future<T?> showRemoteChoice<T>({
   required BuildContext context,
   required String title,
@@ -141,6 +143,7 @@ class _RemoteTargetState extends State<RemoteTarget> {
         button: true,
         enabled: widget.onPressed != null,
         focused: _focused,
+        selected: widget.selected,
         label: widget.label,
         child: MouseRegion(
           cursor: widget.onPressed == null
@@ -158,18 +161,26 @@ class _RemoteTargetState extends State<RemoteTarget> {
                     : _focused && widget.outlined
                     ? Theme.of(context).colorScheme.surfaceContainerHighest
                     : _focused
-                    ? Theme.of(context).colorScheme.primaryContainer
+                    ? (AppLayout.isTelevision(context)
+                          ? Theme.of(
+                              context,
+                            ).colorScheme.surfaceContainerHighest
+                          : Theme.of(context).colorScheme.primaryContainer)
                     : Colors.transparent,
                 borderRadius: BorderRadius.circular(widget.radius),
                 border: Border.all(
                   color: _focused
-                      ? Theme.of(context).colorScheme.primary
+                      ? (AppLayout.isTelevision(context)
+                            ? Theme.of(context).colorScheme.onSurface
+                            : Theme.of(context).colorScheme.primary)
                       : widget.selected
                       ? Theme.of(context).colorScheme.primary
                       : widget.outlined
                       ? Theme.of(context).colorScheme.outlineVariant
                       : Colors.transparent,
-                  width: widget.borderWidth,
+                  width: AppLayout.isTelevision(context)
+                      ? math.max(3, widget.borderWidth)
+                      : widget.borderWidth,
                 ),
               ),
               child: ExcludeFocus(child: widget.child),
@@ -602,6 +613,7 @@ class _TelevisionSearchDialogState extends State<TelevisionSearchDialog> {
   List<String> _results = [];
   bool _searching = false;
   Timer? _debounce;
+  int _generation = 0;
 
   static const _keys = [
     'A',
@@ -653,6 +665,8 @@ class _TelevisionSearchDialogState extends State<TelevisionSearchDialog> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _generation++;
+    widget.onCancel?.call();
     super.dispose();
   }
 
@@ -674,12 +688,17 @@ class _TelevisionSearchDialogState extends State<TelevisionSearchDialog> {
         _query = '';
         _results = [];
       });
-      _debounce?.cancel();
+      _onQueryChanged();
     }
   }
 
   void _onQueryChanged() {
     _debounce?.cancel();
+    _generation++;
+    setState(() {
+      _results = [];
+      _searching = false;
+    });
     final trimmed = _query.trim();
     if (trimmed.isEmpty) {
       setState(() => _results = []);
@@ -692,27 +711,26 @@ class _TelevisionSearchDialogState extends State<TelevisionSearchDialog> {
 
   Future<void> _fetchSuggestions(String text) async {
     if (widget.suggestions == null) return;
+    final generation = _generation;
     setState(() => _searching = true);
     try {
       final list = await widget.suggestions!(text);
-      if (mounted) {
+      if (mounted && generation == _generation) {
         setState(() {
           _results = list;
           _searching = false;
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _searching = false);
+      if (mounted && generation == _generation) {
+        setState(() => _searching = false);
+      }
     }
   }
 
   void _submit(String text) {
-    var target = text.trim();
+    final target = text.trim();
     if (target.isEmpty) return;
-    // 若用户输入纯拼音头字母且已成功联想出短剧，直接点击搜索时优先取第一部短剧全名
-    if (_results.isNotEmpty && RegExp(r'^[a-zA-Z0-9]+$').hasMatch(target)) {
-      target = _results.first;
-    }
     Navigator.pop(context, target);
   }
 
@@ -795,39 +813,47 @@ class _TelevisionSearchDialogState extends State<TelevisionSearchDialog> {
                 children: [
                   // 左侧全字母/数字虚拟键盘
                   SizedBox(
-                    width: 440,
+                    width: math.min(
+                      440,
+                      (MediaQuery.sizeOf(context).width - 170) * .55,
+                    ),
                     child: Column(
                       children: [
                         Expanded(
-                          child: GridView.builder(
-                            physics: const NeverScrollableScrollPhysics(),
-                            gridDelegate:
-                                const SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 6,
-                                  mainAxisSpacing: 8,
-                                  crossAxisSpacing: 8,
-                                  childAspectRatio: 1.4,
-                                ),
-                            itemCount: _keys.length,
-                            itemBuilder: (context, index) {
-                              final char = _keys[index];
-                              return RemoteTarget(
-                                key: ValueKey('tv-key-$char'),
-                                autofocus: index == 0,
-                                radius: 10,
-                                padding: EdgeInsets.zero,
-                                onPressed: () => _onKeyPress(char),
-                                child: Center(
-                                  child: Text(
-                                    char,
-                                    style: const TextStyle(
-                                      fontSize: 19,
-                                      fontWeight: FontWeight.bold,
+                          child: LayoutBuilder(
+                            builder: (context, constraints) => GridView.builder(
+                              physics: const NeverScrollableScrollPhysics(),
+                              gridDelegate:
+                                  SliverGridDelegateWithFixedCrossAxisCount(
+                                    crossAxisCount: 6,
+                                    mainAxisSpacing: 8,
+                                    crossAxisSpacing: 8,
+                                    mainAxisExtent: math.max(
+                                      30,
+                                      (constraints.maxHeight - 40) / 6,
                                     ),
                                   ),
-                                ),
-                              );
-                            },
+                              itemCount: _keys.length,
+                              itemBuilder: (context, index) {
+                                final char = _keys[index];
+                                return RemoteTarget(
+                                  key: ValueKey('tv-key-$char'),
+                                  autofocus: index == 0,
+                                  radius: 10,
+                                  padding: EdgeInsets.zero,
+                                  onPressed: () => _onKeyPress(char),
+                                  child: Center(
+                                    child: Text(
+                                      char,
+                                      style: const TextStyle(
+                                        fontSize: 19,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -926,7 +952,7 @@ class _TelevisionSearchDialogState extends State<TelevisionSearchDialog> {
                                       )
                                     : ListView.separated(
                                         itemCount: _results.length,
-                                        separatorBuilder: (_, __) =>
+                                        separatorBuilder: (_, _) =>
                                             const SizedBox(height: 6),
                                         itemBuilder: (context, index) {
                                           final item = _results[index];

@@ -197,7 +197,7 @@ void main() {
     expect(platform.opened, hasLength(2));
     expect(platform.state.playing, isTrue);
     expect(find.byKey(const ValueKey('tv-control-panel')), findsNothing);
-    await _press(tester, LogicalKeyboardKey.arrowUp);
+    await _press(tester, LogicalKeyboardKey.arrowDown);
     expect(find.byKey(const ValueKey('tv-control-panel')), findsOneWidget);
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'tv-player-play');
     expect(store.history.first.episode, 1);
@@ -248,7 +248,7 @@ void main() {
     await _settle(tester);
     expect(platform.opened, hasLength(2));
     _expectRecoveryActions(findsNothing);
-    await _press(tester, LogicalKeyboardKey.arrowUp);
+    await _press(tester, LogicalKeyboardKey.arrowDown);
     expect(find.byKey(const ValueKey('tv-control-panel')), findsOneWidget);
     await _dispose(tester, repository);
   });

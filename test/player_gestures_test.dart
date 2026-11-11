@@ -660,8 +660,11 @@ void main() {
       expect(find.byKey(const ValueKey('tv-play-pause')), findsNothing);
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pump();
-      expect(platform.state.playing, isTrue);
+      expect(platform.state.playing, isFalse);
       expect(FocusManager.instance.primaryFocus?.debugLabel, 'tv-player-play');
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      expect(platform.state.playing, isTrue);
       await tester.pumpWidget(const SizedBox.shrink());
       await player.dispose();
       await tester.pump();

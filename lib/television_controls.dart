@@ -125,8 +125,6 @@ class TelevisionControlsState extends State<TelevisionControls>
         }
         if (playing) {
           _scheduleHide();
-        } else {
-          _show();
         }
         setState(() {});
       }),
@@ -375,9 +373,10 @@ class TelevisionControlsState extends State<TelevisionControls>
           : 1;
       _seek(direction * (_repeatCount >= 6 ? 30 : 15));
     } else if ((!_visible || _surface.hasPrimaryFocus) &&
-        (key == LogicalKeyboardKey.arrowUp ||
-            key == LogicalKeyboardKey.arrowDown)) {
-      _show();
+        key == LogicalKeyboardKey.arrowDown) {
+      if (event is KeyDownEvent) _show();
+    } else if (!_visible && key == LogicalKeyboardKey.arrowUp) {
+      return KeyEventResult.handled;
     } else if ((!_visible || _surface.hasPrimaryFocus) &&
         [
           LogicalKeyboardKey.select,
@@ -385,7 +384,7 @@ class TelevisionControlsState extends State<TelevisionControls>
           LogicalKeyboardKey.numpadEnter,
           LogicalKeyboardKey.gameButtonA,
         ].contains(key)) {
-      if (event is KeyDownEvent) _togglePlayback();
+      if (event is KeyDownEvent) _show();
     } else {
       return KeyEventResult.ignored;
     }
