@@ -107,42 +107,7 @@ func (downloader *Downloader) resolveHongguoAppMedia(ctx context.Context, videoI
 			return providerMedia{}, errors.New("红果 App 接口未返回该集播放信息")
 		}
 	}
-	// 两种返回形态都要支持：直接给 video_list，或只给 fallback_api。
-	if hongguoModelHasVideoList(model) {
-		return selectHongguoAppMedia(model)
-	}
-	fallback := hongguoFallbackAddress(model["fallback_api"])
-	if fallback == "" {
-		return providerMedia{}, errors.New("红果 App 接口未返回本集片源地址")
-	}
-	outer, err := downloader.hongguoFallbackJSON(ctx, fallback)
-	if err != nil {
-		return providerMedia{}, err
-	}
-	info := nestedMap(outer, "video_info")
-	inner := nestedMap(info, "data")
-	if len(inner) == 0 {
-		inner = nestedMap(outer, "data")
-	}
-	if len(inner) == 0 {
-		return providerMedia{}, errors.New("红果 App 接口未返回本集片源模型")
-	}
-	var seed []byte
-	if encoded := strings.TrimSpace(mapString(inner, "key_seed")); encoded != "" {
-		decoded, decodeErr := decodeHongguoBase64(encoded)
-		if decodeErr != nil {
-			return providerMedia{}, errors.New("红果 App 媒体地址密钥无效")
-		}
-		seed = decoded
-	}
-	merged := make(map[string]any, len(inner)+len(model))
-	for key, value := range model {
-		merged[key] = value
-	}
-	for key, value := range inner {
-		merged[key] = value
-	}
-	return selectHongguoAppMedia(merged, seed)
+	return downloader.resolveHongguoModelMedia(ctx, model)
 }
 
 func hongguoFallbackAddress(value any) string {
@@ -218,6 +183,9 @@ func (downloader *Downloader) hongguoFallbackJSON(ctx context.Context, rawURL st
 		return nil, err
 	}
 	defer response.Body.Close()
+	if response.Header.Get("Retry-After") != "" {
+		return nil, errors.New("红果片源接口要求稍后重试")
+	}
 	content, err := io.ReadAll(io.LimitReader(response.Body, providerMaxBodyBytes+1))
 	if err != nil {
 		return nil, err
@@ -289,8 +257,11 @@ func selectHongguoAppMedia(model map[string]any, seeds ...[]byte) (providerMedia
 			continue
 		}
 		meta := nestedMap(variant, "video_meta")
-		codec := strings.ToLower(mapString(meta, "codec_type"))
-		if codec == "bytevc2" || strings.Contains(strings.ToLower(mapString(variant, "gear_des_key")), "bytevc2") {
+		codec := strings.ToLower(strings.TrimSpace(mapString(variant, "codec_type")))
+		if codec == "" {
+			codec = strings.ToLower(strings.TrimSpace(mapString(meta, "codec_type")))
+		}
+		if codec == "bytevc2" || codec == "bvc2" {
 			failure.unsupportedCodec++
 			continue
 		}
@@ -302,6 +273,9 @@ func selectHongguoAppMedia(model map[string]any, seeds ...[]byte) (providerMedia
 		media := providerMedia{Referer: "https://novel.snssdk.com/", Duration: time.Duration(duration * float64(time.Second))}
 		encryption := nestedMap(variant, "encrypt_info")
 		spade := mapString(encryption, "spade_a")
+		if spade == "" {
+			spade = mapString(variant, "spade_a")
+		}
 		if spade != "" || encryption["encrypt"] == true || mapString(encryption, "encryption_method") == "cenc-aes-ctr" {
 			var err error
 			media.CENCKey, err = hongguoContentKey(spade)

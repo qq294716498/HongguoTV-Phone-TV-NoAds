@@ -15,7 +15,7 @@ func (downloader *Downloader) resolveHongguoRegisteredMedia(ctx context.Context,
 	if err != nil {
 		return providerMedia{}, err
 	}
-	return selectHongguoAppMedia(model)
+	return downloader.resolveHongguoModelMedia(ctx, model)
 }
 
 func (downloader *Downloader) fetchHongguoRegisteredVideoModel(ctx context.Context, videoID string) (map[string]any, error) {
@@ -43,12 +43,8 @@ func (downloader *Downloader) fetchHongguoRegisteredVideoModel(ctx context.Conte
 		}
 	}
 	if len(model) == 0 {
-		if hongguoModelHasVideoList(data) {
-			model = map[string]any{
-				"video_list":     data["video_list"],
-				"video_duration": data["video_duration"],
-				"duration":       data["duration"],
-			}
+		if hongguoModelHasVideoList(data) || hongguoFallbackAddress(data["fallback_api"]) != "" {
+			model = data
 		}
 	}
 	return model, nil
