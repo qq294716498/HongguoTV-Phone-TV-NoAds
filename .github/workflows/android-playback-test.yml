@@ -129,10 +129,10 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-      - name: Build only the two private Android test packages
-        run: python3 scripts/build_android.py --all-sources --abi arm64-v8a --abi armeabi-v7a
+      - name: Build only the ARM64 Android test package
+        run: python3 scripts/build_android.py --all-sources --abi arm64-v8a
       - name: Verify original certificate, test identity and package integrity
-        run: python3 scripts/verify_test_apks.py
+        run: python3 scripts/verify_test_apks.py --abi arm64-v8a
       - name: Remove signing files
         if: always()
         run: python3 scripts/configure_signing.py --clean
@@ -142,16 +142,6 @@ jobs:
           name: HongguoTV-stream-test-arm64-${{ github.run_attempt }}
           path: |
             dist/android/*-arm64-v8a.apk
-            dist/android/APK-test-validation.json
-            dist/android/SHA256SUMS.txt
-          if-no-files-found: error
-          retention-days: 7
-      - name: Upload the verified ARMv7 private test package
-        uses: actions/upload-artifact@v4
-        with:
-          name: HongguoTV-stream-test-armv7-${{ github.run_attempt }}
-          path: |
-            dist/android/*-armeabi-v7a.apk
             dist/android/APK-test-validation.json
             dist/android/SHA256SUMS.txt
           if-no-files-found: error

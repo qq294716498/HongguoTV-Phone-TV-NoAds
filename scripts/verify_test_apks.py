@@ -19,16 +19,20 @@ def run(*arguments):
     return subprocess.check_output(arguments, text=True, stderr=subprocess.STDOUT)
 
 
-def validate_apks(directory, package_version, tools, identity):
+def validate_apks(directory, package_version, tools, identity, architectures=None):
+    selected = tuple(ARCHITECTURES) if architectures is None else tuple(architectures)
+    if not selected or len(set(selected)) != len(selected) or any(abi not in ARCHITECTURES for abi in selected):
+        raise ValueError("Unsupported or duplicate test APK architecture")
     match = re.fullmatch(r'(\d+\.\d+\.\d+-test\.\d+)\+([1-9]\d{0,2})', package_version)
     if not match:
         raise ValueError('Only explicitly marked test versions are accepted')
     version, build = match.group(1), int(match.group(2))
-    expected_names = {f'HongguoTV-{version}-{abi}.apk' for abi in ARCHITECTURES}
+    expected_names = {f'HongguoTV-{version}-{abi}.apk' for abi in selected}
     if {path.name for path in directory.glob('*.apk')} != expected_names:
-        raise ValueError('Expected exactly the two ARM test APKs')
+        raise ValueError('Expected exactly the selected ARM test APKs')
     results = []
-    for abi, (offset, elf_class, machine) in ARCHITECTURES.items():
+    for abi in selected:
+        offset, elf_class, machine = ARCHITECTURES[abi]
         apk = directory / f'HongguoTV-{version}-{abi}.apk'
         badging = run(str(tools / 'aapt'), 'dump', 'badging', str(apk))
         expected = f"package: name='com.hongguo.tv' versionCode='{offset + build}' versionName='{version}'"
@@ -72,12 +76,13 @@ def validate_apks(directory, package_version, tools, identity):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--directory', type=Path, default=ROOT / 'dist/android')
+    parser.add_argument('--abi', action='append', choices=tuple(ARCHITECTURES))
     options = parser.parse_args()
     package_version = re.search(r'^version:\s*(\S+)', (ROOT / 'pubspec.yaml').read_text(), re.M).group(1)
     tools = Path(os.environ['ANDROID_HOME']) / 'build-tools'
     sdk = max(tools.iterdir(), key=lambda path: tuple(int(n) for n in re.findall(r'\d+', path.name)))
     identity = json.loads((ROOT / 'assets/app_identity/identity.json').read_text())
-    results = validate_apks(options.directory, package_version, sdk, identity)
+    results = validate_apks(options.directory, package_version, sdk, identity, options.abi)
     commit = run('git', 'rev-parse', 'HEAD').strip()
     if os.environ.get('GITHUB_SHA', commit) != commit:
         raise ValueError('Built source does not match the workflow commit')

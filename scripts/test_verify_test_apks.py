@@ -65,8 +65,20 @@ class TestApkValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'test versions'):
             self.validate('0.1.48+73')
         (self.directory / 'stale.apk').write_bytes(b'stale')
-        with self.assertRaisesRegex(ValueError, 'exactly the two'):
+        with self.assertRaisesRegex(ValueError, 'exactly the selected'):
             self.validate()
+
+    def test_arm64_only_selection_validates_one_package(self):
+        for apk in self.directory.glob('*-armeabi-v7a.apk'):
+            apk.unlink()
+        with patch('verify_test_apks.run', side_effect=self.run_tool):
+            results = validate_apks(self.directory, '0.1.48-test.1+73', self.directory, self.identity, ['arm64-v8a'])
+        self.assertEqual([row['abi'] for row in results], ['arm64-v8a'])
+        self.assertEqual(results[0]['code'], 2073)
+
+    def test_arm64_only_rejects_an_extra_armv7_package(self):
+        with self.assertRaisesRegex(ValueError, 'exactly the selected'):
+            validate_apks(self.directory, '0.1.48-test.1+73', self.directory, self.identity, ['arm64-v8a'])
 
     def test_wrong_signer_is_rejected(self):
         self.certificate = '0' * 64
