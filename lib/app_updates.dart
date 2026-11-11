@@ -30,6 +30,10 @@ const updateAbiOffsets = {
   'x86_64': 4000,
 };
 
+class _UpdateMetadataTooLarge extends FormatException {
+  const _UpdateMetadataTooLarge() : super('更新信息过大');
+}
+
 class InstalledApp {
   const InstalledApp({
     required this.version,
@@ -319,6 +323,8 @@ class GithubUpdateTransport implements UpdateTransport {
           throw const FormatException('更新信息格式错误');
         }
         return data;
+      } on _UpdateMetadataTooLarge {
+        if (!windows) rethrow;
       } on HttpException {
         if (!windows) rethrow;
       } on SocketException {
@@ -339,7 +345,7 @@ class GithubUpdateTransport implements UpdateTransport {
       final bytes = <int>[];
       await for (final chunk in response.timeout(const Duration(seconds: 15))) {
         bytes.addAll(chunk);
-        if (bytes.length > 1024 * 1024) throw const FormatException('更新信息过大');
+        if (bytes.length > 1024 * 1024) throw const _UpdateMetadataTooLarge();
       }
       return jsonDecode(utf8.decode(bytes));
     })().timeout(const Duration(seconds: 45));

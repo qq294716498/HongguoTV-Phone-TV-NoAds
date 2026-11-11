@@ -49,6 +49,51 @@ void main() {
     abi: 'windows-x64',
   );
   test(
+    'oversized release history falls back without relaxing either size limit',
+    () async {
+      final data = windowsRelease(build: 40);
+      final client = TestClient([
+        TestResponse([List.filled(1024 * 1024 + 1, 32)]),
+        TestResponse([
+          utf8.encode(jsonEncode({'schema': 1, 'release': data})),
+        ]),
+      ]);
+      final result = await GithubUpdateTransport(
+        windows: true,
+        clientFactory: () => client,
+      ).latest();
+      expect(AppRelease.parseWindows(result, windowsInstalled)!.code, 40);
+      expect(client.urls.map((uri) => uri.toString()), [
+        windowsUpdateApi,
+        windowsUpdateMirror,
+      ]);
+      final oversizedMirror = TestClient([
+        TestResponse([List.filled(1024 * 1024 + 1, 32)]),
+        TestResponse([List.filled(1024 * 1024 + 1, 32)]),
+      ]);
+      await expectLater(
+        GithubUpdateTransport(
+          windows: true,
+          clientFactory: () => oversizedMirror,
+        ).latest(),
+        throwsFormatException,
+      );
+      expect(oversizedMirror.urls, hasLength(2));
+      final malformed = TestClient([
+        TestResponse([utf8.encode('invalid')]),
+      ]);
+      await expectLater(
+        GithubUpdateTransport(
+          windows: true,
+          clientFactory: () => malformed,
+        ).latest(),
+        throwsFormatException,
+      );
+      expect(malformed.urls, hasLength(1));
+    },
+  );
+
+  test(
     'Windows rate limits fall back to validated same-repository metadata',
     () async {
       for (final status in [403, 429, 503]) {
