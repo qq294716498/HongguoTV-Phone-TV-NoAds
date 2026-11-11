@@ -60,7 +60,7 @@ def main():
     output = root / 'dist/windows'
     validation = json.loads((output / 'Windows-validation.json').read_text(encoding='utf-8-sig'))
     if (validation.get('ok') is not True or validation.get('architecture') != 'x64'
-            or validation.get('version') != '0.1.50' or validation.get('build') != 86
+            or validation.get('version') != '0.1.51' or validation.get('build') != 87
             or validation.get('sha256') != approved_sha256):
         raise ValueError('The original package did not pass validation')
     package = output / validation['package']
