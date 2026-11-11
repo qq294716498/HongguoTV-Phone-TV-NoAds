@@ -2,7 +2,13 @@
 
 基于 [guoapp](https://github.com/zhoufuweigg/guoapp) 的非官方独立客户端。手机与 Android TV 共用 Android 应用，另提供 Windows x64 与 macOS 通用客户端；支持浏览、搜索、播放、弹幕、追剧和下载。
 
-## 0.1.51+87（更新入口修复后重新发布候选）
+## 0.1.51+87（Android / Windows 正式发布已核验）
+
+正式源码固定为 `5221ff5c3fefa2b23887b87c4ae175f307534736`。[Android CI](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/42962038438) 与 [Windows CI](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/42962038419) 均成功，默认／全站源 Flutter 回归、Go race、Python 检查和静态检查通过。Windows 原生画面、单播放器队列、完整四集自动续播及真实客户端升级／回滚／文件锁后重启清理全部通过；一次测试抢在 finalizing 标记后的异步文件删除之前断言失败，保持原门禁重跑后通过，未修改生产清理逻辑或跳过断言。
+
+[Android 正式下载](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/app-v0.1.51-87) 的三种 ABI 已经实际更新器下载、二次验签和版本／摘要校验；原证书 SHA-256 为 `55c3c3395a00e56e99b8bfd580b14c99618da74db19692a2e42606eb05c47ba9`。ARM64 包 38,673,735 字节，SHA-256 `547c45e46442addc99896bba50de39765f60e39cf613b4356ef557e6d2d50650`。[Windows x64 正式下载](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/windows-v0.1.51-87) 为 101,741,861 字节，SHA-256 `ee15cdfa4ef37a47842fd7e31d685bec11f154ea17b048e4dd1ae21a125462c6`，沿用未签名 EXE。Android Latest 与 Windows 备用更新通道均指向 0.1.51；公开下载、摘要及两端通道隔离核验通过。两个发布说明和 Windows 更新说明均仅为“优化之前无法播放”。
+
+本轮未执行实体手机、Android TV 或物理 Windows GPU 验收；CI 软件解码／合成媒体通过不代表所有设备的音画表现。下一季优化验证了请求数与匹配回退，不承诺所有站源网络延迟。用户 `scripts/build_windows.ps1` 保持原样，未纳入发布提交。
 
 0.1.50 两端完整检查与构建均通过，但 Windows 公网更新验收发现历史发布列表为 1,063,591 字节，超过客户端 1 MiB 上限。修复为只对“元数据过大”切换到同仓库 Windows 已验证备用清单，保留两条路径的大小、签名摘要/下载地址和通道检查；Android 行为不变，畸形 JSON 不触发此回退。39 项更新回归及真实公网既有 0.1.49 ZIP 完整下载/摘要/Android 通道隔离测试通过。
 
