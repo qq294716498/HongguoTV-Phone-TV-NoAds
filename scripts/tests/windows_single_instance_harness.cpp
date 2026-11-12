@@ -70,7 +70,12 @@ void Report() {
       << ",\"ack\":" << Bool(ack) << ",\"child_pid\":" << child_pid
       << ",\"mutex_exists\":" << Bool(mutex_exists) << "}";
   out.close();
-  MoveFileExW(temporary.c_str(), report_path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+  for (int attempt = 0; attempt < 100; ++attempt) {
+    if (MoveFileExW(temporary.c_str(), report_path.c_str(),
+                    MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) return;
+    Sleep(10);
+  }
+  ExitProcess(95);
 }
 void RestoreOwnWindow() {
   const DWORD delay = restores == 0 ? Number(L"restore-delay-once", 0) : 0;
