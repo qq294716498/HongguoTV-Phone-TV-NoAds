@@ -23,11 +23,13 @@ class DownloadsScreen extends StatefulWidget {
     this.embedded = false,
     this.playerBuilder,
     this.collectionDrama,
+    this.initialJobs,
   });
   final AppRepository repository;
   final LocalStore store;
   final bool embedded;
   final Drama? collectionDrama;
+  final List<DownloadJob>? initialJobs;
   @visibleForTesting
   final Widget Function(DramaDetail, int, double)? playerBuilder;
   @override
@@ -53,12 +55,21 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
   int _refreshRequest = 0;
   bool get _allowed =>
       widget.store.profileEpoch == _epoch && widget.store.canDownload;
-  List<DownloadCollection> get _collections => downloadCollections(
-    _jobs,
-    query: _search.text,
-    filter: _filter,
-    release: _release,
-  );
+  Object? _collectionKey;
+  List<DownloadCollection> _collectionCache = const [];
+  List<DownloadCollection> get _collections {
+    final key = (_jobs, _search.text, _filter, _release);
+    if (_collectionKey != key) {
+      _collectionKey = key;
+      _collectionCache = downloadCollections(
+        _jobs,
+        query: _search.text,
+        filter: _filter,
+        release: _release,
+      );
+    }
+    return _collectionCache;
+  }
 
   @override
   void initState() {
@@ -67,7 +78,16 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     _updater = DownloadCollectionUpdater(widget.repository, widget.store)
       ..addListener(_changed);
     widget.store.addListener(_changed);
-    _refresh();
+    if (widget.initialJobs != null && widget.collectionDrama != null) {
+      _jobs = List.unmodifiable(
+        widget.initialJobs!.where(
+          (job) => job.drama.id == widget.collectionDrama!.id,
+        ),
+      );
+      _loading = false;
+    } else {
+      _refresh();
+    }
     _timer = Timer.periodic(const Duration(seconds: 2), (_) => _refresh());
   }
 
@@ -88,20 +108,29 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
 
   Future<void> _refresh({bool afterMutation = false}) async {
     if ((_refreshing && !afterMutation) || !_allowed) return;
+    if (!afterMutation &&
+        !_loading &&
+        ModalRoute.of(context)?.isCurrent == false) {
+      return;
+    }
     final request = ++_refreshRequest;
     _refreshing = true;
     try {
       final jobs = await widget.repository.downloads();
       if (mounted && _allowed && request == _refreshRequest) {
-        setState(() {
-          _jobs = widget.collectionDrama == null
-              ? jobs
-              : jobs
-                    .where((job) => job.drama.id == widget.collectionDrama!.id)
-                    .toList();
-          _selected.retainAll(jobs.map((job) => job.id));
-          _error = null;
-        });
+        final visible = widget.collectionDrama == null
+            ? jobs
+            : jobs
+                  .where((job) => job.drama.id == widget.collectionDrama!.id)
+                  .toList();
+        if (_loading || _error != null || !sameDownloadJobs(_jobs, visible)) {
+          setState(() {
+            _jobs = visible;
+            _selected.retainAll(visible.map((job) => job.id));
+            _error = null;
+            _loading = false;
+          });
+        }
       }
     } catch (error) {
       if (mounted && _allowed && request == _refreshRequest) {
@@ -110,7 +139,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     } finally {
       if (request == _refreshRequest) {
         _refreshing = false;
-        if (mounted) setState(() => _loading = false);
+        if (mounted && _loading) setState(() => _loading = false);
       }
     }
   }
@@ -449,6 +478,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
           repository: widget.repository,
           store: widget.store,
           collectionDrama: collection.drama,
+          initialJobs: _jobs,
           playerBuilder: widget.playerBuilder,
         ),
       ),
@@ -464,13 +494,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
         .where((job) => _selected.contains(job.id))
         .length;
     final expanded = _expanded.contains(collection.drama.id);
-    final progress =
-        collection.jobs.fold<double>(
-          0,
-          (total, job) =>
-              total + (job.completed ? 1 : job.progress.clamp(0, 1)),
-        ) /
-        collection.jobs.length;
+    final progress = collection.progress;
     if (_compact) return _compactCollection(collection, progress, count);
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -564,8 +588,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                     icon: const Icon(Icons.pause_rounded),
                     label: const Text('暂停'),
                   )
-                else if (!_selecting &&
-                    collection.jobs.any((job) => job.resumable))
+                else if (!_selecting && collection.resumable)
                   TextButton.icon(
                     onPressed: _busy
                         ? null
@@ -684,8 +707,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
               Row(
                 children: [
                   if (!_selecting &&
-                      (collection.active > 0 ||
-                          collection.jobs.any((job) => job.resumable)))
+                      (collection.active > 0 || collection.resumable))
                     Expanded(
                       child: TextButton(
                         onPressed: _busy

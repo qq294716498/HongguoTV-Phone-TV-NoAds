@@ -2,6 +2,7 @@ import 'package:duanju_app/app_layout.dart';
 import 'package:duanju_app/core_bridge.dart';
 import 'package:duanju_app/detail_screen.dart';
 import 'package:duanju_app/downloads_screen.dart';
+import 'package:duanju_app/download_collections.dart';
 import 'package:duanju_app/widgets.dart';
 import 'package:duanju_app/home_screen.dart';
 import 'package:duanju_app/local_store.dart';
@@ -22,6 +23,7 @@ import 'remote_test_helpers.dart';
 
 class DownloadRepository extends FixtureRepository {
   final commands = <String>[];
+  int downloadReads = 0;
   List<DownloadJob> jobs = [];
   List<int> selected = [];
   int quality = 0;
@@ -52,7 +54,11 @@ class DownloadRepository extends FixtureRepository {
   @override
   bool get supportsDownloads => true;
   @override
-  Future<List<DownloadJob>> downloads() async => List.of(jobs);
+  Future<List<DownloadJob>> downloads() async {
+    downloadReads++;
+    return List.of(jobs);
+  }
+
   @override
   Future<DramaDetail> detail(Drama drama) async {
     detailCalls++;
@@ -169,6 +175,87 @@ void main() {
       await tester.pump(const Duration(milliseconds: 10));
     }
   }
+
+  testWidgets('unchanged queue and menus do not rebuild download content', (
+    tester,
+  ) async {
+    size(tester, const Size(390, 844));
+    final repository = DownloadRepository();
+    repository.jobs = [
+      for (var i = 1; i <= 1000; i++) repository.job(i, 'completed'),
+    ];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DownloadsScreen(repository: repository, store: await makeStore()),
+      ),
+    );
+    await tick(tester);
+    await tester.pumpAndSettle();
+    var builds = 0;
+    final previous = debugOnRebuildDirtyWidget;
+    debugOnRebuildDirtyWidget = (element, once) {
+      previous?.call(element, once);
+      if (element.widget is DownloadsScreen || element.widget is DramaCover) {
+        builds++;
+      }
+    };
+    addTearDown(() => debugOnRebuildDirtyWidget = previous);
+    for (var i = 0; i < 3; i++) {
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+    }
+    expect(builds, 0);
+    final beforeMenu = repository.downloadReads;
+    await tester.tap(find.byTooltip('测试短剧 · 合集操作'));
+    await tester.pumpAndSettle();
+    builds = 0;
+    await tester.pump(const Duration(seconds: 2));
+    expect(repository.downloadReads, beforeMenu);
+    expect(builds, 0);
+    await tester.tap(find.text('查看剧集'));
+    await tester.pumpAndSettle();
+    expect(repository.downloadReads, beforeMenu);
+    expect(find.byKey(const ValueKey('download-episode-1')), findsOneWidget);
+    builds = 0;
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+    expect(repository.downloadReads, beforeMenu + 1);
+    expect(builds, 0);
+    repository.jobs = [repository.job(1, 'failed'), ...repository.jobs.skip(1)];
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+    expect(find.text('下载失败'), findsOneWidget);
+    expect(builds, greaterThan(0));
+    debugPrint(
+      'download-performance jobs=1000 unchangedPollRebuilds=0 menuPolls=0 navigationExtraReads=0 changedStateVisible=true',
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  test('download snapshot notices metadata and progress changes', () {
+    final repository = DownloadRepository();
+    final a = repository.job(1, 'completed');
+    final b = repository.job(1, 'completed');
+    expect(sameDownloadJobs([a], [b]), isTrue);
+    expect(sameDownloadJobs([a], [repository.job(1, 'failed')]), isFalse);
+    final changed = DownloadJob(
+      id: b.id,
+      drama: b.drama,
+      episode: b.episode,
+      state: b.state,
+      bytes: b.bytes + 1,
+      total: b.total,
+      progress: b.progress,
+      actualQuality: b.actualQuality,
+    );
+    expect(sameDownloadJobs([a], [changed]), isFalse);
+    expect(sameDownloadJobs([a], []), isFalse);
+    final collections = downloadCollections([a, repository.job(2, 'paused')]);
+    expect(collections.single.completed, 1);
+    expect(collections.single.resumable, isTrue);
+    expect(collections.single.progress, .75);
+    expect(downloadCollections([repository.job(3, 'failed')]).single.failed, 1);
+  });
 
   for (final width in [320.0, 390.0]) {
     testWidgets('download cards open a compact episode page at $width', (

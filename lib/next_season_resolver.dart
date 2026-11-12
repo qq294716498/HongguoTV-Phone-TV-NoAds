@@ -334,6 +334,7 @@ class NextSeasonResolver {
       }.take(2);
       final broad = current?.baseTitle ?? anchor.title.trim();
       final queries = <String>{
+        if (!requirePlayableDetail) broad,
         ...targeted,
         broad,
       }.where((query) => normalizedSearchText(query).isNotEmpty);

@@ -100,6 +100,39 @@ class TrackedLookupSession extends SeasonLookupSession {
 }
 
 void main() {
+  for (final broadHit in [true, false]) {
+    test(
+      'follow check uses broad website query first and keeps targeted fallback hit=$broadHit',
+      () async {
+        final repository = LookupRepository();
+        repository.onCatalog = (query, page) async => CatalogPage(
+          query == '合成故事' && !broadHit
+              ? []
+              : [
+                  const Drama(
+                    id: 'hongguo:2',
+                    source: 'hongguo',
+                    title: '合成故事 第二季',
+                    seriesGroupId: '100',
+                    episodes: 20,
+                  ),
+                ],
+        );
+        final result = await NextSeasonResolver(repository).lookup(
+          anchor,
+          knownDramas: [],
+          isCurrent: () => true,
+          requirePlayableDetail: false,
+        );
+        expect(result.next?.id, 'hongguo:2');
+        expect(repository.queries.first, ('合成故事', 1, false));
+        expect(repository.queries.length, broadHit ? 1 : 2);
+        expect(repository.detailIds, isEmpty);
+        expect(repository.metadataIds, isEmpty);
+      },
+    );
+  }
+
   test(
     'expired known next is revalidated without repeated title searches',
     () async {

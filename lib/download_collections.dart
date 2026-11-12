@@ -25,13 +25,110 @@ class DownloadBatchResult {
 }
 
 class DownloadCollection {
-  DownloadCollection(this.drama, this.jobs);
+  DownloadCollection(this.drama, List<DownloadJob> source)
+    : jobs = List.unmodifiable(source) {
+    for (final job in jobs) {
+      if (job.completed) _completed++;
+      if (job.active) _active++;
+      if (job.state == 'failed') _failed++;
+      if (job.resumable) _resumable = true;
+      _bytes += job.bytes;
+      _latestCreated = max(_latestCreated, job.created);
+      _progress += job.completed ? 1 : job.progress.clamp(0, 1);
+    }
+    if (jobs.isNotEmpty) _progress /= jobs.length;
+  }
   final Drama drama;
   final List<DownloadJob> jobs;
-  int get completed => jobs.where((job) => job.completed).length;
-  int get active => jobs.where((job) => job.active).length;
-  int get failed => jobs.where((job) => job.state == 'failed').length;
-  int get bytes => jobs.fold(0, (total, job) => total + job.bytes);
+  int _completed = 0, _active = 0, _failed = 0, _bytes = 0, _latestCreated = 0;
+  double _progress = 0;
+  bool _resumable = false;
+  int get completed => _completed;
+  int get active => _active;
+  int get failed => _failed;
+  int get bytes => _bytes;
+  int get latestCreated => _latestCreated;
+  double get progress => _progress;
+  bool get resumable => _resumable;
+}
+
+bool sameDownloadJobs(List<DownloadJob> before, List<DownloadJob> after) {
+  if (identical(before, after)) return true;
+  if (before.length != after.length) return false;
+  for (var index = 0; index < before.length; index++) {
+    final a = before[index], b = after[index];
+    if (identical(a, b)) continue;
+    if ((
+          a.id,
+          a.state,
+          a.bytes,
+          a.total,
+          a.progress,
+          a.quality,
+          a.actualQuality,
+          a.error,
+          a.created,
+          a.revision,
+          a.archived,
+          a.episode.number,
+        ) !=
+        (
+          b.id,
+          b.state,
+          b.bytes,
+          b.total,
+          b.progress,
+          b.quality,
+          b.actualQuality,
+          b.error,
+          b.created,
+          b.revision,
+          b.archived,
+          b.episode.number,
+        )) {
+      return false;
+    }
+    if (!mapEquals(a.episode.raw, b.episode.raw)) return false;
+    final x = a.drama, y = b.drama;
+    if ((
+              x.id,
+              x.source,
+              x.sourceId,
+              x.seriesGroupId,
+              x.relatedAlbumId,
+              x.title,
+              x.description,
+              x.cover,
+              x.episodes,
+              x.category,
+              x.vipStatus,
+              x.heat,
+              x.views,
+              x.onlineDate,
+              x.releaseStatus,
+            ) !=
+            (
+              y.id,
+              y.source,
+              y.sourceId,
+              y.seriesGroupId,
+              y.relatedAlbumId,
+              y.title,
+              y.description,
+              y.cover,
+              y.episodes,
+              y.category,
+              y.vipStatus,
+              y.heat,
+              y.views,
+              y.onlineDate,
+              y.releaseStatus,
+            ) ||
+        !listEquals(x.tags, y.tags)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 List<DownloadCollection> downloadCollections(
@@ -54,10 +151,12 @@ List<DownloadCollection> downloadCollections(
         !(release == 'finished' && job.drama.releaseStatus == 'completed')) {
       continue;
     }
-    final text =
-        '${job.drama.title} ${SourceSite.byId(job.drama.source).name} ${job.drama.category}'
-            .toLowerCase();
-    if (terms.any((term) => !text.contains(term))) continue;
+    if (terms.isNotEmpty) {
+      final text =
+          '${job.drama.title} ${SourceSite.byId(job.drama.source).name} ${job.drama.category}'
+              .toLowerCase();
+      if (terms.any((term) => !text.contains(term))) continue;
+    }
     if (!(switch (filter) {
       'all' || 'archived' => true,
       'pending' => !job.completed,
@@ -76,12 +175,7 @@ List<DownloadCollection> downloadCollections(
         rows..sort((a, b) => a.episode.number.compareTo(b.episode.number)),
       ),
   ];
-  collections.sort(
-    (a, b) => b.jobs
-        .map((j) => j.created)
-        .reduce(max)
-        .compareTo(a.jobs.map((j) => j.created).reduce(max)),
-  );
+  collections.sort((a, b) => b.latestCreated.compareTo(a.latestCreated));
   return collections;
 }
 
