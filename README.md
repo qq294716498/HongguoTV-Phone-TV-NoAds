@@ -28,15 +28,6 @@
 
 找不到附件时，在对应发布页展开 **Assets**：[Android](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/app-v0.1.51-87) · [Windows](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/windows-v0.1.51-87) · [macOS](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/macos-v0.1.48-74)。源码、SHA-256 校验清单和验证报告也在发布附件中；安装应用请选择 APK 或平台 ZIP，不要下载 GitHub 自动生成的 Source code。
 
-<details>
-<summary>参与测试：Android 64 位测试包</summary>
-
-当前测试包为 **0.1.52-test.1**，原包名、原签名，可覆盖原版并保留数据。测试版不是正式更新，其他平台请使用上方正式包。
-
-[下载测试构件](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/43131121839/artifacts/13906900862)：需登录 GitHub，下载 ZIP 后解压安装 APK。构件保留至 **2026-11-19**，过期后请到 QQ 群咨询。测试版版本码高于当前正式版，想保留数据时请等待后续更高版本覆盖，不要直接卸载降级。
-
-</details>
-
 ## 主要功能
 
 - **浏览与搜索：** 分类、推荐、榜单、剧名搜索及分集选择。
@@ -72,7 +63,7 @@ Android 和 Windows 可在“关于”或设置的“软件更新”页面手动
 
 “跳过此版本”仅隐藏该版本的自动提醒，仍可手动检查。若旧版更新器无法读取更新信息，请使用上方完整安装包手动更新。
 
-Mac 当前不支持应用内自动安装更新，请从 macOS 下载入口获取新版。测试构件不进入正式自动更新通道。
+Mac 当前不支持应用内自动安装更新，请从 macOS 下载入口获取新版。
 
 ## 问题反馈
 
