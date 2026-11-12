@@ -8,6 +8,10 @@
 
 本测试包含下文 0.1.52 本地累计修复（弹幕、TV 交互、主页搜索和官网搜索）。仅构建 Android arm64-v8a 原包名／原签名测试 APK，版本码 2089 可覆盖正式 0.1.51 的 2087 并保留数据；不创建正式 Release、不更新公众下载或自动更新入口。测试流水线沿用全量 Flutter／Go／Python 和 Android 原生播放器门禁，产物需通过证书、包名、版本、架构及摘要验证后才交付；实体手机布局仍待用户验收。
 
+测试交付记录：提交 `89dec6332026fd93057d1651ec8dc88f5fd11a4c` 的 [CI 43131121839](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/43131121839) 已成功。默认 Flutter 1319 项通过／10 跳过，全站源 1322 项通过／7 跳过；Go 两组 race、Python 与 Android 原生播放器门禁通过。首次 CI 因两条旧界面断言仍查找展开列表而失败，更新为独立集数页后全部复验通过。APK 原证书、包名 `com.hongguo.tv`、版本码 2089、ARM64 库、ZIP 完整性与对齐均经 CI 核验；文件 `HongguoTV-0.1.52-test.1-arm64-v8a.apk` 为 38689387 字节，SHA256 `c6f655a6f4af957978940490cfd727241ce85785523599b0f7270799f9842b2d`。
+
+[测试构件下载](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/43131121839/artifacts/13906900862) 需要登录 GitHub，保存期限至 2026-11-19。云端下载此构件被存储服务返回 Forbidden，未重试受限路径，未转存 Library；下载完整性结论来自 CI，未在当前云端二次验包，也未进行实体设备验收。正式 Latest 仍为 0.1.51，没有创建公开 Release 或更新自动更新入口。
+
 ## 0.1.52+88（弹幕性能与 TV 交互修正，本地候选，暂不发布）
 
 参考上游 [198d3e48](https://github.com/Xanerix/guoapp/commit/198d3e48b1912ab935553fd8ede88793447a4eca) 的共享时钟／绘制阶段位移与静默进度保存方案，适配本项目现有行为。APK 手机与 TV 共用弹幕层只保留一个 Ticker，正常飞行和切集退场共用帧时钟，位移由 RenderTransform 更新，不再为每条弹幕创建 AnimationController 或逐帧重建控件。保留手机最多五行、画面顶部向上排列／空间不足时置于下方、表情缓存、独立弹幕速度、24 条总上限及 600ms 平滑退场；Windows 独立弹幕渲染路径保持不变。
