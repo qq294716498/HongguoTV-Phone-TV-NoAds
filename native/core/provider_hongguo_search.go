@@ -22,6 +22,7 @@ const (
 )
 
 type hongguoSearchEntry struct {
+	WebAPI    bool
 	Dramas    []Drama
 	Total     int
 	HasMore   bool
@@ -98,6 +99,14 @@ func (downloader *Downloader) searchHongguoPageProgress(ctx context.Context, key
 			client.mu.Unlock()
 			return hongguoSearchEntry{}, errors.New("红果搜索请求较多，请稍后重试")
 		}
+		if page == 1 {
+			prefix := keyword + "\x00"
+			for key := range client.searches {
+				if strings.HasPrefix(key, prefix) {
+					delete(client.searches, key)
+				}
+			}
+		}
 		pending := &hongguoSearchCall{done: make(chan struct{}), changed: make(chan struct{})}
 		client.searchPending[cacheKey] = pending
 		client.mu.Unlock()
@@ -120,6 +129,9 @@ func (downloader *Downloader) searchHongguoPageProgress(ctx context.Context, key
 				client.searches = map[string]hongguoSearchEntry{}
 			}
 			entry.ExpiresAt = time.Now().Add(5 * time.Minute)
+			if entry.WebAPI {
+				entry.ExpiresAt = time.Now().Add(time.Minute)
+			}
 			client.searches[cacheKey] = entry
 		}
 		pending.entry, pending.err = entry, err
@@ -157,6 +169,29 @@ func (downloader *Downloader) waitHongguoSearch(ctx context.Context, pending *ho
 }
 
 func (downloader *Downloader) fetchHongguoSearch(ctx context.Context, keyword string, page int) (hongguoSearchEntry, error) {
+	if page == 1 {
+		entry, err := downloader.fetchHongguoSearchAPI(ctx, keyword, page)
+		if ctx.Err() != nil {
+			return hongguoSearchEntry{}, ctx.Err()
+		}
+		if err == nil {
+			return entry, nil
+		}
+	} else {
+		client := downloader.hongguoClient()
+		client.mu.Lock()
+		previous := client.searches[keyword+"\x00"+strconv.Itoa(page-1)]
+		client.mu.Unlock()
+		if previous.WebAPI {
+			if !time.Now().Before(previous.ExpiresAt) {
+				return hongguoSearchEntry{}, errors.New("搜索结果已过期，请从第 1 页重新搜索")
+			}
+			if !previous.HasMore {
+				return hongguoSearchEntry{Dramas: []Drama{}, WebAPI: true}, nil
+			}
+			return downloader.fetchHongguoSearchAPI(ctx, keyword, page)
+		}
+	}
 	appCtx, cancel := context.WithTimeout(ctx, 16*time.Second)
 	entry, appErr := downloader.fetchHongguoAppSearch(appCtx, keyword, page)
 	cancel()

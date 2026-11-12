@@ -54,6 +54,8 @@ class _HomeScreenState extends State<HomeScreen> {
   late SourceSite _source;
   bool _allSources = false;
   List<Drama> _items = [];
+  Object? _visibleKey;
+  List<Drama> _visibleItems = const [];
   bool _loading = true;
   bool _loadingMore = false;
   bool _hasMore = true;
@@ -355,7 +357,6 @@ class _HomeScreenState extends State<HomeScreen> {
       _televisionSearch();
       return;
     }
-    if (_specialFeed) _changeCategory('');
     final hadQuery = _search.text.isNotEmpty;
     setState(() {
       _searchVisible = !_searchVisible;
@@ -931,21 +932,37 @@ class _HomeScreenState extends State<HomeScreen> {
 
   List<Drama> get _visible {
     final query = _filterQuery;
-    return sortCatalog(
+    final category = _category;
+    final hideVip = _hideVip;
+    final online = _onlineSearch;
+    final view = widget.store.catalogView;
+    final allowed = widget.store.sources.map((source) => source.id).toSet();
+    final key = (
+      _items,
+      query,
+      category,
+      hideVip,
+      online,
+      view.sort,
+      view.release,
+      allowed.join(','),
+      widget.store.profileEpoch,
+    );
+    if (_visibleKey == key) return _visibleItems;
+    _visibleKey = key;
+    return _visibleItems = sortCatalog(
       _items.where((drama) {
-        if (!widget.store.allowsSource(drama.source)) return false;
-        if (_category.startsWith('local:') &&
-            categoryName(drama.category) != _category.substring(6)) {
+        if (!allowed.contains(drama.source)) return false;
+        if (category.startsWith('local:') &&
+            categoryName(drama.category) != category.substring(6)) {
           return false;
         }
-        if (_hideVip && drama.source == 'huangdou' && drama.vip) {
+        if (hideVip && drama.source == 'huangdou' && drama.vip) {
           return false;
         }
-        return _onlineSearch ||
-            query.isEmpty ||
-            matchesDramaQuery(drama, query);
+        return online || query.isEmpty || matchesDramaQuery(drama, query);
       }),
-      widget.store.catalogView,
+      view,
     );
   }
 
@@ -1383,7 +1400,7 @@ class _HomeScreenState extends State<HomeScreen> {
   );
 
   Widget _catalog({required bool selectionInBody}) {
-    final items = _visible;
+    final items = _specialFeed ? const <Drama>[] : _visible;
     final television = AppLayout.isTelevision(context);
     return Column(
       children: [

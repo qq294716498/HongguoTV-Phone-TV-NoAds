@@ -70,6 +70,7 @@ Future<LocalStore> _mountHome(
   WidgetTester tester,
   _TypingRepository repository, {
   String source = 'hongguo',
+  bool openSearch = true,
 }) async {
   tester.view.physicalSize = const Size(390, 844);
   tester.view.devicePixelRatio = 1;
@@ -82,8 +83,10 @@ Future<LocalStore> _mountHome(
   await store.setCatalogView(const CatalogView(sort: CatalogSort.name));
   await tester.pumpWidget(DuanjuApp(repository: repository, store: store));
   await tester.pumpAndSettle();
-  await tester.tap(find.byKey(const ValueKey('toggle-search')));
-  await tester.pumpAndSettle();
+  if (openSearch) {
+    await tester.tap(find.byKey(const ValueKey('toggle-search')));
+    await tester.pumpAndSettle();
+  }
   return store;
 }
 
@@ -100,7 +103,61 @@ const _localItems = [
   ),
 ];
 
+class _CountedDrama extends Drama {
+  _CountedDrama(int index)
+    : super(
+        id: 'hongguo:count-$index',
+        source: 'hongguo',
+        title: 'Synthetic ${(1000 - index).toString().padLeft(4, '0')}',
+      );
+  static int reads = 0;
+  @override
+  String get title {
+    reads++;
+    return super.title;
+  }
+}
+
 void main() {
+  testWidgets('opening search and keyboard insets reuse the sorted catalog', (
+    tester,
+  ) async {
+    _CountedDrama.reads = 0;
+    final repository = _TypingRepository()
+      ..catalogItems = List.generate(1000, _CountedDrama.new);
+    await _mountHome(tester, repository, openSearch: false);
+    final initialReads = _CountedDrama.reads;
+    expect(initialReads, greaterThan(1000));
+    final requests = repository.queries.length;
+    _CountedDrama.reads = 0;
+    await tester.tap(find.byKey(const ValueKey('toggle-search')));
+    await tester.pumpAndSettle();
+    for (final inset in [100.0, 200.0, 300.0, 0.0]) {
+      tester.view.viewInsets = FakeViewPadding(bottom: inset);
+      await tester.pumpAndSettle();
+    }
+    expect(find.byType(SearchInput), findsOneWidget);
+    expect(repository.queries.length, requests);
+    expect(_CountedDrama.reads, lessThan(500));
+    debugPrint(
+      'search-open-metrics initialTitleReads=$initialReads openAndKeyboardTitleReads=${_CountedDrama.reads} extraRequests=${repository.queries.length - requests}',
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('changing sort invalidates the visible catalog cache', (
+    tester,
+  ) async {
+    final repository = _TypingRepository()
+      ..catalogItems = List.generate(20, _CountedDrama.new);
+    final store = await _mountHome(tester, repository, openSearch: false);
+    _CountedDrama.reads = 0;
+    await store.setCatalogView(const CatalogView(sort: CatalogSort.season));
+    await tester.pumpAndSettle();
+    expect(_CountedDrama.reads, greaterThan(40));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('ten rapid keys keep a sorted 1000-item home catalog idle', (
     tester,
   ) async {

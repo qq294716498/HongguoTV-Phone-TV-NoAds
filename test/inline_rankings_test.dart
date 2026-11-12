@@ -1,4 +1,6 @@
 import 'package:duanju_app/local_store.dart';
+import 'package:duanju_app/search_input.dart';
+import 'package:duanju_app/rankings_screen.dart';
 import 'package:duanju_app/main.dart';
 import 'package:duanju_app/models.dart';
 import 'package:duanju_app/ranking_models.dart';
@@ -40,6 +42,40 @@ class InlineRankingRepository extends FixtureRepository {
 }
 
 void main() {
+  testWidgets('opening and closing home search preserves the current ranking', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    SharedPreferences.setMockInitialValues({});
+    final store = LocalStore(await SharedPreferences.getInstance());
+    addTearDown(store.dispose);
+    await store.setSource('hongguo');
+    await tester.pumpWidget(
+      DuanjuApp(repository: InlineRankingRepository(), store: store),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('category-hongguo-comic')));
+    await tester.pumpAndSettle();
+    final ranking = tester.state(find.byType(RankingsScreen));
+    await tester.tap(find.byKey(const ValueKey('toggle-search')));
+    await tester.pumpAndSettle();
+    expect(find.byType(SearchInput), findsOneWidget);
+    expect(tester.state(find.byType(RankingsScreen)), same(ranking));
+    await tester.tap(find.byKey(const ValueKey('toggle-search')));
+    await tester.pumpAndSettle();
+    expect(find.byType(SearchInput), findsNothing);
+    expect(tester.state(find.byType(RankingsScreen)), same(ranking));
+    await tester.tap(find.byKey(const ValueKey('toggle-search')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '测试剧名');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+    expect(find.byType(RankingsScreen), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'desktop inline rankings keep source order, switch layouts and return to catalog',
     (tester) async {
