@@ -262,7 +262,11 @@ void main() {
         await tester.tap(find.text('短标题'));
         await tester.pumpAndSettle();
         expect(
-          find.byKey(const ValueKey('download-task-task-0')),
+          find.byKey(
+            ValueKey(
+              '${layout.$1.width < 600 ? 'download-episode' : 'download-task'}-task-0',
+            ),
+          ),
           findsOneWidget,
         );
         await tester.tap(filters);
@@ -272,11 +276,19 @@ void main() {
         await tester.tap(find.text('应用'));
         await tester.pumpAndSettle();
         expect(
-          find.byKey(const ValueKey('download-task-task-0')),
+          find.byKey(
+            ValueKey(
+              '${layout.$1.width < 600 ? 'download-episode' : 'download-task'}-task-0',
+            ),
+          ),
           findsNothing,
         );
         expect(
-          find.byKey(const ValueKey('download-task-task-2')),
+          find.byKey(
+            ValueKey(
+              '${layout.$1.width < 600 ? 'download-episode' : 'download-task'}-task-2',
+            ),
+          ),
           findsOneWidget,
         );
         await tester.tap(menu);
