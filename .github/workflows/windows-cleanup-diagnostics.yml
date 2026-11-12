@@ -1,26 +1,42 @@
-name: Windows cleanup filesystem diagnostics
-
+name: Windows existing package transaction retest
 on:
-  push:
-    branches: [verify/windows-cleanup-fs-0.1.38-63]
   workflow_dispatch:
-
 permissions:
   contents: read
-
+  actions: read
 jobs:
-  filesystem:
+  retest:
     runs-on: windows-2022
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: 8600153fea24189bba3746a701565de6fc810faa
           persist-credentials: false
-      - uses: subosito/flutter-action@v2
+      - uses: actions/download-artifact@v4
         with:
-          flutter-version: '3.47.4'
-          channel: stable
-          cache: true
-      - run: flutter pub get --enforce-lockfile
-      - name: Verify isolated filesystem behavior with error reports
-        run: flutter test --no-pub test/windows_update_cleanup_test.dart test/windows_update_startup_test.dart --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true --reporter=expanded
+          name: hongguotv-windows-x64
+          run-id: 43193568955
+          github-token: ${{ github.token }}
+          path: dist/windows
+      - name: Validate original package and extract unchanged executable
+        shell: pwsh
+        run: |
+          $v = Get-Content dist/windows/Windows-validation.json -Raw | ConvertFrom-Json
+          if (!$v.ok -or $v.version -ne '0.1.52' -or $v.build -ne 92 -or $v.architecture -ne 'x64') { throw 'Original package validation identity mismatch' }
+          $zip = 'dist/windows/' + $v.package
+          if ((Get-FileHash $zip -Algorithm SHA256).Hash.ToLower() -ne $v.sha256.ToLower()) { throw 'Package digest mismatch' }
+          New-Item -ItemType Directory -Force build/windows/x64/runner/Release | Out-Null
+          Expand-Archive $zip build/windows/x64/runner/Release -Force
+          $exe = 'build/windows/x64/runner/Release/HongguoTV.exe'
+          $signature = Get-AuthenticodeSignature $exe
+          if ($signature.Status -ne 'NotSigned') { throw 'Unexpected executable signature state' }
+          @{ status = $signature.Status.ToString(); signed = $false; file = 'HongguoTV.exe' } | ConvertTo-Json | Set-Content -Encoding utf8 dist/windows/Windows-signature.json
+      - name: Retest complete update transactions with original package
+        run: python scripts/test_windows_transaction.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-0.1.52-existing-package-transaction-retest
+          path: dist/windows/Windows-update*.json
+          if-no-files-found: warn
