@@ -12,7 +12,7 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[1]
 output = root / 'dist/windows'
 repository = 'qq294716498/HongguoTV-Phone-TV-NoAds'
-release_branch = 'release/windows-android-0.1.51-87'
+release_branch = 'release/windows-android-0.1.52-92'
 approved_source = 'bd65a859516d4b0d9823b9dc5c8ffe0b4d52dc3e'
 previous_windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48', 'windows-v0.1.24-49', 'windows-v0.1.25-50', 'windows-v0.1.29-54', 'windows-v0.1.30-55', 'windows-v0.1.31-56', 'windows-v0.1.32-57', 'windows-v0.1.34-59', 'windows-v0.1.38-63', 'windows-v0.1.39-64', 'windows-v0.1.43-68', 'windows-v0.1.46-71', 'windows-v0.1.48-74', 'windows-v0.1.49-84', 'windows-v0.1.50-86')
 previous_android_tag = 'app-v0.1.49-84'
@@ -55,7 +55,7 @@ def release_description(version):
 
 def finalize_release_notes(tag):
     published = json.loads(github('api', f'repos/{repository}/releases/tags/{tag}'))
-    if tag != 'windows-v0.1.51-87' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
+    if tag != 'windows-v0.1.52-92' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
         raise ValueError('Only the current verified Windows stable release notes may be finalized')
     body = published['body']
     if body.count(pending_publication_note) != 1:
@@ -228,8 +228,8 @@ def main():
     version, build = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(encoding='utf-8'), re.MULTILINE).group(1).split('+')
     if not re.fullmatch(r'\d+\.\d+\.\d+', version):
         raise ValueError('Only Windows stable releases are allowed')
-    if version != '0.1.51' or build != '87':
-        raise ValueError('This workflow only publishes Windows 0.1.51+87')
+    if version != '0.1.52' or build != '92':
+        raise ValueError('This workflow only publishes Windows 0.1.52+92')
     tag = f'windows-v{version}-{build}'
     package = output / f'HongguoTV-{version}-windows-x64.zip'
     if sys.argv[1] == 'stage':
@@ -295,7 +295,7 @@ def main():
         write_json('Android-isolation.json', {'before': android, 'androidParserUnchanged': True,
                                               'parserSha256': hashlib.sha256(old.encode()).hexdigest()})
         subprocess.run([sys.executable, 'scripts/finish_task.py', '--message',
-                        '完成 Windows 0.1.51 x64 弹幕切集平滑退场、最高季最高集同步及播放性能优化；保留完整App四集与更新事务门禁，实体设备音画连续性仍未验收'], check=True)
+                        '完成 Windows 0.1.52 x64 弹幕切集平滑退场、最高季最高集同步及播放性能优化；保留完整App四集与更新事务门禁，实体设备音画连续性仍未验收'], check=True)
         subprocess.run([sys.executable, 'scripts/sync_source.py', '--check'], check=True)
         source = max(root.parent.glob('真果·鉴-*.zip'), key=lambda file: file.stat().st_mtime_ns)
         source_package = output / f'HongguoTV-{version}-source.zip'

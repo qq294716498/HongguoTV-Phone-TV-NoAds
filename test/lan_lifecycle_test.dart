@@ -27,6 +27,8 @@ class MemoryLanRepository extends FixtureRepository {
   int starts = 0;
   int sequence = 0;
   bool holdSummary = false;
+  bool rejectRequests = false;
+  bool legacyPair = false;
   bool legacySyncRequests = false;
   bool legacySyncResponses = false;
   bool legacyProgressRequests = false;
@@ -106,6 +108,7 @@ class MemoryLanRepository extends FixtureRepository {
         return poll!.future;
       case 'request':
         requestPaths.add(payload['path'] as String);
+        if (rejectRequests) throw AppFailure('NAT blocks reverse connection');
         final request = payload['requestId'] as String;
         final pending = Completer<Map<String, dynamic>>();
         pendingRequests[request] = pending;
@@ -152,6 +155,7 @@ class MemoryLanRepository extends FixtureRepository {
             pending.complete(
               Map<String, dynamic>.from(payload['payload'] as Map)..removeWhere(
                 (key, _) =>
+                    legacyPair && key == 'initiatorSync' ||
                     legacySyncResponses && key == 'schema' ||
                     legacyProgressResponses &&
                         path == 'sync/summary' &&
@@ -181,9 +185,9 @@ void main() {
   Future<
     (LanController, LanController, MemoryLanRepository, MemoryLanRepository)
   >
-  pair() async {
-    final a = MemoryLanRepository('1' * 32);
-    final b = MemoryLanRepository('2' * 32);
+  pair({bool crossRouter = false, bool reverseIDs = false}) async {
+    final a = MemoryLanRepository((reverseIDs ? '2' : '1') * 32);
+    final b = MemoryLanRepository((reverseIDs ? '1' : '2') * 32);
     a.remote = b;
     b.remote = a;
     final left = LanController(a, await store(), kind: 'phone');
@@ -195,7 +199,7 @@ void main() {
     });
     await left.setEnabled(true);
     await right.setEnabled(true);
-    await left.connect(right.local!);
+    await left.connect(right.local!, initiatorDriven: crossRouter);
     return (left, right, a, b);
   }
 
@@ -319,6 +323,88 @@ void main() {
       expect(restarted.lanDocument.hashFor({'hongguo'}), hash);
     }
   }
+
+  test(
+    'cross-router merges both directions without receiver callbacks',
+    () async {
+      final (left, right, _, b) = await pair(crossRouter: true);
+      b.rejectRequests = true;
+      expect(left.connection!.passive, false);
+      expect(right.connection!.passive, true);
+      expect(left.settings['syncRoute'], 'initiator');
+      expect(right.settings['syncRoute'], 'passive');
+      await baseline(left, right);
+      await right.store.saveWatch(progress(season3, 7, 37, 3));
+      await left.synchronize();
+      expectProgress(left.store, season3, 7, 37);
+      expectProgress(right.store, season3, 7, 37);
+      await left.store.saveWatch(progress(season3, 8, 42, 3));
+      await left.synchronize();
+      expectProgress(right.store, season3, 8, 42);
+      right.flush();
+      await expectLater(right.synchronize(), throwsA(isA<StateError>()));
+      expect(b.requestPaths, isEmpty);
+      await left.disconnect();
+      await right.disconnect();
+      await left.connect(right.local!, initiatorDriven: true);
+      await left.synchronize();
+      expect(b.requestPaths, isEmpty);
+    },
+  );
+
+  test(
+    'cross-router receiver stays connected through initiator heartbeat',
+    () async {
+      final (left, right, a, b) = await pair(crossRouter: true);
+      b.rejectRequests = true;
+      await Future<void>.delayed(const Duration(seconds: 6));
+      expect(a.requestPaths, contains('status'));
+      expect(b.requestPaths, isEmpty);
+      expect(right.connection, isNotNull);
+      expect(left.connection, isNotNull);
+    },
+  );
+
+  test(
+    'cross-router requires peer capability without silently falling back',
+    () async {
+      final (left, right, _, b) = await pair();
+      await left.disconnect();
+      await right.disconnect();
+      b.legacyPair = true;
+      await expectLater(
+        left.connect(right.local!, initiatorDriven: true),
+        throwsA(isA<StateError>()),
+      );
+      expect(left.connection, isNull);
+    },
+  );
+
+  test(
+    'cross-router initiator drives automatic merge regardless of ID order',
+    () async {
+      final (left, right, _, b) = await pair(
+        crossRouter: true,
+        reverseIDs: true,
+      );
+      b.rejectRequests = true;
+      await baseline(left, right);
+      await right.store.saveWatch(progress(season3, 7, 37, 3));
+      await left.setAutoSync(true);
+      await right.setAutoSync(true);
+      left.connection!.autoSync = true;
+      left.flush();
+      for (
+        var i = 0;
+        i < 100 && left.store.seriesWatch(season1)?.drama.id != season3.id;
+        i++
+      ) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      expectProgress(left.store, season3, 7, 37);
+      expect(b.requestPaths, isEmpty);
+    },
+  );
 
   for (final mode in ['merge', 'push', 'pull', 'automatic']) {
     test(

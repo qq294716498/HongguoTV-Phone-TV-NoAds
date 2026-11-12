@@ -81,11 +81,16 @@ class LanConnection {
     required this.user,
     required this.sources,
     required this.autoSync,
+    this.initiatorDriven = false,
+    this.initiatedLocally = true,
   });
   final LanPeer peer;
   final String address, token, account, user;
   final Set<String> sources;
   bool autoSync;
+  final bool initiatorDriven, initiatedLocally;
+  DateTime lastInbound = DateTime.now();
+  bool get passive => initiatorDriven && !initiatedLocally;
 }
 
 const lanLegacySources = {

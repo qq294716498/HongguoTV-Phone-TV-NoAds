@@ -360,7 +360,10 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
                               ? _cancelling
                                     ? null
                                     : _cancel
-                              : remote == null || _busy || _cancelling
+                              : remote == null ||
+                                    remote.passive ||
+                                    _busy ||
+                                    _cancelling
                               ? null
                               : () => _perform(() => link.synchronize()),
                         ),
@@ -386,10 +389,16 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
                 ListTile(
                   leading: const Icon(Icons.sync_alt_rounded),
                   title: const Text('手动同步'),
-                  subtitle: const Text('双向合并、覆盖对方或覆盖本机'),
+                  subtitle: Text(
+                    remote?.passive == true
+                        ? '请在发起连接的设备操作，记录仍会双向合并'
+                        : '双向合并、覆盖对方或覆盖本机',
+                  ),
                   trailing: const Icon(Icons.chevron_right_rounded),
-                  enabled: remote != null && controlsEnabled,
-                  onTap: remote != null && controlsEnabled ? _manual : null,
+                  enabled: remote != null && !remote.passive && controlsEnabled,
+                  onTap: remote != null && !remote.passive && controlsEnabled
+                      ? _manual
+                      : null,
                 ),
                 if (_error ?? link.error case final message?)
                   Padding(
@@ -413,7 +422,7 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
                     childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                     children: [
                       const Text(
-                        '两台设备都需开启设备互联并保持前台。发现失败时，可在另一端输入下列地址；Windows 需允许本应用通过专用网络防火墙。',
+                        '两台设备都需开启设备互联并保持前台。发现失败时，可在另一端输入下列地址；Windows 需允许本应用通过专用网络防火墙。手机在次路由时，请在手机输入电脑显示的地址和端口，并勾选跨路由同步；不要填路由器管理地址。此模式需要两端更新且手机能访问电脑。',
                       ),
                       for (final address in link.local!.addresses)
                         ListTile(
@@ -450,6 +459,7 @@ class _LanDevicesState extends State<_LanDevices> {
   final _address = TextEditingController();
   bool _busy = false;
   bool _manual = false;
+  bool _initiatorDriven = false;
   bool _selected = false;
   LanPeer? _target;
   bool _closing = false;
@@ -519,7 +529,10 @@ class _LanDevicesState extends State<_LanDevices> {
       if (!mounted || _epoch != link.store.profileEpoch || link.store.locked)
         return;
       _target = selected;
-      await link.connect(selected);
+      await link.connect(
+        selected,
+        initiatorDriven: peer == null && _initiatorDriven,
+      );
       _changed();
     } catch (error) {
       if (mounted)
@@ -670,6 +683,17 @@ class _LanDevicesState extends State<_LanDevices> {
                   label: const Text('输入地址连接'),
                 ),
                 if (_manual) ...[
+                  CheckboxListTile(
+                    value: _initiatorDriven,
+                    onChanged: _busy
+                        ? null
+                        : (value) =>
+                              setState(() => _initiatorDriven = value ?? false),
+                    title: const Text('跨路由同步（由本机发起）'),
+                    subtitle: const Text(
+                      '两端需更新。手机在次路由时，在手机输入电脑地址；保持两端前台，双向合并进度。',
+                    ),
+                  ),
                   TextField(
                     controller: _address,
                     autocorrect: false,
