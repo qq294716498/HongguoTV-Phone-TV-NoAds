@@ -22,10 +22,12 @@ class DownloadsScreen extends StatefulWidget {
     required this.store,
     this.embedded = false,
     this.playerBuilder,
+    this.collectionDrama,
   });
   final AppRepository repository;
   final LocalStore store;
   final bool embedded;
+  final Drama? collectionDrama;
   @visibleForTesting
   final Widget Function(DramaDetail, int, double)? playerBuilder;
   @override
@@ -92,7 +94,11 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
       final jobs = await widget.repository.downloads();
       if (mounted && _allowed && request == _refreshRequest) {
         setState(() {
-          _jobs = jobs;
+          _jobs = widget.collectionDrama == null
+              ? jobs
+              : jobs
+                    .where((job) => job.drama.id == widget.collectionDrama!.id)
+                    .toList();
           _selected.retainAll(jobs.map((job) => job.id));
           _error = null;
         });
@@ -431,6 +437,28 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     ),
   ];
 
+  bool get _compact =>
+      !AppLayout.isTelevision(context) &&
+      MediaQuery.sizeOf(context).width < 600;
+
+  Future<void> _openCollection(DownloadCollection collection) async {
+    _timer?.cancel();
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => DownloadsScreen(
+          repository: widget.repository,
+          store: widget.store,
+          collectionDrama: collection.drama,
+          playerBuilder: widget.playerBuilder,
+        ),
+      ),
+    );
+    if (mounted) {
+      _timer = Timer.periodic(const Duration(seconds: 2), (_) => _refresh());
+      await _refresh(afterMutation: true);
+    }
+  }
+
   Widget _collection(DownloadCollection collection) {
     final count = collection.jobs
         .where((job) => _selected.contains(job.id))
@@ -443,6 +471,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
               total + (job.completed ? 1 : job.progress.clamp(0, 1)),
         ) /
         collection.jobs.length;
+    if (_compact) return _compactCollection(collection, progress, count);
     return Card(
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -591,11 +620,216 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     );
   }
 
+  Widget _compactCollection(
+    DownloadCollection collection,
+    double progress,
+    int count,
+  ) {
+    return Card(
+      key: ValueKey('download-collection-${collection.drama.id}'),
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () =>
+            _selecting ? _select(collection.jobs) : _openCollection(collection),
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    DramaCover(
+                      drama: collection.drama,
+                      repository: widget.repository,
+                      radius: 8,
+                      showMetadata: false,
+                      showEpisodeCount: false,
+                    ),
+                    if (_selecting)
+                      Align(
+                        alignment: Alignment.topRight,
+                        child: Checkbox(
+                          tristate: true,
+                          value: count == 0
+                              ? false
+                              : count == collection.jobs.length
+                              ? true
+                              : null,
+                          onChanged: _busy
+                              ? null
+                              : (_) => _select(collection.jobs),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                collection.drama.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${collection.completed}/${collection.jobs.length} 集 · ${storageSize(collection.bytes)}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              LinearProgressIndicator(value: progress, minHeight: 3),
+              Row(
+                children: [
+                  if (!_selecting &&
+                      (collection.active > 0 ||
+                          collection.jobs.any((job) => job.resumable)))
+                    Expanded(
+                      child: TextButton(
+                        onPressed: _busy
+                            ? null
+                            : () => _batch(
+                                collection.active > 0 ? 'pause' : 'resume',
+                                collection.jobs,
+                              ),
+                        child: Text(collection.active > 0 ? '暂停' : '继续'),
+                      ),
+                    )
+                  else
+                    const Spacer(),
+                  PopupMenuButton<String>(
+                    tooltip: '${collection.drama.title} · 合集操作',
+                    enabled: !_busy,
+                    onSelected: (value) {
+                      if (value == 'open') {
+                        _openCollection(collection);
+                      } else if (value == 'update') {
+                        _update(collection.drama);
+                      } else if (value == 'select') {
+                        _select(collection.jobs);
+                      } else {
+                        _batch(value, collection.jobs);
+                      }
+                    },
+                    itemBuilder: (_) => [
+                      const PopupMenuItem(value: 'open', child: Text('查看剧集')),
+                      PopupMenuItem(
+                        value: 'update',
+                        enabled: !_updater.busy,
+                        child: const Text('更新本剧 · 补充新增与缺失'),
+                      ),
+                      const PopupMenuItem(
+                        value: 'select',
+                        child: Text('选择本合集'),
+                      ),
+                      const PopupMenuItem(value: 'pause', child: Text('暂停本合集')),
+                      const PopupMenuItem(
+                        value: 'resume',
+                        child: Text('继续 / 重试本合集'),
+                      ),
+                      const PopupMenuItem(
+                        value: 'archive',
+                        child: Text('清理已完成任务，保留视频'),
+                      ),
+                      if (_filter == 'archived')
+                        const PopupMenuItem(
+                          value: 'restore',
+                          child: Text('恢复到任务列表'),
+                        ),
+                      const PopupMenuItem(
+                        value: 'remove',
+                        child: Text('取消任务并删除视频'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _episodeActions(DownloadJob job) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (_) => SafeArea(
+        child: Padding(padding: const EdgeInsets.all(12), child: _episode(job)),
+      ),
+    );
+  }
+
+  Widget _episodeGrid(List<DownloadJob> jobs) => LayoutBuilder(
+    builder: (context, constraints) {
+      final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
+      final columns = math.min(
+        5,
+        math.max(3, ((constraints.maxWidth - 24) / (56 * scale)).floor()),
+      );
+      return GridView.builder(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 20),
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: columns,
+          crossAxisSpacing: 6,
+          mainAxisSpacing: 6,
+          mainAxisExtent: 32 + MediaQuery.textScalerOf(context).scale(30),
+        ),
+        itemCount: jobs.length,
+        itemBuilder: (_, index) {
+          final job = jobs[index];
+          return Tooltip(
+            message: '${job.stateLabel}，长按管理',
+            child: Material(
+              color: _selected.contains(job.id)
+                  ? Theme.of(context).colorScheme.primaryContainer
+                  : Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(10),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                key: ValueKey('download-episode-${job.id}'),
+                onTap: _busy
+                    ? null
+                    : () => _selecting
+                          ? _select([job])
+                          : job.completed
+                          ? _play(job)
+                          : _episodeActions(job),
+                onLongPress: _busy ? null : () => _episodeActions(job),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text('${job.episode.number}', maxLines: 1),
+                    Text(
+                      job.stateLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelSmall,
+                    ),
+                    if (!job.completed)
+                      LinearProgressIndicator(
+                        value: job.progress.clamp(0, 1),
+                        minHeight: 2,
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    },
+  );
+
   Widget _episode(DownloadJob job) => Padding(
     padding: const EdgeInsets.only(left: 12),
     child: Card(
       key: ValueKey('download-task-${job.id}'),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           ListTile(
@@ -631,6 +865,9 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                     enabled: !_busy,
                     tooltip: '分集操作',
                     onSelected: (value) {
+                      if (widget.collectionDrama != null) {
+                        Navigator.pop(context);
+                      }
                       if (value == 'play') {
                         _play(job);
                       } else {
@@ -728,7 +965,9 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
         if (_expanded.contains(collection.drama.id)) ...collection.jobs,
       ],
     ];
-    final title = _selecting ? '已选 ${_selected.length} 项' : '下载合集';
+    final title = _selecting
+        ? '已选 ${_selected.length} 项'
+        : widget.collectionDrama?.title ?? '下载合集';
     final actions = _titleActions(collections);
     final body = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -750,24 +989,25 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
               ],
             ),
           ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-          child: TelevisionSearchField(
-            controller: _search,
-            onChanged: (_) => setState(() {}),
-            decoration: InputDecoration(
-              hintText: '搜索剧名、站源或分类',
-              prefixIcon: const Icon(Icons.search_rounded),
-              suffixIcon: _search.text.isEmpty
-                  ? null
-                  : IconButton(
-                      tooltip: '清空搜索',
-                      onPressed: () => setState(_search.clear),
-                      icon: const Icon(Icons.close_rounded),
-                    ),
+        if (widget.collectionDrama == null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            child: TelevisionSearchField(
+              controller: _search,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                hintText: '搜索剧名、站源或分类',
+                prefixIcon: const Icon(Icons.search_rounded),
+                suffixIcon: _search.text.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: '清空搜索',
+                        onPressed: () => setState(_search.clear),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+              ),
             ),
           ),
-        ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
           child: Text(
@@ -813,6 +1053,21 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                   title: _jobs.isEmpty ? '还没有下载任务' : '暂无符合条件的任务',
                   message: '在剧集详情选择下载，或调整筛选查看已保留的视频。',
                   icon: Icons.download_outlined,
+                )
+              : widget.collectionDrama != null
+              ? _episodeGrid(collections.expand((c) => c.jobs).toList())
+              : _compact
+              ? GridView.builder(
+                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 20),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 8,
+                    mainAxisSpacing: 8,
+                    mainAxisExtent:
+                        240 + MediaQuery.textScalerOf(context).scale(64),
+                  ),
+                  itemCount: collections.length,
+                  itemBuilder: (_, index) => _collection(collections[index]),
                 )
               : ListView.builder(
                   padding: const EdgeInsets.fromLTRB(12, 4, 12, 20),

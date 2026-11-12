@@ -170,6 +170,77 @@ void main() {
     }
   }
 
+  for (final width in [320.0, 390.0]) {
+    testWidgets('download cards open a compact episode page at $width', (
+      tester,
+    ) async {
+      size(tester, Size(width, 844));
+      final repository = DownloadRepository();
+      final second = const Drama(
+        id: 'hongguo:second',
+        source: 'hongguo',
+        title: '合成下载剧集很长的标题',
+      );
+      repository.jobs = [
+        for (var i = 1; i <= 20; i++) repository.job(i, 'completed'),
+        DownloadJob(
+          id: 'second',
+          drama: second,
+          episode: repository.episode(1),
+          state: 'paused',
+          bytes: 0,
+          total: 100,
+          progress: 0,
+        ),
+      ];
+      final store = await makeStore();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: DownloadsScreen(
+            repository: repository,
+            store: store,
+            playerBuilder: (_, index, _) =>
+                Scaffold(appBar: AppBar(), body: Text('播放索引 $index')),
+          ),
+        ),
+      );
+      await tick(tester);
+      final firstCard = find.byKey(
+        ValueKey('download-collection-${FixtureRepository.free.id}'),
+      );
+      final secondCard = find.byKey(
+        const ValueKey('download-collection-hongguo:second'),
+      );
+      expect(tester.getTopLeft(firstCard).dy, tester.getTopLeft(secondCard).dy);
+      expect(
+        tester.getTopLeft(secondCard).dx,
+        greaterThan(tester.getTopLeft(firstCard).dx),
+      );
+      await tester.tap(firstCard);
+      await tester.pumpAndSettle();
+      expect(find.byType(DownloadsScreen), findsOneWidget);
+      final first = find.byKey(const ValueKey('download-episode-1'));
+      final fifth = find.byKey(const ValueKey('download-episode-5'));
+      final sixth = find.byKey(const ValueKey('download-episode-6'));
+      expect(tester.getTopLeft(first).dy, tester.getTopLeft(fifth).dy);
+      expect(
+        tester.getTopLeft(sixth).dy,
+        greaterThan(tester.getTopLeft(first).dy),
+      );
+      expect(tester.getSize(first).width, lessThan(75));
+      await tester.tap(find.byKey(const ValueKey('download-episode-2')));
+      await tester.pumpAndSettle();
+      expect(find.text('播放索引 1'), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(firstCard, findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
   testWidgets('download covers and direct controls fit narrow enlarged text', (
     tester,
   ) async {
@@ -432,14 +503,18 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: ThemeData.dark(),
-        home: DownloadsScreen(repository: repository, store: await makeStore()),
+        home: DownloadsScreen(
+          repository: repository,
+          store: await makeStore(),
+          collectionDrama: FixtureRepository.free,
+        ),
       ),
     );
     await tick(tester);
-    await tester.tap(find.text('测试短剧'));
-    await tester.pumpAndSettle();
     await tester.pump(const Duration(seconds: 2));
     expect(repository.calls, 2);
+    await tester.longPress(find.byKey(const ValueKey('download-episode-1')));
+    await tester.pumpAndSettle();
     await tester.tap(
       find.descendant(
         of: find.byKey(const ValueKey('download-task-1')),
@@ -481,6 +556,8 @@ void main() {
     await tester.tap(find.text('测试短剧'));
     await tick(tester);
     Future<void> action(String id, String label) async {
+      await tester.longPress(find.byKey(ValueKey('download-episode-$id')));
+      await tester.pumpAndSettle();
       await tester.tap(
         find.descendant(
           of: find.byKey(ValueKey('download-task-$id')),
@@ -501,8 +578,8 @@ void main() {
     await tester.tap(find.widgetWithText(ChoiceChip, '已下载'));
     await tester.tap(find.text('应用'));
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('download-task-1')), findsNothing);
-    expect(find.byKey(const ValueKey('download-task-2')), findsOneWidget);
+    expect(find.byKey(const ValueKey('download-episode-1')), findsNothing);
+    expect(find.byKey(const ValueKey('download-episode-2')), findsOneWidget);
     await action('2', '删除视频');
     await tester.tap(find.text('保留'));
     await tester.pumpAndSettle();
