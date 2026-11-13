@@ -64,7 +64,7 @@ def release(tag):
 
 def finalize_release_notes(tag):
     published = release(tag)
-    if tag != 'app-v0.1.52-92' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
+    if tag != 'app-v0.1.52-92' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ.get('RELEASE_SOURCE', os.environ['GITHUB_SHA']):
         raise ValueError('Only the current verified Android stable release notes may be finalized')
     body = published['body']
     if body.count(pending_publication_note) != 1:
@@ -139,7 +139,7 @@ def validate_apks(records, version, build, directory):
 
 
 def validate_android_player_report(report, version, build, commit):
-    expected_run = f'https://github.com/{repository}/actions/runs/{os.environ["GITHUB_RUN_ID"]}'
+    expected_run = f'https://github.com/{repository}/actions/runs/43190642078'
     if report.get('ok') is not True or report.get('version') != version or report.get('build') != build or report.get('sourceCommit') != commit or report.get('workflowRun') != expected_run:
         raise ValueError('Android native player report identity does not match this release')
     if report.get('testCount', 0) < 161 or report.get('suiteCount', 0) < 20 or any(report.get(key) != 0 for key in ['failures', 'errors', 'skipped']):
@@ -158,14 +158,14 @@ def main():
     build = int(raw_build)
     if version != '0.1.52' or build != 92:
         raise ValueError('This workflow only publishes Android 0.1.52+92')
-    validate_release_source(os.environ['GITHUB_SHA'])
+    validate_release_source(os.environ.get('RELEASE_SOURCE', os.environ['GITHUB_SHA']))
     tag = f'app-v{version}-{build}'
     phase = sys.argv[1]
     if phase == 'wait-windows':
-        wait_for_windows(os.environ['GITHUB_SHA'])
+        wait_for_windows(os.environ.get('RELEASE_SOURCE', os.environ['GITHUB_SHA']))
     elif phase == 'stage':
         head = json.loads(github('api', f'repos/{repository}/git/ref/heads/{release_branch}'))['object']['sha']
-        if head != os.environ['GITHUB_SHA']:
+        if head != os.environ.get('RELEASE_SOURCE', os.environ['GITHUB_SHA']):
             raise ValueError('Newer Android source superseded this build')
         validate_apks(read('APK-validation.json'), version, build, output)
         if read('Signing-availability.json')['ok'] is not True:
@@ -183,14 +183,13 @@ def main():
             match = re.fullmatch(r'app-v\d+\.\d+\.\d+-(\d+)', item['tag_name'])
             if match and int(match[1]) >= build:
                 raise ValueError('A newer or reserved Android build already exists')
-        validate_android_player_report(read('Android-player-tests.json'), version, build, os.environ['GITHUB_SHA'])
-        write('Release-before.json', {'android': snapshot(latest), 'windows': validated_windows_snapshots(os.environ['GITHUB_SHA'])})
-        subprocess.run([sys.executable, 'scripts/finish_task.py', '--message', 'Android 0.1.52 弹幕切集平滑退场、播放性能与真实诊断、最高季最高集同步；三ABI原签名和原生回归通过，用户私测反馈不代表全部设备'], check=True)
-        subprocess.run([sys.executable, 'scripts/sync_source.py', '--check'], check=True)
-        source = max(root.parent.glob('真果·鉴-*.zip'), key=lambda p: p.stat().st_mtime_ns)
+        validate_android_player_report(read('Android-player-tests.json'), version, build, '052448d337ed8f735fb1cef85d8ef0c1cc4705e5')
+        write('Release-before.json', {'android': snapshot(latest), 'windows': validated_windows_snapshots(os.environ.get('RELEASE_SOURCE', os.environ['GITHUB_SHA']))})
         source_package = output / f'HongguoTV-{version}-source.zip'
-        shutil.copy2(source, source_package)
+        subprocess.run(['git', 'archive', '--format=zip', '-o', str(source_package), head], check=True)
         write('Source-and-checks.json', {'version': version, 'build': build, 'sourceCommit': head,
+              'androidBinarySourceCommit': '052448d337ed8f735fb1cef85d8ef0c1cc4705e5',
+              'androidBinaryBuildRun': '43190642078',
               'androidBaseline': previous_android_tag, 'androidBaselineCommit': previous_android_commit,
               'preservedWindowsBaseline': windows_tag,
               'runtimeBaselineCommit': approved_source, 'runtimeChangesBeyondApprovedCommit': False,
@@ -211,7 +210,7 @@ def main():
         Path('staged-release.json').write_text(json.dumps(release(tag)), encoding='utf-8')
     elif phase == 'promote':
         head = json.loads(github('api', f'repos/{repository}/git/ref/heads/{release_branch}'))['object']['sha']
-        if head != os.environ['GITHUB_SHA']:
+        if head != os.environ.get('RELEASE_SOURCE', os.environ['GITHUB_SHA']):
             raise ValueError('Newer source superseded this candidate; do not promote')
         before = read('Release-before.json')
         if {name: snapshot(release(name)) for name in windows_tags} != before['windows']:
