@@ -1,42 +1,43 @@
-name: Audit Android release finalization
+name: Finalize verified Android release evidence
 on:
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
   actions: read
-  checks: write
 jobs:
-  audit:
+  finalize:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
+      RELEASE_SOURCE: 7f23f624a9d82d05a2123c7e297dab20d42a9023
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
       - uses: actions/download-artifact@v4
         with:
           name: android-0.1.52-reused-package-evidence
           run-id: 43341696721
           github-token: ${{ github.token }}
           path: dist/android
-      - name: Inspect recorded release evidence
+      - name: Validate completed public verification and restore evidence
         run: |
           python3 - <<'PY'
-          import os,sys,json
-          from pathlib import Path
-          sys.path.insert(0,'scripts')
-          import publish_android_stable as p
-          try:
-              d=Path('dist/android')
-              print('EVIDENCE_FILES', sorted(x.name for x in d.iterdir()))
-              before=p.read('Release-before.json')
-              windows={name:p.snapshot(p.release(name)) for name in p.windows_tags}
-              print('WINDOWS_UNCHANGED',windows==before['windows'])
-              print('PREVIOUS_ANDROID_UNCHANGED',p.snapshot(p.release(before['android']['tag']))==before['android'])
-              for k in ['staged-apk-validation.json','latest-apk-validation.json','staged-update-check.json','latest-update-check.json']:
-                  print('::notice title=Evidence file::'+k+'='+str((d/k).exists()))
-              if windows!=before['windows'] or p.snapshot(p.release(before['android']['tag']))!=before['android']: raise ValueError('release snapshots changed')
-              print('::notice title=Release evidence::Previous Android and Windows release snapshots are unchanged')
-          except Exception as e:
-              print('::error title=Release audit::'+type(e).__name__+' '+str(e).replace('%','%25').replace('\n','%0A'))
-              raise
+          import json, subprocess, pathlib, shutil
+          repo='repos/qq294716498/HongguoTV-Phone-TV-NoAds'
+          job=json.loads(subprocess.check_output(['gh','api',repo+'/actions/runs/43341696721/jobs?per_page=100']))['jobs']
+          j=next(x for x in job if x['name']=='publish')
+          for name in ['Verify original Android build and exact runtime differences','Download staged APKs using updater','Run python3 scripts/publish_android_stable.py promote','Verify public update downloads and signatures']:
+              assert any(x['name']==name and x['conclusion']=='success' for x in j['steps']), name
+          r=json.loads(subprocess.check_output(['gh','api',repo+'/releases/tags/app-v0.1.52-92']))
+          assert not r['draft'] and not r['prerelease'] and r['target_commitish']=='7f23f624a9d82d05a2123c7e297dab20d42a9023'
+          pending={'staged-apk-validation.json','latest-apk-validation.json','staged-update-check.json','latest-update-check.json','Windows-isolation.json','SHA256SUMS.txt'}
+          assert not pending.intersection(a['name'] for a in r['assets']), 'Some evidence already exists; do not overwrite'
+          src=pathlib.Path('dist/android'); dest=pathlib.Path('dist/update-check');dest.mkdir(parents=True,exist_ok=True)
+          for p in src.iterdir():
+              if p.name.endswith('.apk') or p.name in pending:
+                  shutil.copy2(p,dest/p.name)
           PY
+      - name: Verify snapshots and publish missing evidence
+        run: python3 scripts/publish_android_stable.py finalize
