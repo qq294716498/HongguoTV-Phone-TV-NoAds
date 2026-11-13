@@ -26,6 +26,7 @@ class SavedLibrary extends StatefulWidget {
     required this.onContinue,
     this.onDownload,
     this.refreshToken = 0,
+    this.followUpdates,
   });
 
   final AppRepository repository;
@@ -35,6 +36,7 @@ class SavedLibrary extends StatefulWidget {
   final ValueChanged<Drama> onContinue;
   final ValueChanged<Drama>? onDownload;
   final int refreshToken;
+  final FollowUpdates? followUpdates;
 
   @override
   State<SavedLibrary> createState() => _SavedLibraryState();
@@ -48,7 +50,8 @@ class _SavedLibraryState extends State<SavedLibrary> {
   @override
   void initState() {
     super.initState();
-    _updates = FollowUpdates(widget.repository, widget.store);
+    _updates =
+        widget.followUpdates ?? FollowUpdates(widget.repository, widget.store);
     _updatesEpoch = widget.store.profileEpoch;
     if (!widget.history) unawaited(_refreshUpdates());
   }
@@ -59,10 +62,13 @@ class _SavedLibraryState extends State<SavedLibrary> {
     final reset =
         oldWidget.repository != widget.repository ||
         oldWidget.store != widget.store ||
+        oldWidget.followUpdates != widget.followUpdates ||
         _updatesEpoch != widget.store.profileEpoch;
     if (reset) {
-      _updates.dispose();
-      _updates = FollowUpdates(widget.repository, widget.store);
+      if (oldWidget.followUpdates == null) _updates.dispose();
+      _updates =
+          widget.followUpdates ??
+          FollowUpdates(widget.repository, widget.store);
       _updatesEpoch = widget.store.profileEpoch;
       _search.clear();
     }
@@ -107,7 +113,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
 
   @override
   void dispose() {
-    _updates.dispose();
+    if (widget.followUpdates == null) _updates.dispose();
     _search.dispose();
     super.dispose();
   }

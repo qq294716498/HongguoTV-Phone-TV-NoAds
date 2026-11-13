@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import 'core_bridge.dart';
@@ -12,6 +14,7 @@ class FollowUpdates extends ChangeNotifier {
   final LocalStore store;
   final int _epoch;
   bool checking = false;
+  bool _forcePending = false;
   int checked = 0;
   int total = 0;
   int failed = 0;
@@ -25,7 +28,11 @@ class FollowUpdates extends ChangeNotifier {
       store.seriesWatch(drama)?.drama ?? store.followedSeries(drama) ?? drama;
 
   Future<void> refresh({bool force = false}) async {
-    if (!_valid || checking) return;
+    if (!_valid) return;
+    if (checking) {
+      if (force) _forcePending = true;
+      return;
+    }
     final tracked = store.trackedSeries
         .where((drama) => drama.source == SourceSite.hongguo.id)
         .toList();
@@ -144,12 +151,16 @@ class FollowUpdates extends ChangeNotifier {
     } finally {
       if (current()) {
         checking = false;
+        final repeat = _forcePending;
+        _forcePending = false;
         notifyListeners();
+        if (repeat) unawaited(refresh(force: true));
       }
     }
   }
 
   void cancel() {
+    _forcePending = false;
     _generation++;
     checking = false;
   }

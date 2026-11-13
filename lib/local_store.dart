@@ -1277,7 +1277,7 @@ class LocalStore extends ChangeNotifier {
             _checkedNext(mergedAnchor, previous)) {
           check = previous;
         }
-        final earliest = now.add(const Duration(seconds: 30));
+        final earliest = now.add(const Duration(seconds: 5));
         check = check.retrying(
           retryAt: retryAt != null && retryAt.isAfter(earliest)
               ? retryAt

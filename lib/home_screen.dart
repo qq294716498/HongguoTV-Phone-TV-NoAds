@@ -20,6 +20,7 @@ import 'detail_screen.dart';
 import 'playback_launch_screen.dart';
 import 'downloads_screen.dart';
 import 'local_store.dart';
+import 'follow_updates.dart';
 import 'lan_screen.dart';
 import 'models.dart';
 import 'remote_widgets.dart';
@@ -47,6 +48,18 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  late FollowUpdates _followUpdates;
+  late int _followUpdatesEpoch;
+
+  FollowUpdates _currentFollowUpdates() {
+    if (_followUpdatesEpoch != widget.store.profileEpoch) {
+      _followUpdates.dispose();
+      _followUpdates = FollowUpdates(widget.repository, widget.store);
+      _followUpdatesEpoch = widget.store.profileEpoch;
+    }
+    return _followUpdates;
+  }
+
   static const _recommendationCategory = 'app:recommendations';
   final _search = TextEditingController();
   final _scroll = ScrollController();
@@ -473,6 +486,8 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _followUpdates = FollowUpdates(widget.repository, widget.store);
+    _followUpdatesEpoch = widget.store.profileEpoch;
     _scroll.addListener(_onCatalogScroll);
     _source = SourceSite.byId(widget.store.source);
     _allSources = widget.store.catalogView.allSources;
@@ -496,6 +511,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    _followUpdates.dispose();
     _initialRetryTimer?.cancel();
     _updater.removeListener(_updateChanged);
     _updater.dispose();
@@ -1327,6 +1343,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           store: widget.store,
                           history: _tab == 2,
                           refreshToken: _followVisit,
+                          followUpdates: _currentFollowUpdates(),
                           onOpen: _openDrama,
                           onContinue: (drama) =>
                               _openDrama(drama, resume: true),

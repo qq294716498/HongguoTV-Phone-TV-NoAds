@@ -8,7 +8,9 @@ import 'package:duanju_app/local_store.dart';
 import 'package:duanju_app/models.dart';
 import 'package:duanju_app/next_season_resolver.dart';
 import 'package:duanju_app/season_check.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:duanju_app/saved_library.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'fixtures.dart';
@@ -138,6 +140,67 @@ void main() {
     await updates.refresh();
     expect(updates.total, 0);
   });
+
+  testWidgets(
+    'switching away keeps shared follow checks running and restores results',
+    (tester) async {
+      final store = await create();
+      await store.toggleSeriesFavorite(first);
+      final repository = CheckRepository()
+        ..blocked = Completer<CatalogPage>()
+        ..blockedPrefix = '';
+      final shared = follow(repository, store);
+      Widget followPage() => MaterialApp(
+        home: Scaffold(
+          body: SavedLibrary(
+            repository: repository,
+            store: store,
+            history: false,
+            followUpdates: shared,
+            onOpen: (_) {},
+            onContinue: (_) {},
+          ),
+        ),
+      );
+      await tester.pumpWidget(followPage());
+      await tester.pump(const Duration(milliseconds: 20));
+      expect(repository.active, 1);
+      await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+      expect(shared.checking, isTrue);
+      repository.blocked!.complete(CatalogPage([]));
+      for (var i = 0; i < 30 && shared.checking; i++) {
+        await tester.pump(const Duration(milliseconds: 20));
+      }
+      expect(shared.checking, isFalse);
+      expect(store.hasConfirmedNoNextSeason(first), isTrue);
+      final calls = repository.calls.length;
+      await tester.pumpWidget(followPage());
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(repository.calls.length, calls);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  test(
+    'manual refresh requested during checking runs after the in-flight batch',
+    () async {
+      final store = await create();
+      await store.toggleSeriesFavorite(first);
+      final repository = CheckRepository()
+        ..blocked = Completer<CatalogPage>()
+        ..blockedPrefix = '';
+      final updates = follow(repository, store);
+      final firstBatch = updates.refresh();
+      await until(() => repository.active == 1);
+      await updates.refresh(force: true);
+      repository.blocked!.complete(CatalogPage([]));
+      await firstBatch;
+      await until(() => repository.calls.any((call) => call.$2));
+      await until(() => !updates.checking);
+      expect(repository.maximum, 1);
+      expect(store.hasConfirmedNoNextSeason(first), isTrue);
+    },
+  );
 
   test('three tracked dramas use a single worker', () async {
     final store = await create();
@@ -299,7 +362,7 @@ void main() {
         (checks[first.id] as Map)['checkedAt'],
         observedAt.millisecondsSinceEpoch,
       );
-      now = now.add(const Duration(seconds: 31));
+      now = now.add(const Duration(seconds: 6));
       expect(store.shouldCheckNextSeason(first), isTrue);
     },
   );
@@ -317,7 +380,7 @@ void main() {
       expect(repository.calls, hasLength(3));
       await updates.refresh();
       expect(repository.calls, hasLength(3));
-      now = now.add(const Duration(seconds: 31));
+      now = now.add(const Duration(seconds: 6));
       expect(store.shouldCheckNextSeason(first), isTrue);
       repository.warning = '';
       repository.items = [second];
@@ -559,7 +622,7 @@ void main() {
         store.seriesDramasFor(first).map((drama) => drama.id),
         contains(second.id),
       );
-      now = now.add(const Duration(seconds: 31));
+      now = now.add(const Duration(seconds: 6));
       expect(store.nextSeasonDramasFor(first).map((drama) => drama.id), [
         first.id,
       ]);
@@ -614,7 +677,7 @@ void main() {
       await updates.refresh();
       expect(store.hasFreshNoNextSeason(sparse), isFalse);
       expect(store.nextSeasonDramasFor(sparse), hasLength(1));
-      now = now.add(const Duration(seconds: 31));
+      now = now.add(const Duration(seconds: 6));
       repository.warning = '';
       repository.failure = AppFailure(
         '合成限制',
