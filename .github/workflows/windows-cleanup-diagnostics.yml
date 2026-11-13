@@ -33,7 +33,7 @@ jobs:
               print('WINDOWS_UNCHANGED',windows==before['windows'])
               print('PREVIOUS_ANDROID_UNCHANGED',p.snapshot(p.release(before['android']['tag']))==before['android'])
               for k in ['staged-apk-validation.json','latest-apk-validation.json','staged-update-check.json','latest-update-check.json']:
-                  print('EVIDENCE_'+k, (d/k).exists())
+                  print('::notice title=Evidence file::'+k+'='+str((d/k).exists()))
               if windows!=before['windows'] or p.snapshot(p.release(before['android']['tag']))!=before['android']: raise ValueError('release snapshots changed')
               print('::notice title=Release evidence::Previous Android and Windows release snapshots are unchanged')
           except Exception as e:
