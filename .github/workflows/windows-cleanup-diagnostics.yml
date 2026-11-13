@@ -42,8 +42,8 @@ jobs:
           PY
       - uses: actions/download-artifact@v4
         with:
-          name: hongguotv-android-0.1.52+92
-          run-id: 43190642078
+          name: android-0.1.52-reused-package-evidence
+          run-id: 43341323136
           github-token: ${{ github.token }}
           path: dist/android
       - uses: actions/setup-java@v4
@@ -58,21 +58,25 @@ jobs:
       - run: flutter pub get --enforce-lockfile
       - name: Confirm matching finalized Windows release
         run: python3 scripts/publish_android_stable.py wait-windows
-      - name: Verify original APKs and stage candidate
+      - name: Verify original APKs and existing staged candidate
         run: |
           python3 scripts/verify_release_apks.py --directory dist/android --report APK-validation.json
-          python3 scripts/publish_android_stable.py stage
+          gh api repos/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tags/app-v0.1.52-92 > staged-release.json
+          python3 -c "import json; r=json.load(open('staged-release.json')); assert r['prerelease'] and not r['draft'] and r['target_commitish']=='7f23f624a9d82d05a2123c7e297dab20d42a9023'"
       - name: Download staged APKs using updater
         env:
           UPDATE_METADATA_FILE: staged-release.json
           CHECK_STAGED_UPDATE: 'true'
         run: flutter test --no-pub test/app_update_live_test.dart --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true --reporter=expanded
-      - run: python3 scripts/verify_release_apks.py --directory dist/update-check --report staged-apk-validation.json
+      - run: |
+          python3 scripts/verify_release_apks.py --directory dist/update-check --report staged-apk-validation.json
+          cp dist/update-check/staged-apk-validation.json dist/android/
       - run: python3 scripts/publish_android_stable.py promote
       - name: Verify public update downloads and signatures
         run: |
           flutter test --no-pub test/app_update_live_test.dart --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true --reporter=expanded
           python3 scripts/verify_release_apks.py --directory dist/update-check --report latest-apk-validation.json
+          cp dist/update-check/latest-apk-validation.json dist/android/
       - run: python3 scripts/publish_android_stable.py finalize
       - uses: actions/upload-artifact@v4
         if: always()
