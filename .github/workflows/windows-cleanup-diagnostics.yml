@@ -1,85 +1,42 @@
-name: Publish verified existing Android package
+name: Audit Android release finalization
 on:
   workflow_dispatch:
 permissions:
-  contents: write
+  contents: read
   actions: read
+  checks: write
 jobs:
-  publish:
+  audit:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
     env:
       GH_TOKEN: ${{ github.token }}
-      RELEASE_SOURCE: 7f23f624a9d82d05a2123c7e297dab20d42a9023
-      EXPECTED_UPDATE_TAG: app-v0.1.52-92
-      EXPECTED_WINDOWS_TAG: windows-v0.1.52-92
-      CHECK_LIVE_UPDATE: 'true'
-      CHECK_UPDATE_DOWNLOAD: 'true'
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Verify original Android build and exact runtime differences
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          import json, os, subprocess
-          old='052448d337ed8f735fb1cef85d8ef0c1cc4705e5'
-          new=os.environ['RELEASE_SOURCE']
-          run=json.loads(subprocess.check_output(['gh','api','repos/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/43190642078']))
-          assert run['head_sha']==old and run['path']=='.github/workflows/android-stable.yml'
-          jobs=json.loads(subprocess.check_output(['gh','api','repos/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/43190642078/jobs?per_page=100']))['jobs']
-          for name in ['checks','android']:
-              assert any(j['name']==name and j['conclusion']=='success' for j in jobs), name
-          artifact=json.loads(subprocess.check_output(['gh','api','repos/qq294716498/HongguoTV-Phone-TV-NoAds/actions/artifacts/13932705456']))
-          assert artifact['name']=='hongguotv-android-0.1.52+92' and not artifact['expired'] and artifact['digest']=='sha256:07eaf74416a88831dc713ca288ed5feb5847249561eb4a5bdc40836ae4f48e37'
-          changed=subprocess.check_output(['git','diff','--name-only',old,new,'--','lib','native','android','packages','pubspec.yaml','pubspec.lock'],text=True).splitlines()
-          assert changed==['lib/app_layout.dart'], changed
-          before=subprocess.check_output(['git','show',old+':lib/app_layout.dart'],text=True)
-          after=subprocess.check_output(['git','show',new+':lib/app_layout.dart'],text=True)
-          assert before.replace('const windowsBuildNumber = 90;', 'const windowsBuildNumber = 92;')==after
-          PY
       - uses: actions/download-artifact@v4
         with:
           name: android-0.1.52-reused-package-evidence
-          run-id: 43341323136
+          run-id: 43341696721
           github-token: ${{ github.token }}
           path: dist/android
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.47.4'
-          channel: stable
-          cache: true
-      - run: flutter pub get --enforce-lockfile
-      - name: Confirm matching finalized Windows release
-        run: python3 scripts/publish_android_stable.py wait-windows
-      - name: Verify original APKs and existing staged candidate
+      - name: Inspect recorded release evidence
         run: |
-          python3 scripts/verify_release_apks.py --directory dist/android --report APK-validation.json
-          gh api repos/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tags/app-v0.1.52-92 > staged-release.json
-          python3 -c "import json; r=json.load(open('staged-release.json')); assert r['prerelease'] and not r['draft'] and r['target_commitish']=='7f23f624a9d82d05a2123c7e297dab20d42a9023'"
-      - name: Download staged APKs using updater
-        env:
-          UPDATE_METADATA_FILE: staged-release.json
-          CHECK_STAGED_UPDATE: 'true'
-        run: flutter test --no-pub test/app_update_live_test.dart --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true --reporter=expanded
-      - run: |
-          python3 scripts/verify_release_apks.py --directory dist/update-check --report staged-apk-validation.json
-          cp dist/update-check/staged-apk-validation.json dist/android/
-      - run: python3 scripts/publish_android_stable.py promote
-      - name: Verify public update downloads and signatures
-        run: |
-          flutter test --no-pub test/app_update_live_test.dart --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true --reporter=expanded
-          python3 scripts/verify_release_apks.py --directory dist/update-check --report latest-apk-validation.json
-          cp dist/update-check/latest-apk-validation.json dist/android/
-      - run: python3 scripts/publish_android_stable.py finalize
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: android-0.1.52-reused-package-evidence
-          path: dist/android/*
+          python3 - <<'PY'
+          import os,sys,json
+          from pathlib import Path
+          sys.path.insert(0,'scripts')
+          import publish_android_stable as p
+          try:
+              d=Path('dist/android')
+              print('EVIDENCE_FILES', sorted(x.name for x in d.iterdir()))
+              before=p.read('Release-before.json')
+              windows={name:p.snapshot(p.release(name)) for name in p.windows_tags}
+              print('WINDOWS_UNCHANGED',windows==before['windows'])
+              print('PREVIOUS_ANDROID_UNCHANGED',p.snapshot(p.release(before['android']['tag']))==before['android'])
+              for k in ['staged-apk-validation.json','latest-apk-validation.json','staged-update-check.json','latest-update-check.json']:
+                  print('EVIDENCE_'+k, (d/k).exists())
+              if windows!=before['windows'] or p.snapshot(p.release(before['android']['tag']))!=before['android']: raise ValueError('release snapshots changed')
+              print('::notice title=Release evidence::Previous Android and Windows release snapshots are unchanged')
+          except Exception as e:
+              print('::error title=Release audit::'+type(e).__name__+' '+str(e).replace('%','%25').replace('\n','%0A'))
+              raise
+          PY
