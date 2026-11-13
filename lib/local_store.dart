@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -42,6 +43,21 @@ class LocalStore extends ChangeNotifier {
   final Map<String, FollowState> _followStates = {};
   final Map<String, Drama> _seriesCandidates = {};
   final Map<String, SeasonCheck> _seasonChecks = {};
+  final Map<String, Completer<void>> _seasonCheckInFlight = {};
+
+  Future<void>? seasonCheckPending(String id, int epoch) =>
+      _seasonCheckInFlight['$epoch:$id']?.future;
+  bool beginSeasonCheck(String id, int epoch) {
+    final key = '$epoch:$id';
+    if (_seasonCheckInFlight.containsKey(key)) return false;
+    _seasonCheckInFlight[key] = Completer<void>();
+    return true;
+  }
+
+  void endSeasonCheck(String id, int epoch) {
+    _seasonCheckInFlight.remove('$epoch:$id')?.complete();
+  }
+
   final _seriesIndex = <String, List<Drama>>{};
   final _seriesGroupIndex = <String, List<Drama>>{};
   final _seriesCharacterIndex = <String, List<Drama>>{};

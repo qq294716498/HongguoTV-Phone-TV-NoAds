@@ -99,6 +99,46 @@ void main() {
 
   setUp(() => now = DateTime.utc(2026, 10, 30, 12));
 
+  test(
+    'page replacement waits for an in-flight check and avoids duplicate work',
+    () async {
+      final store = await create();
+      await store.toggleSeriesFavorite(first);
+      final repository = CheckRepository()
+        ..blocked = Completer<CatalogPage>()
+        ..blockedPrefix = '';
+      final firstPage = follow(repository, store);
+      final secondPage = follow(repository, store);
+      final oldRequest = firstPage.refresh();
+      await until(() => repository.active == 1);
+      firstPage.cancel();
+      final newRequest = secondPage.refresh();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(repository.maximum, 1);
+      repository.blocked!.complete(CatalogPage([]));
+      await Future.wait([oldRequest, newRequest]);
+      expect(repository.maximum, 1);
+      expect(store.hasConfirmedNoNextSeason(first), isTrue);
+    },
+  );
+
+  test('manual refresh bypasses a successful twelve hour cache', () async {
+    final store = await create();
+    await store.toggleSeriesFavorite(first);
+    final repository = CheckRepository();
+    final updates = follow(repository, store);
+    await updates.refresh();
+    final count = repository.calls.length;
+    now = now.add(const Duration(hours: 11));
+    await updates.refresh();
+    expect(repository.calls.length, count);
+    await updates.refresh(force: true);
+    expect(repository.calls.length, greaterThan(count));
+    now = now.add(const Duration(hours: 11));
+    await updates.refresh();
+    expect(updates.total, 0);
+  });
+
   test('three tracked dramas use a single worker', () async {
     final store = await create();
     for (var index = 0; index < 3; index++) {
@@ -115,7 +155,7 @@ void main() {
     await follow(repository, store).refresh();
     expect(repository.maximum, 1);
     expect(store.trackedSeries.every(store.hasConfirmedNoNextSeason), isTrue);
-    now = now.add(const Duration(minutes: 11));
+    now = now.add(const Duration(hours: 12, seconds: 1));
     expect(store.trackedSeries.any(store.hasConfirmedNoNextSeason), isFalse);
   });
 
@@ -144,7 +184,7 @@ void main() {
       await updates.refresh();
       expect(updates.total, 0);
       expect(repository.calls, hasLength(18));
-      now = now.add(const Duration(minutes: 10, milliseconds: 1));
+      now = now.add(const Duration(hours: 12, milliseconds: 1));
       await updates.refresh();
       expect(updates.checked, 6);
       expect(repository.calls, hasLength(36));
@@ -213,7 +253,7 @@ void main() {
       await updates.refresh();
       expect(updates.total, 0);
       expect(repository.calls, hasLength(1));
-      now = now.add(const Duration(minutes: 30, milliseconds: 1));
+      now = now.add(const Duration(hours: 12, milliseconds: 1));
       repository.items = [];
       await updates.refresh();
       expect(repository.calls, hasLength(4));
@@ -243,7 +283,7 @@ void main() {
       final updates = follow(repository, store);
       await updates.refresh();
       final observedAt = now;
-      now = now.add(const Duration(minutes: 31));
+      now = now.add(const Duration(hours: 12, seconds: 1));
       repository.failure = AppFailure('合成临时错误');
       await updates.refresh();
       expect(updates.failed, 1);
@@ -437,8 +477,11 @@ void main() {
       complete: true,
     );
     expect(check.isFresh(now.subtract(const Duration(seconds: 1))), isFalse);
-    expect(check.isFresh(now.add(const Duration(minutes: 9))), isTrue);
-    expect(check.isFresh(now.add(const Duration(minutes: 10))), isFalse);
+    expect(
+      check.isFresh(now.add(const Duration(hours: 11, minutes: 59))),
+      isTrue,
+    );
+    expect(check.isFresh(now.add(const Duration(hours: 12))), isFalse);
     expect(SeasonCheck.fromJson(check.toJson()).matches(first), isTrue);
   });
 
@@ -501,7 +544,7 @@ void main() {
       final repository = CheckRepository()..items = [second];
       final updates = follow(repository, store);
       await updates.refresh();
-      now = now.add(const Duration(minutes: 31));
+      now = now.add(const Duration(hours: 12, seconds: 1));
       expect(store.nextSeasonDramasFor(first).map((drama) => drama.id), [
         first.id,
       ]);
@@ -565,7 +608,7 @@ void main() {
       expect(store.hasFreshNoNextSeason(sparse), isTrue);
       now = now.subtract(const Duration(seconds: 1));
       expect(store.hasFreshNoNextSeason(sparse), isFalse);
-      now = now.add(const Duration(minutes: 10, seconds: 1));
+      now = now.add(const Duration(hours: 12, seconds: 1));
       expect(store.hasFreshNoNextSeason(sparse), isFalse);
       repository.warning = '合成部分响应';
       await updates.refresh();

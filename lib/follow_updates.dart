@@ -51,7 +51,29 @@ class FollowUpdates extends ChangeNotifier {
             !store.shouldCheckNextSeason(_anchor(drama), force: force)) {
           continue;
         }
-        final anchor = _anchor(drama);
+        var anchor = _anchor(drama);
+        var claimed = false;
+        while (current()) {
+          final pending = store.seasonCheckPending(anchor.id, _epoch);
+          if (pending != null) {
+            await pending;
+            if (!current() || store.followedSeries(drama) == null) break;
+            anchor = _anchor(drama);
+            if (!force && !store.shouldCheckNextSeason(anchor)) break;
+            continue;
+          }
+          if (store.beginSeasonCheck(anchor.id, _epoch)) {
+            claimed = true;
+            break;
+          }
+        }
+        if (!claimed) continue;
+        if (!current() ||
+            store.followedSeries(drama) == null ||
+            !store.shouldCheckNextSeason(anchor, force: force)) {
+          store.endSeasonCheck(anchor.id, _epoch);
+          continue;
+        }
         final expected = SeasonCheck.observed(
           anchor,
           checkedAt: store.seasonCheckTime,
@@ -105,6 +127,8 @@ class FollowUpdates extends ChangeNotifier {
               );
             } catch (_) {}
           }
+        } finally {
+          store.endSeasonCheck(anchor.id, _epoch);
         }
         if (!current()) return;
         checked++;

@@ -60,7 +60,7 @@ class SeasonCheck {
     if (age.isNegative) return false;
     if (retryAt != null && now.isBefore(retryAt!)) return true;
     if (nextId == null && !complete) return false;
-    return age < Duration(minutes: nextId == null ? 10 : 30);
+    return age < const Duration(hours: 12);
   }
 
   bool hasFreshPositive(DateTime now) {
@@ -68,7 +68,7 @@ class SeasonCheck {
     return nextId != null &&
         retryAt == null &&
         !age.isNegative &&
-        age < const Duration(minutes: 30);
+        age < const Duration(hours: 12);
   }
 
   bool isBlocked(DateTime now) =>
