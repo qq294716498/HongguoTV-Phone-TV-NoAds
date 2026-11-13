@@ -18,13 +18,13 @@ class AndroidStablePublishTests(unittest.TestCase):
 
     def test_release_uses_published_049_baseline_and_preserves_all_windows_releases(self):
         import publish_windows_stable as windows
-        self.assertEqual(publish.previous_android_tag, 'app-v0.1.49-84')
-        self.assertEqual(publish.previous_android_commit, 'ed4c541c56e3afaf326c7f9d312157db99746d61')
+        self.assertEqual(publish.previous_android_tag, 'app-v0.1.51-87')
+        self.assertEqual(publish.previous_android_commit, '5221ff5c3fefa2b23887b87c4ae175f307534736')
         self.assertEqual(windows.previous_android_tag, publish.previous_android_tag)
         self.assertEqual(windows.previous_android_commit, publish.previous_android_commit)
         self.assertEqual(publish.windows_tag, 'windows-v0.1.52-92')
         self.assertEqual(windows.previous_windows_tags, (
-            'windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48', 'windows-v0.1.24-49', 'windows-v0.1.25-50', 'windows-v0.1.29-54', 'windows-v0.1.30-55', 'windows-v0.1.31-56', 'windows-v0.1.32-57', 'windows-v0.1.34-59', 'windows-v0.1.38-63', 'windows-v0.1.39-64', 'windows-v0.1.43-68', 'windows-v0.1.46-71', 'windows-v0.1.48-74', 'windows-v0.1.49-84', 'windows-v0.1.50-86'))
+            'windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48', 'windows-v0.1.24-49', 'windows-v0.1.25-50', 'windows-v0.1.29-54', 'windows-v0.1.30-55', 'windows-v0.1.31-56', 'windows-v0.1.32-57', 'windows-v0.1.34-59', 'windows-v0.1.38-63', 'windows-v0.1.39-64', 'windows-v0.1.43-68', 'windows-v0.1.46-71', 'windows-v0.1.48-74', 'windows-v0.1.49-84', 'windows-v0.1.50-86', 'windows-v0.1.51-87'))
         self.assertEqual(publish.windows_tags, (*windows.previous_windows_tags, publish.windows_tag))
         self.assertEqual(windows.release_branch, publish.release_branch)
         self.assertEqual(windows.approved_source, publish.approved_source)
@@ -89,7 +89,10 @@ class AndroidStablePublishTests(unittest.TestCase):
             workflow = (root / '.github/workflows' / filename).read_text()
             branches = re.search(r'(?m)^    branches: (.*)$', workflow).group(1)
             self.assertIn(fix, branches)
-            self.assertIn(release, branches)
+            if filename == 'windows-preview.yml':
+                self.assertIn(release, branches)
+            else:
+                self.assertNotIn(release, branches)
             expression = re.search(r'(?m)^  release:\n(?:    [^\n]*\n)*?    if: ([^\n]+)', workflow).group(1)
             expression = expression.replace('github.ref', 'ref').replace('github.event_name', 'event').replace('inputs.publish_release', 'publish')
             expression = expression.replace('&&', ' and ').replace('||', ' or ')

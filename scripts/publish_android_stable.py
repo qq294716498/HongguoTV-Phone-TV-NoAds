@@ -15,15 +15,15 @@ output = root / 'dist/android'
 repository = 'qq294716498/HongguoTV-Phone-TV-NoAds'
 certificate = '55c3c3395a00e56e99b8bfd580b14c99618da74db19692a2e42606eb05c47ba9'
 windows_tag = 'windows-v0.1.52-92'
-windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48', 'windows-v0.1.24-49', 'windows-v0.1.25-50', 'windows-v0.1.29-54', 'windows-v0.1.30-55', 'windows-v0.1.31-56', 'windows-v0.1.32-57', 'windows-v0.1.34-59', 'windows-v0.1.38-63', 'windows-v0.1.39-64', 'windows-v0.1.43-68', 'windows-v0.1.46-71', 'windows-v0.1.48-74', 'windows-v0.1.49-84', 'windows-v0.1.50-86', windows_tag)
-previous_android_tag = 'app-v0.1.49-84'
-previous_android_commit = 'ed4c541c56e3afaf326c7f9d312157db99746d61'
+windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48', 'windows-v0.1.24-49', 'windows-v0.1.25-50', 'windows-v0.1.29-54', 'windows-v0.1.30-55', 'windows-v0.1.31-56', 'windows-v0.1.32-57', 'windows-v0.1.34-59', 'windows-v0.1.38-63', 'windows-v0.1.39-64', 'windows-v0.1.43-68', 'windows-v0.1.46-71', 'windows-v0.1.48-74', 'windows-v0.1.49-84', 'windows-v0.1.50-86', 'windows-v0.1.51-87', windows_tag)
+previous_android_tag = 'app-v0.1.51-87'
+previous_android_commit = '5221ff5c3fefa2b23887b87c4ae175f307534736'
 pending_publication_note = '公开发布核验进行中：尚未完成三 ABI 公网下载、签名复核及 Android / Windows 升级通道隔离检查。'
 verified_publication_note = '公开发布核验已完成：三 ABI 公网下载、SHA-256、正式证书与版本复核通过；Android Latest 和 Windows 升级通道隔离、旧版本资产保持检查通过。'
 windows_verified_publication_note = '公开发布核验已完成：Windows 公网 ZIP 下载与 SHA-256、正式升级通道和 API 限流回退检查通过；Android Latest 隔离及旧版本资产保持检查通过。'
 offsets = {'arm64-v8a': 2000, 'armeabi-v7a': 1000, 'x86_64': 4000}
 release_branch = 'release/windows-android-0.1.52-92'
-approved_source = '8600153fea24189bba3746a701565de6fc810faa'
+approved_source = 'f0b3a9c280b60c4f47cbaf937d4f221b3c52d956'
 release_only_paths = frozenset({
     'README.md', '.github/workflows/android-stable.yml',
     '.github/workflows/windows-preview.yml',
