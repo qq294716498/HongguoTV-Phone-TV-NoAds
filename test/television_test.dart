@@ -132,6 +132,13 @@ void main() {
       r'^version:\s*([^+\s]+)',
       multiLine: true,
     ).firstMatch(File('pubspec.yaml').readAsStringSync())!.group(1);
+    final build = int.parse(
+      RegExp(
+        r'^version:\s*[^+\s]+\+(\d+)',
+        multiLine: true,
+      ).firstMatch(File('pubspec.yaml').readAsStringSync())!.group(1)!,
+    );
+    expect(windowsBuildNumber, build);
     expect(appVersion, packageVersion);
     expect(const AppDevice().version, packageVersion);
     debugDefaultTargetPlatformOverride = TargetPlatform.windows;
