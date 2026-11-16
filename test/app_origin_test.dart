@@ -155,7 +155,7 @@ void main() {
       await tester.tap(find.text('about'));
       await tester.pumpAndSettle();
       expect(find.text(projectFreeNotice), findsOneWidget);
-      expect(find.text('维护仓库 · qq294716498'), findsOneWidget);
+      expect(find.text('QQ群 636504313'), findsOneWidget);
       expect(find.textContaining('zhoufuweigg/guoapp'), findsOneWidget);
       expect(find.byType(Image), findsOneWidget);
       final licenses = MaterialLocalizations.of(

@@ -3,7 +3,6 @@ import 'dart:convert';
 
 import 'package:duanju_app/core_bridge.dart';
 import 'package:duanju_app/follow_updates.dart';
-import 'package:duanju_app/local_snapshot.dart';
 import 'package:duanju_app/local_store.dart';
 import 'package:duanju_app/models.dart';
 import 'package:duanju_app/next_season_resolver.dart';
@@ -41,6 +40,7 @@ class CheckRepository extends FixtureRepository {
   List<Drama> items = [];
   AppFailure? failure;
   String warning = '';
+  bool hasMore = false;
   final calls = <(String, bool)>[];
   int active = 0;
   int maximum = 0;
@@ -64,7 +64,7 @@ class CheckRepository extends FixtureRepository {
       if (blocked != null && query.startsWith(blockedPrefix)) {
         return await blocked!.future;
       }
-      return CatalogPage(items, warning: warning);
+      return CatalogPage(items, warning: warning, hasMore: hasMore);
     } finally {
       active--;
     }
@@ -241,16 +241,16 @@ void main() {
       await updates.refresh();
       expect(updates.checked, 6);
       expect(updates.failed, 0);
-      expect(repository.calls, hasLength(18));
+      expect(repository.calls, hasLength(6));
       expect(repository.calls.every((call) => !call.$2), isTrue);
       expect(repository.maximum, 3);
       await updates.refresh();
       expect(updates.total, 0);
-      expect(repository.calls, hasLength(18));
+      expect(repository.calls, hasLength(6));
       now = now.add(const Duration(hours: 12, milliseconds: 1));
       await updates.refresh();
       expect(updates.checked, 6);
-      expect(repository.calls, hasLength(36));
+      expect(repository.calls, hasLength(12));
     },
   );
 
@@ -294,7 +294,7 @@ void main() {
   );
 
   test(
-    'positive cache persists, expires, and complete none revokes only derived relation',
+    'positive badges skip automatic and manual refresh after restart and expiry',
     () async {
       final store = await create();
       await store.toggleSeriesFavorite(first);
@@ -313,57 +313,56 @@ void main() {
       final restarted = LocalStore(store.preferences, now: () => now);
       addTearDown(restarted.dispose);
       final updates = follow(repository, restarted);
-      await updates.refresh();
-      expect(updates.total, 0);
-      expect(repository.calls, hasLength(1));
-      now = now.add(const Duration(hours: 12, milliseconds: 1));
+      now = now.add(const Duration(days: 2));
       repository.items = [];
+      repository.failure = AppFailure('should not be called');
       await updates.refresh();
-      expect(repository.calls, hasLength(4));
-      expect(repository.calls.every((call) => !call.$2), isTrue);
-      expect(restarted.hasNextSeason(first), isFalse);
-      expect(
-        restarted.following(first.id)!.seriesSeasons,
-        isNot(contains(second.id)),
-      );
-      expect(restarted.favorites.single.id, first.id);
+      await updates.refresh(force: true);
+      expect(updates.total, 0);
+      expect(updates.failed, 0);
+      expect(repository.calls, hasLength(1));
+      expect(restarted.hasNextSeason(first), isTrue);
       expect(restarted.watched(first.id)!.toJson(), watched.toJson());
-      await restarted.refreshDramas([second]);
-      expect(restarted.hasNextSeason(first), isFalse);
-      final again = LocalStore(store.preferences, now: () => now);
-      addTearDown(again.dispose);
-      expect(again.hasNextSeason(first), isFalse);
-      expect(again.shouldCheckNextSeason(first), isFalse);
     },
   );
 
+  test('advancing the watched season makes the next anchor eligible', () async {
+    final store = await create();
+    await store.toggleSeriesFavorite(first);
+    final repository = CheckRepository()..items = [second];
+    final updates = follow(repository, store);
+    await updates.refresh();
+    expect(store.hasNextSeason(first), isTrue);
+    await store.saveWatch(
+      WatchEntry(
+        drama: second,
+        episode: 1,
+        position: 2,
+        duration: 90,
+        updatedAt: now,
+      ),
+    );
+    expect(store.hasNextSeason(first), isFalse);
+    repository.items = [third];
+    await updates.refresh();
+    expect(repository.calls, hasLength(2));
+    expect(store.hasNextSeason(second), isTrue);
+  });
+
   test(
-    'failed recheck keeps verified positive without renewing its timestamp',
+    'one normal empty response ends the card even when more pages exist',
     () async {
       final store = await create();
       await store.toggleSeriesFavorite(first);
-      final repository = CheckRepository()..items = [second];
+      final repository = CheckRepository()..hasMore = true;
       final updates = follow(repository, store);
       await updates.refresh();
-      final observedAt = now;
-      now = now.add(const Duration(hours: 12, seconds: 1));
-      repository.failure = AppFailure('合成临时错误');
+      expect(repository.calls, hasLength(1));
+      expect(updates.checked, 1);
+      expect(updates.failed, 0);
+      expect(store.hasConfirmedNoNextSeason(first), isTrue);
       await updates.refresh();
-      expect(updates.failed, 1);
-      expect(store.hasNextSeason(first), isTrue);
-      expect(store.shouldCheckNextSeason(first), isFalse);
-      final snapshot =
-          jsonDecode(store.preferences.getString(LocalSnapshot.storageKey)!)
-              as Map;
-      final checks =
-          jsonDecode((snapshot['values'] as Map)['seasonChecks'] as String)
-              as Map;
-      expect(
-        (checks[first.id] as Map)['checkedAt'],
-        observedAt.millisecondsSinceEpoch,
-      );
-      now = now.add(const Duration(seconds: 6));
-      expect(store.shouldCheckNextSeason(first), isTrue);
+      expect(repository.calls, hasLength(1));
     },
   );
 
@@ -377,16 +376,16 @@ void main() {
       await updates.refresh();
       expect(updates.failed, 1);
       expect(store.hasConfirmedNoNextSeason(first), isFalse);
-      expect(repository.calls, hasLength(3));
+      expect(repository.calls, hasLength(1));
       await updates.refresh();
-      expect(repository.calls, hasLength(3));
+      expect(repository.calls, hasLength(1));
       now = now.add(const Duration(seconds: 6));
       expect(store.shouldCheckNextSeason(first), isTrue);
       repository.warning = '';
       repository.items = [second];
       await updates.refresh();
       expect(store.hasNextSeason(first), isTrue);
-      expect(repository.calls, hasLength(4));
+      expect(repository.calls, hasLength(2));
     },
   );
 
@@ -428,7 +427,7 @@ void main() {
       now = now.add(const Duration(minutes: 5, milliseconds: 1));
       repository.failure = null;
       await updates.refresh(force: true);
-      expect(repository.calls, hasLength(4));
+      expect(repository.calls, hasLength(2));
       expect(repository.calls.skip(1).every((call) => call.$2), isTrue);
     },
   );

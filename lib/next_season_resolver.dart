@@ -44,6 +44,7 @@ class NextSeasonResolver {
     bool force = false,
     bool requirePlayableDetail = true,
     bool revalidateKnownNext = false,
+    bool singleSearch = false,
   }) async {
     if (anchor.source != SourceSite.hongguo.id ||
         normalizedSearchText(anchor.title).isEmpty) {
@@ -338,7 +339,7 @@ class NextSeasonResolver {
         ...targeted,
         broad,
       }.where((query) => normalizedSearchText(query).isNotEmpty);
-      final pending = queries.toSet();
+      final pending = (singleSearch ? queries.take(1) : queries).toSet();
       for (var page = 1; page <= 3 && pending.isNotEmpty; page++) {
         for (final query in pending.toList()) {
           checkCurrent();
@@ -355,6 +356,7 @@ class NextSeasonResolver {
           } catch (error) {
             failed(error);
             pending.remove(query);
+            if (singleSearch) return result();
             continue;
           }
           for (final fresh in response.items) {
@@ -372,6 +374,7 @@ class NextSeasonResolver {
           }
           final found = await verifiedNext();
           if (found != null) return found;
+          if (singleSearch) return result(complete: !incomplete);
           if (!response.hasMore) {
             pending.remove(query);
           }

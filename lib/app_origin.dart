@@ -6,7 +6,7 @@ import 'app_layout.dart';
 
 const projectRepositoryUrl =
     'https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds';
-const projectOwner = 'qq294716498';
+const projectGroup = '636504313';
 const projectFreeNotice = '本软件免费提供，仅供学习交流，请勿付费购买，谨防盗卖';
 const originNoticeAcknowledgedKey = 'app_origin_notice_acknowledged_v1';
 
@@ -35,7 +35,7 @@ class ProjectOrigin extends StatelessWidget {
               'assets/app_identity/github-avatar.png',
               width: 48,
               height: 48,
-              semanticLabel: '$projectOwner 的 GitHub 公开头像',
+              semanticLabel: '项目头像',
               errorBuilder: (_, _, _) => const SizedBox(
                 width: 48,
                 height: 48,
@@ -44,7 +44,7 @@ class ProjectOrigin extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
-          const Expanded(child: Text('维护仓库 · $projectOwner')),
+          const Expanded(child: Text('QQ群 $projectGroup')),
         ],
       ),
       const SizedBox(height: 12),

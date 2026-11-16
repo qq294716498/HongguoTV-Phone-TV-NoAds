@@ -27,6 +27,10 @@ class FollowUpdates extends ChangeNotifier {
   Drama _anchor(Drama drama) =>
       store.seriesWatch(drama)?.drama ?? store.followedSeries(drama) ?? drama;
 
+  bool _shouldCheck(Drama drama, {bool force = false}) =>
+      !store.hasNextSeason(drama) &&
+      store.shouldCheckNextSeason(_anchor(drama), force: force);
+
   Future<void> refresh({bool force = false}) async {
     if (!_valid) return;
     if (checking) {
@@ -37,9 +41,7 @@ class FollowUpdates extends ChangeNotifier {
         .where((drama) => drama.source == SourceSite.hongguo.id)
         .toList();
     final dramas = tracked
-        .where(
-          (drama) => store.shouldCheckNextSeason(_anchor(drama), force: force),
-        )
+        .where((drama) => _shouldCheck(drama, force: force))
         .toList();
     final generation = ++_generation;
     bool current() => _valid && generation == _generation;
@@ -55,7 +57,7 @@ class FollowUpdates extends ChangeNotifier {
           cursor < dramas.length) {
         final drama = dramas[cursor++];
         if (store.followedSeries(drama) == null ||
-            !store.shouldCheckNextSeason(_anchor(drama), force: force)) {
+            !_shouldCheck(drama, force: force)) {
           continue;
         }
         var anchor = _anchor(drama);
@@ -66,7 +68,7 @@ class FollowUpdates extends ChangeNotifier {
             await pending;
             if (!current() || store.followedSeries(drama) == null) break;
             anchor = _anchor(drama);
-            if (!force && !store.shouldCheckNextSeason(anchor)) break;
+            if (!_shouldCheck(drama, force: force)) break;
             continue;
           }
           if (store.beginSeasonCheck(anchor.id, _epoch)) {
@@ -77,7 +79,7 @@ class FollowUpdates extends ChangeNotifier {
         if (!claimed) continue;
         if (!current() ||
             store.followedSeries(drama) == null ||
-            !store.shouldCheckNextSeason(anchor, force: force)) {
+            !_shouldCheck(drama, force: force)) {
           store.endSeasonCheck(anchor.id, _epoch);
           continue;
         }
@@ -99,7 +101,7 @@ class FollowUpdates extends ChangeNotifier {
             isCurrent: stillCurrent,
             trustKnownNext: false,
             requirePlayableDetail: false,
-            revalidateKnownNext: true,
+            singleSearch: true,
             force: force,
           );
           if (!current()) return;
@@ -140,7 +142,6 @@ class FollowUpdates extends ChangeNotifier {
         if (!current()) return;
         checked++;
         notifyListeners();
-        await Future<void>.delayed(const Duration(milliseconds: 16));
       }
     }
 
