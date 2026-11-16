@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -62,6 +64,44 @@ func TestHongguoConcurrentRejectedIdentityOnlyRegistersOnce(t *testing.T) {
 	}
 }
 
+func TestHongguoRegisteredBatchFallbackAfterEmptySingle(t *testing.T) {
+	var batch int
+	d := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Path {
+		case "/service/2/device_register/":
+			response := sourceFixtureResponse(r, 200, `{"device_id":"3456789012345678","install_id":"4567890123456789"}`)
+			response.Header.Add("Set-Cookie", "install_id=4567890123456789; Path=/")
+			return response, nil
+		case hongguoSingleVideoModelPath:
+			return sourceFixtureResponse(r, 200, ""), nil
+		case hongguoVideoModelPath:
+			batch++
+			if r.URL.Query().Get("version_code") != "73932" || r.URL.Query().Get("device_id") != "3456789012345678" || r.Header.Get("X-Medusa") == "" || r.Header.Get("Cookie") == "" {
+				t.Error("batch identity or signature missing")
+			}
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ts, err := strconv.ParseUint(r.Header.Get("X-Khronos"), 10, 32)
+			if err != nil || hgBranchOf(r.URL.String(), body, uint32(ts)) != 0 {
+				t.Error("batch signature did not use reference branch")
+			}
+			if r.URL.Query().Get("host_abi") != "arm64-v8a" || r.URL.Query().Get("pv_player") != "73932" || r.Header.Get("User-Agent") != "com.phoenix.read/71532 (Linux; U; Android 9; SM-N9860; Build/PQ3A.190705.10241111;tt-ok/3.12.13.20)" {
+				t.Error("batch profile mismatch")
+			}
+
+			return sourceFixtureResponse(r, 200, `{"code":0,"data":{"9001":{"video_model":{"video_list":[{"main_url":"https://media.example.test/a.mp4","video_meta":{"codec_type":"h264","definition":"720p"}}]}}}}`), nil
+		}
+		return nil, errors.New("unexpected endpoint")
+	})
+	searchFixtureIdentity(d)
+	media, err := d.resolveHongguoRegisteredMedia(context.Background(), "9001")
+	if err != nil || media.URL == "" || batch != 1 {
+		t.Fatalf("batch=%d err=%v", batch, err)
+	}
+}
+
 func TestHongguoSingleEpisodeRotationBoundedAndRestrictionsStop(t *testing.T) {
 	for _, status := range []int{200, 403, 429} {
 		t.Run(fmt.Sprint(status), func(t *testing.T) {
@@ -81,7 +121,7 @@ func TestHongguoSingleEpisodeRotationBoundedAndRestrictionsStop(t *testing.T) {
 				t.Fatal("unexpected success")
 			}
 			if status == 200 {
-				if registrations != 3 || requests != 4 || !errors.Is(err, errHongguoEmptyResponse) {
+				if registrations != 3 || requests != 5 || !errors.Is(err, errHongguoEmptyResponse) {
 					t.Fatalf("unbounded empty recovery: %d/%d %v", registrations, requests, err)
 				}
 			} else if registrations != 0 || requests != 1 {

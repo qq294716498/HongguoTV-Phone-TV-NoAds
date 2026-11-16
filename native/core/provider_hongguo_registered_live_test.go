@@ -37,3 +37,21 @@ func TestLiveHongguoTemporaryPlaybackIdentity(t *testing.T) {
 	state := d.hongguoClient().signatureSnapshot()
 	t.Logf("generated=%d reused=%d refreshed=%d", state.Generated, state.Reused, state.Refreshed)
 }
+
+func TestLiveHongguoRegisteredFallbackCandidate(t *testing.T) {
+	if os.Getenv("HG_REGISTERED_FALLBACK_LIVE") != "1" {
+		t.Skip("explicit isolated candidate")
+	}
+	engine, err := newNativeEngine(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(engine.downloads.close)
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer cancel()
+	media, err := engine.downloader.resolveHongguoRegisteredMedia(ctx, "7693917197759958040")
+	if err != nil || media.URL == "" {
+		t.Fatalf("candidate resolution: %v", err)
+	}
+	t.Logf("resolved quality=%d variants=%d", media.Quality, len(media.Variants))
+}

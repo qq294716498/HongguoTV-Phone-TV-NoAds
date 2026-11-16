@@ -24,6 +24,7 @@ const hongguoPlaybackUserAgent = "com.phoenix.read/71332 (Linux; U; Android 16; 
 const hongguoEmptyResponseRetryDelay = 250 * time.Millisecond
 
 var errHongguoEmptyResponse = errors.New("红果 App 接口返回空响应")
+var errHongguoIdentityRenewal = errors.New("红果播放设备身份更新失败")
 
 type hongguoCatalogCursor struct {
 	Offset        int       `json:"offset"`
@@ -151,7 +152,8 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 	client.mu.Unlock()
 	singlePlayback := method == http.MethodPost && path == hongguoSingleVideoModelPath
 	registeredProtocol := singlePlayback || path == "/reading/distribution/category/landpage/v/" || path == "/novel/player/video_detail/v1/"
-	playbackModel := method == http.MethodPost && path == hongguoVideoModelPath
+	registeredBatch, _ := ctx.Value(hongguoRegisteredBatchKey{}).(bool)
+	playbackModel := method == http.MethodPost && path == hongguoVideoModelPath && !registeredBatch
 	if playbackModel {
 		ctx = context.WithValue(ctx, hongguoPlaybackTransportKey{}, true)
 	}
@@ -237,6 +239,10 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 		request.Header.Set("Accept", "application/json")
 		request.Header.Set("X-XS-From-Web", "0")
 		request.Header.Set("Sdk-Version", "2")
+		if registeredBatch {
+			request.Header.Set("User-Agent", "com.phoenix.read/71532 (Linux; U; Android 9; SM-N9860; Build/PQ3A.190705.10241111;tt-ok/3.12.13.20)")
+			request.Header.Set("Accept", "application/json; charset=utf-8,application/x-protobuf")
+		}
 		if playbackModel {
 			request.Header.Set("User-Agent", hongguoPlaybackUserAgent)
 			request.Header.Set("Accept", "application/json; charset=utf-8,application/x-protobuf")
@@ -274,6 +280,15 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 			prepared.URL.RawQuery = query.Encode()
 			if playbackModel {
 				client.preparePlaybackSignature(prepared, body, now, playbackIdentities)
+			} else if registeredBatch {
+				for i := 0; i < 1024 && hgBranchOf(prepared.URL.String(), body, uint32(now.Unix())) != 0; i++ {
+					next, ok := hgBumpTicket(prepared.URL.RawQuery)
+					if !ok {
+						break
+					}
+					prepared.URL.RawQuery = next
+				}
+				signHongguoRequest(prepared, body, now)
 			} else if comment {
 				signHongguoCommentRequest(prepared, commentNonce, now)
 			} else if registeredProtocol {
@@ -336,7 +351,7 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 					retryDelay = time.Second
 					continue
 				} else {
-					return nil, errors.Join(lastErr, renewErr)
+					return nil, errors.Join(lastErr, errHongguoIdentityRenewal, renewErr)
 				}
 			}
 			if emptyRetry && attempt+1 < attempts && response.Header.Get("Retry-After") == "" {
