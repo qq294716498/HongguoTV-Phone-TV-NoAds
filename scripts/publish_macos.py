@@ -25,6 +25,7 @@ PENDING_NOTE = '公开发布核验进行中：尚未完成 macOS 公网下载、
 VERIFIED_NOTE = '公开发布核验已完成：macOS 公网下载、SHA-256 与其他平台隔离复核通过。'
 root = Path(__file__).resolve().parents[1]
 release_only_paths = frozenset({
+    'integration_test/windows_video_layout_test.dart',
     'test/series_browsing_test.dart',
     'README.md', '.github/workflows/android-stable.yml', '.github/workflows/windows-preview.yml',
     'scripts/publish_android_stable.py', 'scripts/test_android_stable_publish.py',

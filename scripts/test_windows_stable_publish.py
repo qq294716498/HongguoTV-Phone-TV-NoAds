@@ -350,8 +350,8 @@ class WindowsStablePublishTests(unittest.TestCase):
             self.assertEqual(github.call_count, 1)
             mutations.assert_not_called()
 
-    def test_android_baseline_accepts_only_verified_old_or_same_source_sibling(self):
-        for tag, commit in [(publish.previous_android_tag, publish.previous_android_commit), ('app-v0.1.53-97', 'current')]:
+    def test_android_baseline_accepts_only_verified_old_or_pinned_published_sibling(self):
+        for tag, commit in [(publish.previous_android_tag, publish.previous_android_commit), ('app-v0.1.53-97', publish.published_android_commit)]:
             value = dict(draft=False, prerelease=False, target_commitish=commit, body='公开发布核验已完成')
             with mock.patch.object(publish, 'github', return_value=json.dumps(value)):
                 publish.validate_android_baseline(tag, 'current')
@@ -359,7 +359,7 @@ class WindowsStablePublishTests(unittest.TestCase):
                 with mock.patch.object(publish, 'github', return_value=json.dumps({**value, **change})), self.assertRaises(ValueError):
                     publish.validate_android_baseline(tag, 'current')
         with mock.patch.object(publish, 'github', return_value=json.dumps({**value, 'body': 'pending'})), self.assertRaises(ValueError):
-            publish.validate_android_baseline('app-v0.1.53-97', 'current')
+            publish.validate_android_baseline('app-v0.1.53-97', publish.published_android_commit)
         with mock.patch.object(publish, 'github') as api, self.assertRaises(ValueError):
             publish.validate_android_baseline('app-v0.1.54-98', 'current')
         api.assert_not_called()

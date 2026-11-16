@@ -17,9 +17,11 @@ approved_source = '5bc09e9da7a3c9609e31fc5a91f28f797c985958'
 previous_windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48', 'windows-v0.1.24-49', 'windows-v0.1.25-50', 'windows-v0.1.29-54', 'windows-v0.1.30-55', 'windows-v0.1.31-56', 'windows-v0.1.32-57', 'windows-v0.1.34-59', 'windows-v0.1.38-63', 'windows-v0.1.39-64', 'windows-v0.1.43-68', 'windows-v0.1.46-71', 'windows-v0.1.48-74', 'windows-v0.1.49-84', 'windows-v0.1.50-86', 'windows-v0.1.51-87', 'windows-v0.1.52-92')
 previous_android_tag = 'app-v0.1.52-92'
 previous_android_commit = '7f23f624a9d82d05a2123c7e297dab20d42a9023'
+published_android_commit = '74e9aeaeda8e69ada71f60d01cf69afbe09c3d42'
 pending_publication_note = '公开发布核验进行中：尚未完成 Windows 公网 ZIP 下载、升级通道及 Android Latest 隔离检查。'
 verified_publication_note = '公开发布核验已完成：Windows 公网 ZIP 下载与 SHA-256、正式升级通道和 API 限流回退检查通过；Android Latest 隔离及旧版本资产保持检查通过。'
 release_only_paths = frozenset({
+    'integration_test/windows_video_layout_test.dart',
     'test/series_browsing_test.dart',
     '.github/workflows/macos.yml', '.github/workflows/macos-publish.yml',
     'scripts/publish_macos.py', 'scripts/test_macos_publish.py',
@@ -79,7 +81,7 @@ def metadata():
 
 
 def validate_android_baseline(tag, commit):
-    expected = {previous_android_tag: previous_android_commit, 'app-v0.1.53-97': commit}
+    expected = {previous_android_tag: previous_android_commit, 'app-v0.1.53-97': published_android_commit}
     if tag not in expected:
         raise ValueError('Android latest changed beyond the approved stable baseline')
     published = json.loads(github('api', f'repos/{repository}/releases/tags/{tag}'))

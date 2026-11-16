@@ -140,6 +140,22 @@ void main() {
       required bool hidden,
       bool bakedBottom = false,
     }) async {
+      final chromeFinder = find.byKey(const ValueKey('player-chrome'));
+      final chromeRender = tester.renderObject<RenderAnimatedOpacity>(
+        chromeFinder,
+      );
+      final opacityBeforeWait = chromeRender.opacity.value;
+      if (hidden) {
+        await until(
+          () =>
+              tester.widget<AnimatedOpacity>(chromeFinder).opacity == 0 &&
+              chromeRender.opacity.value == 0 &&
+              !chromeRender.opacity.isAnimating,
+          'controls paint hidden $name',
+        );
+        await tester.pump();
+      }
+      final paintOpacity = chromeRender.opacity.value;
       final videoFinder = find.byType(Video);
       final native = await desktop.channel.invokeMapMethod<String, dynamic>(
         'windowGeometry',
@@ -253,6 +269,8 @@ void main() {
         'fullscreen': desktop.fullscreen,
         'mini': desktop.mini,
         'controlsHidden': hidden,
+        'controlsOpacityBeforeWait': opacityBeforeWait,
+        'controlsPaintOpacity': paintOpacity,
         'sourceContainsBottomBlack': bakedBottom,
       };
       failures.addAll(
@@ -278,6 +296,10 @@ void main() {
             failures.add('$name controls visibility changed $field');
         }
       }
+      debugPrint(
+        '[WindowsVideoPixels] $name opacityBefore=$opacityBeforeWait '
+        'paintOpacity=$paintOpacity expected=$expected pixels=$pixels',
+      );
       samples.add(sample);
       image.dispose();
       await File(
