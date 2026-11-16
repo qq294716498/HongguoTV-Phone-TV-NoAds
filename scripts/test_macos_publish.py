@@ -242,7 +242,7 @@ class MacOSPublishTests(unittest.TestCase):
         self.assertLess(workflow.index('publish_macos.require_pins()'), download)
         self.assertLess(workflow.index('publish_macos.validate_release_source(publish_macos.BUILD_COMMIT)'), download)
         self.assertNotIn('41383092284', workflow)
-        self.assertIn('branches: [release/macos-0.1.49-84]', workflow)
+        self.assertIn('branches: [release/macos-0.1.53-97]', workflow)
         self.assertEqual(workflow.count('run-id: ${{ env.MACOS_BUILD_RUN }}'), 5)
 
     def public_fixture(self):

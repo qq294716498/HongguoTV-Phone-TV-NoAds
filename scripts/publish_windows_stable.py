@@ -20,6 +20,7 @@ previous_android_commit = '7f23f624a9d82d05a2123c7e297dab20d42a9023'
 pending_publication_note = '公开发布核验进行中：尚未完成 Windows 公网 ZIP 下载、升级通道及 Android Latest 隔离检查。'
 verified_publication_note = '公开发布核验已完成：Windows 公网 ZIP 下载与 SHA-256、正式升级通道和 API 限流回退检查通过；Android Latest 隔离及旧版本资产保持检查通过。'
 release_only_paths = frozenset({
+    'test/series_browsing_test.dart',
     '.github/workflows/macos.yml', '.github/workflows/macos-publish.yml',
     'scripts/publish_macos.py', 'scripts/test_macos_publish.py',
     'README.md', '.github/workflows/android-stable.yml',

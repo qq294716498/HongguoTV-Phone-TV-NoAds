@@ -1,12 +1,12 @@
 name: Publish validated macOS package
 on:
   push:
-    branches: [release/macos-0.1.49-84]
+    branches: [release/macos-0.1.53-97]
 permissions:
   contents: write
   actions: read
 concurrency:
-  group: macos-stable-publish
+  group: hongguotv-stable-publication
   cancel-in-progress: false
 env:
   MACOS_BUILD_RUN: '0'

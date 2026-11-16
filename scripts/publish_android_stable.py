@@ -26,6 +26,7 @@ offsets = {'arm64-v8a': 2000, 'armeabi-v7a': 1000, 'x86_64': 4000}
 release_branch = 'release/windows-android-0.1.53-97'
 approved_source = '5bc09e9da7a3c9609e31fc5a91f28f797c985958'
 release_only_paths = frozenset({
+    'test/series_browsing_test.dart',
     '.github/workflows/macos.yml', '.github/workflows/macos-publish.yml',
     'scripts/publish_macos.py', 'scripts/test_macos_publish.py',
     'README.md', '.github/workflows/android-stable.yml',
