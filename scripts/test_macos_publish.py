@@ -21,8 +21,8 @@ class MacOSPublishTests(unittest.TestCase):
         self.commit, self.release_commit, self.run = 'a' * 40, 'b' * 40, '123'
         self.content = b'synthetic validated universal package'
         self.checksum = hashlib.sha256(self.content).hexdigest()
-        (self.root / 'pubspec.yaml').write_text('version: 0.1.49+84\n')
-        self.identity = {'ok': True, 'version': '0.1.49', 'build': 84,
+        (self.root / 'pubspec.yaml').write_text('version: 0.1.53+97\n')
+        self.identity = {'ok': True, 'version': '0.1.53', 'build': 97,
                          'sourceCommit': self.commit, 'workflowRun': self.run, 'allSources': False}
         names = ['Contents/MacOS/HongguoTV', 'Contents/Frameworks/libduanju_core.dylib']
         self.package_report = {**self.identity, 'package': publish.PACKAGE, 'bytes': len(self.content),
@@ -37,7 +37,7 @@ class MacOSPublishTests(unittest.TestCase):
         self.write('package/macOS-checks.json', self.checks)
         (self.artifacts / 'package' / publish.PACKAGE).write_bytes(self.content)
         for arch in ('arm64', 'x86_64'):
-            smoke_run = {'version': '0.1.49', 'build': 84, **{key: True for key in publish.SMOKE_KEYS}}
+            smoke_run = {'version': '0.1.53', 'build': 97, **{key: True for key in publish.SMOKE_KEYS}}
             self.write(f'{arch}/macOS-smoke.json', {**self.identity, 'platform': 'macos', 'hostArchitecture': arch,
                                                    'repeatedLaunches': 3, 'runs': [copy.deepcopy(smoke_run) for _ in range(3)]})
             self.write(f'playback-{arch}/macOS-app-autoplay-chain.json', self.chain(arch))
@@ -219,6 +219,7 @@ class MacOSPublishTests(unittest.TestCase):
         with mock.patch.object(publish, 'api', side_effect=api):
             before = publish.isolation_state()
             self.assertEqual(set(before['releases']), {
+                'app-v0.1.53-97', 'windows-v0.1.53-97', 'app-v0.1.52-92', 'windows-v0.1.52-92',
                 'app-v0.1.49-84', 'windows-v0.1.49-84', 'macos-v0.1.48-74', 'macos-v0.1.34-59',
                 'app-v0.1.46-71', 'windows-v0.1.46-71'})
             for tag in ('macos-v0.1.34-59', 'app-v0.1.46-71', 'windows-v0.1.46-71'):
@@ -228,7 +229,7 @@ class MacOSPublishTests(unittest.TestCase):
                 releases[tag]['assets'][0]['id'] = original
             self.assertEqual(before['windowsChannel']['branchCommit'], 'e' * 40)
             releases[publish.PROTECTED_TAGS[0]]['tag_name'] = 'app-v0.1.46-71'
-            with self.assertRaisesRegex(ValueError, 'Latest must remain on app-v0.1.49-84'):
+            with self.assertRaisesRegex(ValueError, 'Latest must remain on app-v0.1.53-97'):
                 publish.isolation_state()
             releases[publish.PROTECTED_TAGS[0]]['tag_name'] = publish.PROTECTED_TAGS[0]
             manifest['release']['tag_name'] = 'windows-v0.1.43-68'

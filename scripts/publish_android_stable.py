@@ -14,17 +14,20 @@ root = Path(__file__).resolve().parents[1]
 output = root / 'dist/android'
 repository = 'qq294716498/HongguoTV-Phone-TV-NoAds'
 certificate = '55c3c3395a00e56e99b8bfd580b14c99618da74db19692a2e42606eb05c47ba9'
-windows_tag = 'windows-v0.1.52-92'
-windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48', 'windows-v0.1.24-49', 'windows-v0.1.25-50', 'windows-v0.1.29-54', 'windows-v0.1.30-55', 'windows-v0.1.31-56', 'windows-v0.1.32-57', 'windows-v0.1.34-59', 'windows-v0.1.38-63', 'windows-v0.1.39-64', 'windows-v0.1.43-68', 'windows-v0.1.46-71', 'windows-v0.1.48-74', 'windows-v0.1.49-84', 'windows-v0.1.50-86', 'windows-v0.1.51-87', windows_tag)
-previous_android_tag = 'app-v0.1.51-87'
-previous_android_commit = '5221ff5c3fefa2b23887b87c4ae175f307534736'
+windows_tag = os.environ.get('EXPECTED_WINDOWS_TAG', 'windows-v0.1.52-92')
+previous_windows_commit = '7f23f624a9d82d05a2123c7e297dab20d42a9023'
+windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48', 'windows-v0.1.24-49', 'windows-v0.1.25-50', 'windows-v0.1.29-54', 'windows-v0.1.30-55', 'windows-v0.1.31-56', 'windows-v0.1.32-57', 'windows-v0.1.34-59', 'windows-v0.1.38-63', 'windows-v0.1.39-64', 'windows-v0.1.43-68', 'windows-v0.1.46-71', 'windows-v0.1.48-74', 'windows-v0.1.49-84', 'windows-v0.1.50-86', 'windows-v0.1.51-87', 'windows-v0.1.52-92') + ((windows_tag,) if windows_tag != 'windows-v0.1.52-92' else ())
+previous_android_tag = 'app-v0.1.52-92'
+previous_android_commit = '7f23f624a9d82d05a2123c7e297dab20d42a9023'
 pending_publication_note = '公开发布核验进行中：尚未完成三 ABI 公网下载、签名复核及 Android / Windows 升级通道隔离检查。'
 verified_publication_note = '公开发布核验已完成：三 ABI 公网下载、SHA-256、正式证书与版本复核通过；Android Latest 和 Windows 升级通道隔离、旧版本资产保持检查通过。'
 windows_verified_publication_note = '公开发布核验已完成：Windows 公网 ZIP 下载与 SHA-256、正式升级通道和 API 限流回退检查通过；Android Latest 隔离及旧版本资产保持检查通过。'
 offsets = {'arm64-v8a': 2000, 'armeabi-v7a': 1000, 'x86_64': 4000}
-release_branch = 'release/windows-android-0.1.52-92'
-approved_source = 'f0b3a9c280b60c4f47cbaf937d4f221b3c52d956'
+release_branch = 'release/windows-android-0.1.53-97'
+approved_source = '5bc09e9da7a3c9609e31fc5a91f28f797c985958'
 release_only_paths = frozenset({
+    '.github/workflows/macos.yml', '.github/workflows/macos-publish.yml',
+    'scripts/publish_macos.py', 'scripts/test_macos_publish.py',
     'README.md', '.github/workflows/android-stable.yml',
     '.github/workflows/windows-preview.yml',
     'scripts/publish_android_stable.py', 'scripts/test_android_stable_publish.py',
@@ -64,7 +67,7 @@ def release(tag):
 
 def finalize_release_notes(tag):
     published = release(tag)
-    if tag != 'app-v0.1.52-92' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
+    if tag != 'app-v0.1.53-97' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
         raise ValueError('Only the current verified Android stable release notes may be finalized')
     body = published['body']
     if body.count(pending_publication_note) != 1:
@@ -87,28 +90,25 @@ def validated_windows_snapshots(commit):
     published = {name: release(name) for name in windows_tags}
     candidate = published[windows_tag]
     required = {'Windows-update-check.json', 'Windows-update-channel.json', 'Windows-update-transaction.json', 'Windows-single-instance-native.json', 'Windows-playback-queue.json', 'Windows-app-autoplay-chain.json', 'Android-isolation.json', 'SHA256SUMS.txt'}
-    if candidate['draft'] or candidate['prerelease'] or candidate['target_commitish'] != commit or not required.issubset({asset['name'] for asset in candidate['assets']}) or windows_verified_publication_note not in candidate.get('body', ''):
+    if candidate['draft'] or candidate['prerelease'] or candidate['target_commitish'] != (previous_windows_commit if windows_tag == 'windows-v0.1.52-92' else commit) or not required.issubset({asset['name'] for asset in candidate['assets']}) or windows_verified_publication_note not in candidate.get('body', ''):
         raise ValueError('Published Windows baseline is not finalized or has a different source')
     return {name: snapshot(value) for name, value in published.items()}
 
 
 def wait_for_windows(commit, timeout=1200):
-    deadline = time.monotonic() + timeout
-    required = {'Windows-update-check.json', 'Windows-update-channel.json', 'Windows-update-transaction.json', 'Windows-single-instance-native.json', 'Windows-playback-queue.json', 'Windows-app-autoplay-chain.json', 'Android-isolation.json', 'SHA256SUMS.txt'}
-    while time.monotonic() < deadline:
-        result = subprocess.run(['gh', 'api', f'repos/{repository}/releases/tags/{windows_tag}'], capture_output=True, text=True)
-        if result.returncode == 0:
-            candidate = json.loads(result.stdout)
-            if candidate['target_commitish'] != commit:
-                raise ValueError('Windows release source differs from this Android candidate')
-            if not candidate['draft'] and not candidate['prerelease'] and required.issubset({asset['name'] for asset in candidate['assets']}) and windows_verified_publication_note in candidate.get('body', ''):
-                print('Matching Windows release finalized; Android public validation may proceed.', flush=True)
-                return
-        elif '404' not in result.stderr:
-            raise ValueError('Unable to verify the Windows release dependency: ' + result.stderr)
-        print('Waiting for the matching Windows release to finish public update and isolation checks.', flush=True)
-        time.sleep(30)
-    raise TimeoutError('Windows release dependency did not finalize before the Android publication deadline')
+    published = json.loads(github('api', f'repos/{repository}/releases?per_page=100'))
+    candidates = [item for item in published if not item['draft'] and not item['prerelease']
+                  and re.fullmatch(r'windows-v\d+\.\d+\.\d+-\d+', item['tag_name'])]
+    if not candidates:
+        raise ValueError('No verified Windows update baseline exists')
+    candidate = max(candidates, key=lambda item: int(item['tag_name'].rsplit('-', 1)[1]))
+    tag = candidate['tag_name']
+    expected = {'windows-v0.1.52-92': previous_windows_commit, 'windows-v0.1.53-97': commit}
+    if tag not in expected or candidate['target_commitish'] != expected[tag] or windows_verified_publication_note not in candidate.get('body', ''):
+        raise ValueError('Windows channel differs from the approved stable baseline')
+    with Path(os.environ['GITHUB_ENV']).open('a', encoding='utf-8') as stream:
+        stream.write(f'EXPECTED_WINDOWS_TAG={tag}\n')
+    print('Verified current Windows baseline; Android can publish independently.', flush=True)
 
 
 def write(name, value):
@@ -156,8 +156,8 @@ def main():
     os.chdir(root)
     version, raw_build = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(), re.M).group(1).split('+')
     build = int(raw_build)
-    if version != '0.1.52' or build != 92:
-        raise ValueError('This workflow only publishes Android 0.1.52+92')
+    if version != '0.1.53' or build != 97:
+        raise ValueError('This workflow only publishes Android 0.1.53+97')
     validate_release_source(os.environ['GITHUB_SHA'])
     tag = f'app-v{version}-{build}'
     phase = sys.argv[1]
@@ -185,7 +185,7 @@ def main():
                 raise ValueError('A newer or reserved Android build already exists')
         validate_android_player_report(read('Android-player-tests.json'), version, build, os.environ['GITHUB_SHA'])
         write('Release-before.json', {'android': snapshot(latest), 'windows': validated_windows_snapshots(os.environ['GITHUB_SHA'])})
-        subprocess.run([sys.executable, 'scripts/finish_task.py', '--message', 'Android 0.1.52 弹幕切集平滑退场、播放性能与真实诊断、最高季最高集同步；三ABI原签名和原生回归通过，用户私测反馈不代表全部设备'], check=True)
+        subprocess.run([sys.executable, 'scripts/finish_task.py', '--message', 'Android 0.1.53 v5取流恢复、下一季单次检查、12小时缓存与QQ群文案；三ABI原签名和原生回归通过，用户私测反馈不代表全部设备'], check=True)
         subprocess.run([sys.executable, 'scripts/sync_source.py', '--check'], check=True)
         source = max(root.parent.glob('真果·鉴-*.zip'), key=lambda p: p.stat().st_mtime_ns)
         source_package = output / f'HongguoTV-{version}-source.zip'
@@ -199,10 +199,10 @@ def main():
               'formatAnalysisPythonFlutterAndGoRacePassed': True, 'allThreeSignedApksValidated': True,
               'androidPlayerJvmTestsPassed': True, 'androidPlayerJvmReport': 'Android-player-tests.json',
               'androidFiveEpisodeQueueJvmRequiredCaseVerified': True,
-              'reportedPrivateTestVersion': '0.1.48-test.1+73', 'reportedPrivateTestAvSyncRestored': True,
+              'reportedPrivateTestVersion': '0.1.53-test.3+95', 'reportedPrivateTestPlaybackRestored': True,
               'realPhoneOrTvPerformanceMeasured': False, 'realDevicePlaybackVerified': False})
         notes = release_description(version)
-        notes += f'\n源码：https://github.com/{repository}/commit/{head}\n\nCI：https://github.com/{repository}/actions/runs/{os.environ["GITHUB_RUN_ID"]}\n\n手机 / TV 继续共用 com.hongguo.tv、既有正式证书和 Android 8.0 最低版本。报告者的测试版同步恢复反馈仅限其设备；其他真实手机 / TV、MediaCodec、音频设备和长时间连续播放仍待验收。\n\n{pending_publication_note}\n'
+        notes += f'\n源码：https://github.com/{repository}/commit/{head}\n\nCI：https://github.com/{repository}/actions/runs/{os.environ["GITHUB_RUN_ID"]}\n\n手机 / TV 继续共用 com.hongguo.tv、既有正式证书和 Android 8.0 最低版本。报告者的测试版播放恢复反馈仅限其设备；其他真实手机 / TV、MediaCodec、音频设备和长时间连续播放仍待验收。\n\n{pending_publication_note}\n'
         notes_file = Path(os.environ['RUNNER_TEMP']) / 'android-release-notes.md'
         notes_file.write_text(notes, encoding='utf-8')
         assets = [output / f'HongguoTV-{version}-{abi}.apk' for abi in offsets] + [source_package, output / 'APK-validation.json', output / 'Source-and-checks.json', output / 'Signing-availability.json', output / 'Android-player-tests.json']

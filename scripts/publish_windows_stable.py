@@ -12,14 +12,16 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[1]
 output = root / 'dist/windows'
 repository = 'qq294716498/HongguoTV-Phone-TV-NoAds'
-release_branch = 'release/windows-android-0.1.52-92'
-approved_source = 'f0b3a9c280b60c4f47cbaf937d4f221b3c52d956'
-previous_windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48', 'windows-v0.1.24-49', 'windows-v0.1.25-50', 'windows-v0.1.29-54', 'windows-v0.1.30-55', 'windows-v0.1.31-56', 'windows-v0.1.32-57', 'windows-v0.1.34-59', 'windows-v0.1.38-63', 'windows-v0.1.39-64', 'windows-v0.1.43-68', 'windows-v0.1.46-71', 'windows-v0.1.48-74', 'windows-v0.1.49-84', 'windows-v0.1.50-86', 'windows-v0.1.51-87')
-previous_android_tag = 'app-v0.1.51-87'
-previous_android_commit = '5221ff5c3fefa2b23887b87c4ae175f307534736'
+release_branch = 'release/windows-android-0.1.53-97'
+approved_source = '5bc09e9da7a3c9609e31fc5a91f28f797c985958'
+previous_windows_tags = ('windows-v0.1.15-40', 'windows-v0.1.17-42', 'windows-v0.1.19-44', 'windows-v0.1.22-47', 'windows-v0.1.23-48', 'windows-v0.1.24-49', 'windows-v0.1.25-50', 'windows-v0.1.29-54', 'windows-v0.1.30-55', 'windows-v0.1.31-56', 'windows-v0.1.32-57', 'windows-v0.1.34-59', 'windows-v0.1.38-63', 'windows-v0.1.39-64', 'windows-v0.1.43-68', 'windows-v0.1.46-71', 'windows-v0.1.48-74', 'windows-v0.1.49-84', 'windows-v0.1.50-86', 'windows-v0.1.51-87', 'windows-v0.1.52-92')
+previous_android_tag = 'app-v0.1.52-92'
+previous_android_commit = '7f23f624a9d82d05a2123c7e297dab20d42a9023'
 pending_publication_note = '公开发布核验进行中：尚未完成 Windows 公网 ZIP 下载、升级通道及 Android Latest 隔离检查。'
 verified_publication_note = '公开发布核验已完成：Windows 公网 ZIP 下载与 SHA-256、正式升级通道和 API 限流回退检查通过；Android Latest 隔离及旧版本资产保持检查通过。'
 release_only_paths = frozenset({
+    '.github/workflows/macos.yml', '.github/workflows/macos-publish.yml',
+    'scripts/publish_macos.py', 'scripts/test_macos_publish.py',
     'README.md', '.github/workflows/android-stable.yml',
     '.github/workflows/windows-preview.yml',
     'scripts/publish_android_stable.py', 'scripts/test_android_stable_publish.py',
@@ -55,7 +57,7 @@ def release_description(version):
 
 def finalize_release_notes(tag):
     published = json.loads(github('api', f'repos/{repository}/releases/tags/{tag}'))
-    if tag != 'windows-v0.1.52-92' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
+    if tag != 'windows-v0.1.53-97' or published['tag_name'] != tag or published['draft'] or published['prerelease'] or published['target_commitish'] != os.environ['GITHUB_SHA']:
         raise ValueError('Only the current verified Windows stable release notes may be finalized')
     body = published['body']
     if body.count(pending_publication_note) != 1:
@@ -73,6 +75,17 @@ def metadata():
     return {'id': value['id'], 'tag': value['tag_name'], 'assets': [
         {'id': item['id'], 'name': item['name'], 'bytes': item['size'], 'digest': item['digest']}
         for item in value['assets']]}
+
+
+def validate_android_baseline(tag, commit):
+    expected = {previous_android_tag: previous_android_commit, 'app-v0.1.53-97': commit}
+    if tag not in expected:
+        raise ValueError('Android latest changed beyond the approved stable baseline')
+    published = json.loads(github('api', f'repos/{repository}/releases/tags/{tag}'))
+    if published.get('draft') or published.get('prerelease') or published.get('target_commitish') != expected[tag]:
+        raise ValueError('Android stable baseline source or state changed')
+    if tag != previous_android_tag and '公开发布核验已完成' not in published.get('body', ''):
+        raise ValueError('New Android baseline has not completed public validation')
 
 
 def write_json(name, value):
@@ -228,8 +241,8 @@ def main():
     version, build = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(encoding='utf-8'), re.MULTILINE).group(1).split('+')
     if not re.fullmatch(r'\d+\.\d+\.\d+', version):
         raise ValueError('Only Windows stable releases are allowed')
-    if version != '0.1.52' or build != '92':
-        raise ValueError('This workflow only publishes Windows 0.1.52+92')
+    if version != '0.1.53' or build != '97':
+        raise ValueError('This workflow only publishes Windows 0.1.53+97')
     tag = f'windows-v{version}-{build}'
     package = output / f'HongguoTV-{version}-windows-x64.zip'
     if sys.argv[1] == 'stage':
@@ -281,8 +294,7 @@ def main():
             raise ValueError('Release exists; never replace published assets')
         write_json('Windows-previous-release.json', {name: release_identity(json.loads(github('api', f'repos/{repository}/releases/tags/{name}'))) for name in previous_windows_tags})
         android = metadata()
-        if android['tag'] != previous_android_tag:
-            raise ValueError('Android latest changed beyond the approved stable baseline')
+        validate_android_baseline(android['tag'], os.environ['GITHUB_SHA'])
         subprocess.run(['git', 'fetch', '--depth=1', 'origin', 'tag', previous_android_tag], check=True)
         original = subprocess.check_output(['git', 'show', f'{previous_android_tag}:lib/app_updates.dart'], text=True)
         current = (root / 'lib/app_updates.dart').read_text(encoding='utf-8')
@@ -295,7 +307,7 @@ def main():
         write_json('Android-isolation.json', {'before': android, 'androidParserUnchanged': True,
                                               'parserSha256': hashlib.sha256(old.encode()).hexdigest()})
         subprocess.run([sys.executable, 'scripts/finish_task.py', '--message',
-                        '完成 Windows 0.1.52 x64 弹幕切集平滑退场、最高季最高集同步及播放性能优化；保留完整App四集与更新事务门禁，实体设备音画连续性仍未验收'], check=True)
+                        '完成 Windows 0.1.53 x64 v5取流恢复、下一季单次检查、12小时缓存与QQ群文案；保留完整App四集与更新事务门禁，实体设备音画连续性仍未验收'], check=True)
         subprocess.run([sys.executable, 'scripts/sync_source.py', '--check'], check=True)
         source = max(root.parent.glob('真果·鉴-*.zip'), key=lambda file: file.stat().st_mtime_ns)
         source_package = output / f'HongguoTV-{version}-source.zip'
@@ -315,8 +327,8 @@ def main():
             'nativeSingleInstancePassed': True, 'nativeSinglePlayerQueuePassed': True,
             'nativeAppAutoplayChainPassed': True,
             'nativeTrayAndMiniWindowPassed': True, 'unsigned': True,
-            'reportedPrivateAndroidTestAVRestored': True,
-            'reportedPrivateTestVersion': '0.1.48-test.1+73',
+            'reportedPrivateAndroidPlaybackRestored': True,
+            'reportedPrivateTestVersion': '0.1.53-test.3+95',
             'physicalWindowsAudioVideoVerified': False,
             'sourceArchiveSha256': hashlib.file_digest(source_package.open('rb'), 'sha256').hexdigest(),
             'notTested': ['real-provider playback on physical Windows hardware', 'long-running episode/season transitions',

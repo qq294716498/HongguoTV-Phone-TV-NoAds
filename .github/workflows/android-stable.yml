@@ -188,15 +188,18 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
   release:
+    concurrency:
+      group: hongguotv-stable-publication
+      cancel-in-progress: false
     needs: [checks, android]
-    if: github.ref == 'refs/heads/release/windows-android-0.1.52-92' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_release))
+    if: github.ref == 'refs/heads/release/windows-android-0.1.53-97' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_release))
     runs-on: ubuntu-latest
     timeout-minutes: 35
     permissions:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
-      EXPECTED_UPDATE_TAG: app-v0.1.52-92
+      EXPECTED_UPDATE_TAG: app-v0.1.53-97
       EXPECTED_WINDOWS_TAG: windows-v0.1.52-92
       CHECK_LIVE_UPDATE: 'true'
       CHECK_UPDATE_DOWNLOAD: 'true'
@@ -219,7 +222,7 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get --enforce-lockfile
-      - name: Wait for matching Windows publication and isolation checks
+      - name: Verify current Windows baseline without waiting for its new build
         run: python3 scripts/publish_android_stable.py wait-windows
       - name: Stage signed immutable Android candidate and preserve Windows assets
         run: python3 scripts/publish_android_stable.py stage
@@ -252,7 +255,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: android-0.1.52-release-evidence
+          name: android-0.1.53-release-evidence
           path: |
             dist/android/*
             dist/update-check/*-update-check.json
