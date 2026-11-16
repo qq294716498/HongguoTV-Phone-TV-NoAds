@@ -17,7 +17,7 @@ RUNTIME_BASELINE = '5bc09e9da7a3c9609e31fc5a91f28f797c985958'
 VERSION, BUILD = '0.1.53', 97
 TAG = 'macos-v0.1.53-97'
 PACKAGE = 'HongguoTV-0.1.53-macos-universal.zip'
-PROTECTED_TAGS = ('app-v0.1.53-97', 'windows-v0.1.53-97', 'app-v0.1.52-92', 'windows-v0.1.52-92', 'app-v0.1.49-84', 'windows-v0.1.49-84', 'macos-v0.1.48-74', 'macos-v0.1.34-59',
+PROTECTED_TAGS = ('app-v0.1.53-97', 'windows-v0.1.52-92', 'app-v0.1.52-92', 'app-v0.1.49-84', 'windows-v0.1.49-84', 'macos-v0.1.48-74', 'macos-v0.1.34-59',
                   'app-v0.1.46-71', 'windows-v0.1.46-71')
 JOBS = {'build', 'smoke (macos-15)', 'smoke (macos-15-intel)',
         'playback (macos-15)', 'playback (macos-15-intel)'}

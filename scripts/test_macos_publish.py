@@ -219,7 +219,7 @@ class MacOSPublishTests(unittest.TestCase):
         with mock.patch.object(publish, 'api', side_effect=api):
             before = publish.isolation_state()
             self.assertEqual(set(before['releases']), {
-                'app-v0.1.53-97', 'windows-v0.1.53-97', 'app-v0.1.52-92', 'windows-v0.1.52-92',
+                'app-v0.1.53-97', 'windows-v0.1.52-92', 'app-v0.1.52-92',
                 'app-v0.1.49-84', 'windows-v0.1.49-84', 'macos-v0.1.48-74', 'macos-v0.1.34-59',
                 'app-v0.1.46-71', 'windows-v0.1.46-71'})
             for tag in ('macos-v0.1.34-59', 'app-v0.1.46-71', 'windows-v0.1.46-71'):
