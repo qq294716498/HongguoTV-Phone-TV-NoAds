@@ -110,3 +110,5 @@ python3 scripts/sync_source.py --check
 ```
 
 </details>
+
+红果 v5 播放请求与签名适配参考 [N3urda/hongguoTV](https://github.com/N3urda/hongguoTV/tree/6672b55d5308ea1ec26d2fe0bc0b2401ef4aa0c3/kotlin-tv) 的 `MobilePlayback`、`Signer`、`AesV3` 和 `V5Constants`（GPL-3.0-only）。本项目将该协议移植为 Go，保留已有匿名身份持久化；移植涉及的源码及合成验证向量遵循 [GPL-3.0](native/core/HONGGUO-V5-LICENSE.txt)。摘要及封装向量源于上游测试，完整签名向量由上游 Kotlin 使用固定合成输入生成，不含真实设备或账号数据。

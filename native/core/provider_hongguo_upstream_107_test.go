@@ -104,7 +104,7 @@ func TestHongguoResolutionUsesOnlyOfficialRoutes(t *testing.T) {
 	var paths []string
 	d := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
 		paths = append(paths, r.URL.Host+r.URL.Path)
-		if r.URL.Path == hongguoSingleVideoModelPath {
+		if r.URL.Host == "api5-normal-sinfonlinea.fqnovel.com" && r.URL.Path == "/novel/player/multi_video_model/player/v1" {
 			return sourceFixtureResponse(r, 200, `{"code":100001}`), nil
 		}
 		if r.URL.Host != "hongguoduanju.com" {
@@ -114,7 +114,7 @@ func TestHongguoResolutionUsesOnlyOfficialRoutes(t *testing.T) {
 	})
 	searchFixtureIdentity(d)
 	_, err := d.resolveHongguoMedia(context.Background(), Task{DramaID: "hongguo:100", Chapter: Chapter{VideoURL: "hongguo-cenc://9001"}})
-	if err == nil || len(paths) != 2 {
+	if err == nil || len(paths) != 1 {
 		t.Fatalf("wrong-episode or route validation failed: paths=%v error=%v", paths, err)
 	}
 }

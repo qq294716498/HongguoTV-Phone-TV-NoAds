@@ -750,6 +750,10 @@ var hgAESOrder = [4][16]int{
 var hgAESInit = [4]uint32{0xca025ddc, 0x823dc546, 0xc9420583, 0xc298225f}
 
 func hgNewAesV3(key []byte, khronos uint32) *hgAesV3 {
+	return hgNewAesProfile(key, khronos, false)
+}
+
+func hgNewAesProfile(key []byte, khronos uint32, mobile bool) *hgAesV3 {
 	wordSize := int(khronos & 3)
 	sbox := hgSBox()
 	aes := &hgAesV3{
@@ -758,6 +762,17 @@ func hgNewAesV3(key []byte, khronos uint32) *hgAesV3 {
 		order: hgAESOrder[wordSize],
 	}
 	init := hgAESInit[wordSize]
+	if mobile {
+		aes.box = hgV5SBox[wordSize*256 : (wordSize+1)*256]
+		aes.con2 = [4][4]int{{2, 0, 3, 1}, {1, 3, 2, 0}, {3, 2, 1, 0}, {2, 3, 1, 0}}[wordSize]
+		aes.order = [4][16]int{
+			{0, 9, 14, 15, 4, 13, 2, 7, 8, 1, 6, 3, 12, 5, 10, 11},
+			{0, 9, 14, 11, 4, 13, 2, 3, 8, 1, 6, 15, 12, 5, 10, 7},
+			{0, 9, 14, 3, 4, 13, 2, 15, 8, 1, 6, 11, 12, 5, 10, 7},
+			{0, 9, 14, 15, 4, 13, 2, 3, 8, 1, 6, 11, 12, 5, 10, 7},
+		}[wordSize]
+		init = [4]uint32{0xbbb5de72, 0xd4638d5b, 0x92a5f73b, 0x89f8a1c9}[wordSize]
+	}
 	initial := make([]byte, 16)
 	for i := 0; i < 4; i++ {
 		binary.LittleEndian.PutUint32(initial[i*4:], init)
@@ -1160,6 +1175,10 @@ func hgHelios(khronos uint32) string {
 }
 
 func hgHeliosWith(khronos uint32, random uint32) string {
+	return hgHeliosLicense(khronos, random, "1588093228")
+}
+
+func hgHeliosLicense(khronos uint32, random uint32, license string) string {
 	digest := hgMD5(append(hgLe32(random), []byte("8662")...))
 	ascii := []byte(hgHex(digest))
 	var words [4]uint64
@@ -1183,7 +1202,7 @@ func hgHeliosWith(khronos uint32, random uint32) string {
 		queue = queue[1:]
 	}
 
-	text := strconv.FormatUint(uint64(khronos), 10) + "-1588093228-8662"
+	text := strconv.FormatUint(uint64(khronos), 10) + "-" + license + "-8662"
 	tb := []byte(text)
 	padLen := (len(tb) + 1 + 15) / 16 * 16
 	pad := make([]byte, padLen)

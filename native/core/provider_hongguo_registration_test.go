@@ -104,6 +104,11 @@ func TestHongguoMigratesPreviouslyRegisteredSearchIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	identity, err := d.ensureHongguoDeviceIdentity(context.Background())
+	saved.CDID = identity.CDID
+	body, _ = json.Marshal(saved)
+	if saved.CDID == "" {
+		t.Fatal("missing migrated client identity")
+	}
 	if err != nil || identity != saved {
 		t.Fatalf("migration lost identity: %v", err)
 	}
@@ -160,6 +165,13 @@ func TestHongguoPersistedIdentitySurvivesPlaybackFailureAndRestart(t *testing.T)
 	}
 	for iteration := 0; iteration < 2; iteration++ {
 		identity, err := d.ensureHongguoDeviceIdentity(context.Background())
+		if iteration == 0 {
+			saved.CDID = identity.CDID
+			body, _ = json.Marshal(saved)
+		}
+		if saved.CDID == "" {
+			t.Fatal("missing client identity")
+		}
 		if err != nil || identity != saved {
 			t.Fatalf("startup identity changed: %v", err)
 		}

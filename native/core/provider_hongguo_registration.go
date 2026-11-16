@@ -48,6 +48,7 @@ type hongguoDeviceIdentity struct {
 	DeviceID  string `json:"deviceId"`
 	InstallID string `json:"installId"`
 	Cookie    string `json:"cookie"`
+	CDID      string `json:"cdid,omitempty"`
 }
 
 func (identity hongguoDeviceIdentity) valid() bool {
@@ -80,6 +81,11 @@ func (d *Downloader) ensureHongguoDeviceIdentity(ctx context.Context, rejected .
 		}
 		client.deviceIdentityLoaded = true
 	}
+	background, _ := ctx.Value(backgroundCatalogKey{}).(bool)
+	mobile, _ := ctx.Value(hongguoMobileModelKey{}).(bool)
+	if mobile && background && !client.deviceIdentity.valid() {
+		return hongguoDeviceIdentity{}, errors.New("红果后台预取等待前台设备注册")
+	}
 	rotate := len(rejected) > 0 && rejected[0] == client.deviceIdentity.DeviceID
 	if !client.deviceIdentity.valid() || rotate {
 		if time.Now().Before(client.deviceRotationPausedUntil) {
@@ -95,6 +101,10 @@ func (d *Downloader) ensureHongguoDeviceIdentity(ctx context.Context, rejected .
 		}
 		client.deviceIdentityPersisted = false
 		client.deviceIdentity = hongguoDeviceIdentity{DeviceID: deviceID, InstallID: installID, Cookie: cookie}
+	}
+	if client.deviceIdentity.CDID == "" {
+		client.deviceIdentity.CDID = uuidLike()
+		client.deviceIdentityPersisted = false
 	}
 	if d.cfg.dataDir != "" && !client.deviceIdentityPersisted {
 		body, _ := json.Marshal(client.deviceIdentity)

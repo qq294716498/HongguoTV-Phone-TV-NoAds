@@ -217,14 +217,7 @@ func (d *Downloader) resolveHongguoMedia(ctx context.Context, task Task) (provid
 	if !hongguoNumericID.MatchString(videoID) || !hongguoNumericID.MatchString(seriesID) {
 		return providerMedia{}, fmt.Errorf("红果章节 ID 无效，请重新获取章节")
 	}
-	return resolveHongguoMediaRoutes(ctx, []hongguoMediaRoute{
-		{name: "红果 App 取流失败", resolve: func(stage context.Context) (providerMedia, error) {
-			return d.resolveHongguoRegisteredMedia(stage, videoID)
-		}},
-		{name: "网页取流失败", resolve: func(stage context.Context) (providerMedia, error) {
-			return d.resolveHongguoWebMedia(stage, seriesID, videoID)
-		}},
-	})
+	return d.resolveHongguoMobileMedia(ctx, videoID)
 }
 
 func (d *Downloader) resolveHongguoWebMedia(ctx context.Context, seriesID, videoID string) (providerMedia, error) {

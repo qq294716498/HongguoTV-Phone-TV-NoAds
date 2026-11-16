@@ -72,37 +72,18 @@ func TestHongguoEpisodeContentTypeSurvivesDetailAndSerialization(t *testing.T) {
 	}
 }
 
-func TestHongguoPlaybackRoutesUseRegisteredSingleEpisode(t *testing.T) {
+func TestHongguoPlaybackRoutesUseMobileV5ForAllContentTypes(t *testing.T) {
 	for _, contentType := range []int{1, 1004, 1007, 0, -1} {
 		t.Run(fmt.Sprint(contentType), func(t *testing.T) {
 			d := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
-				if r.URL.Path != hongguoSingleVideoModelPath {
-					t.Fatalf("unexpected route %s", r.URL.Path)
+				if r.URL.Path != "/novel/player/multi_video_model/player/v1" {
+					t.Fatal("wrong production route")
 				}
-				if r.URL.Query().Get("version_name") != "7.3.5.32" || r.URL.Query().Get("device_id") != "1234567890123456" || r.Header.Get("Cookie") != "" {
-					t.Fatal("incorrect reference identity/profile")
-				}
-				for _, key := range []string{"X-Gorgon", "X-Argus", "X-Ladon", "X-Khronos", "X-SS-STUB"} {
-					if r.Header.Get(key) == "" {
-						t.Fatal("missing signature", key)
-					}
-				}
-				if r.Header.Get("X-Medusa") != "" {
-					t.Fatal("mixed incompatible signature profiles")
-				}
-				var payload map[string]any
-				if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-					t.Fatal(err)
-				}
-				if payload["video_id"] != "9001" || payload["content_type"] != float64(1) || nestedMap(payload, "biz_param")["video_platform"] != float64(3) {
-					t.Fatalf("incorrect single episode request: %v", payload)
-				}
-				return sourceFixtureResponse(r, 200, `{"data":{"video_model":{"video_list":[{"main_url":"https://media.example.test/episode.mp4","video_meta":{"codec_type":"h264","definition":"1080p"}}]}}}`), nil
+				return sourceFixtureResponse(r, 200, mobileFixtureModel("9001", true, false)), nil
 			})
-			searchFixtureIdentity(d)
 			media, err := d.resolveHongguoMedia(context.Background(), Task{DramaID: providerDramaID(sourceHongguo, "12345"), Chapter: Chapter{VideoURL: "hongguo-cenc://9001", ContentType: contentType}})
-			if err != nil || media.Quality != 1080 {
-				t.Fatalf("single episode failed: %v", err)
+			if err != nil || media.Quality != 720 {
+				t.Fatalf("v5 model failed: %v", err)
 			}
 		})
 	}
@@ -149,7 +130,7 @@ func TestHongguoPlaybackHTTPBackoffSurvivesFallback(t *testing.T) {
 			calls := 0
 			d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
 				calls++
-				if request.URL.Path != hongguoSingleVideoModelPath {
+				if request.URL.Path != "/novel/player/multi_video_model/player/v1" {
 					if status == http.StatusTooManyRequests {
 						t.Fatalf("429 issued another route: %s", request.URL)
 					}
@@ -167,64 +148,44 @@ func TestHongguoPlaybackHTTPBackoffSurvivesFallback(t *testing.T) {
 			if !errors.As(err, &blocked) || blocked.status != status || time.Until(blocked.until) < 119*time.Second {
 				t.Fatalf("HTTP backoff identity or deadline was lost: %v", err)
 			}
-			if status == http.StatusTooManyRequests && calls != 1 || status == http.StatusForbidden && calls != 2 {
+			if calls != 1 {
 				t.Fatalf("unexpected fallback count after HTTP %d: %d", status, calls)
 			}
 		})
 	}
 }
 
-func TestHongguoSlowAppReachesOfficialWebWithinCallerBudget(t *testing.T) {
-	appCalls, webCalls, apiCalls := 0, 0, 0
-	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
-		switch request.URL.Path {
-		case hongguoSingleVideoModelPath:
-			appCalls++
-			<-request.Context().Done()
-			return nil, request.Context().Err()
-		case "/player/12345/9001":
-			webCalls++
-			return sourceFixtureResponse(request, http.StatusOK, `<script>_ROUTER_DATA = {"loaderData":{"player_page":{"series_id":"12345","vid":"9001","video_player_info":{"main_url":"https://media.example.test/current.mp4"}}}};</script>`), nil
-		case "/api/hongguo/play":
-			apiCalls++
-			return sourceFixtureResponse(request, http.StatusOK, "{}"), nil
-		default:
-			t.Fatalf("unexpected playback route: %s", request.URL)
-			return nil, errors.New("unexpected route")
+func TestHongguoV5SlowRequestHonorsCallerBudget(t *testing.T) {
+	calls := 0
+	d := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
+		calls++
+		if r.URL.Path != "/novel/player/multi_video_model/player/v1" {
+			t.Fatal("unexpected fallback")
 		}
+		<-r.Context().Done()
+		return nil, r.Context().Err()
 	})
-	d.cfg.Retries = 2
-	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
-	media, err := d.resolveHongguoMedia(ctx, Task{
-		DramaID: providerDramaID(sourceHongguo, "12345"),
-		Chapter: Chapter{VideoURL: "hongguo-cenc://9001", ContentType: 1004},
-	})
-	if err != nil || media.URL != "https://media.example.test/current.mp4" || appCalls != 1 || webCalls != 1 || apiCalls != 0 || ctx.Err() != nil {
-		t.Fatalf("slow routes consumed the caller budget: app=%d web=%d api=%d ctx=%v error=%v", appCalls, webCalls, apiCalls, ctx.Err(), err)
+	start := time.Now()
+	_, err := d.resolveHongguoMedia(ctx, Task{DramaID: providerDramaID(sourceHongguo, "12345"), Chapter: Chapter{VideoURL: "hongguo-cenc://9001"}})
+	if !errors.Is(err, context.DeadlineExceeded) || calls != 1 || time.Since(start) > time.Second {
+		t.Fatalf("deadline lost: %v", err)
 	}
 }
 
-func TestHongguoHTTPForbiddenAllowsIndependentWebPlayback(t *testing.T) {
+func TestHongguoV5ForbiddenStopsProductionRoute(t *testing.T) {
 	calls := 0
-	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+	d := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
 		calls++
-		switch request.URL.Path {
-		case hongguoSingleVideoModelPath:
-			return sourceFixtureResponse(request, http.StatusForbidden, "{}"), nil
-		case "/player/12345/9001":
-			return sourceFixtureResponse(request, http.StatusOK, `<script>_ROUTER_DATA = {"loaderData":{"player_page":{"series_id":"12345","vid":"9001","video_player_info":{"main_url":"https://media.example.test/fallback.mp4"}}}}};</script>`), nil
-		default:
-			t.Fatalf("unexpected fallback request: %s", request.URL)
-			return nil, errors.New("unexpected fallback request")
+		if r.URL.Path != "/novel/player/multi_video_model/player/v1" {
+			t.Fatal("fallback after rejection")
 		}
+		return sourceFixtureResponse(r, 403, "{}"), nil
 	})
-	media, err := d.resolveHongguoMedia(context.Background(), Task{
-		DramaID: providerDramaID(sourceHongguo, "12345"),
-		Chapter: Chapter{VideoURL: "hongguo-cenc://9001", ContentType: 1004},
-	})
-	if err != nil || calls != 2 || media.URL != "https://media.example.test/fallback.mp4" {
-		t.Fatalf("independent HTTP fallback failed: calls=%d media=%+v error=%v", calls, media, err)
+	_, err := d.resolveHongguoMedia(context.Background(), Task{DramaID: providerDramaID(sourceHongguo, "12345"), Chapter: Chapter{VideoURL: "hongguo-cenc://9001"}})
+	if err == nil || calls != 1 {
+		t.Fatalf("rejection not preserved: %v", err)
 	}
 }
 
