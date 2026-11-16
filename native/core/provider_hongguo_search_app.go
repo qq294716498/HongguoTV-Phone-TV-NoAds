@@ -84,8 +84,12 @@ func (d *Downloader) fetchHongguoAppSearchTab(ctx context.Context, keyword, tabT
 	if err != nil {
 		return hongguoSearchEntry{}, err
 	}
+	tabs := anyList(result["search_tabs"])
+	if tabs == nil {
+		tabs = anyList(nestedMap(result, "data")["search_tabs"])
+	}
 	var tab map[string]any
-	for _, value := range anyList(result["search_tabs"]) {
+	for _, value := range tabs {
 		candidate, _ := value.(map[string]any)
 		if mapString(candidate, "tab_type") == tabType {
 			tab = candidate
