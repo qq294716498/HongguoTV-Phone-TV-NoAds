@@ -10,9 +10,9 @@ import shutil
 import subprocess
 
 REPO = 'qq294716498/HongguoTV-Phone-TV-NoAds'
-BUILD_RUN = 0
-BUILD_COMMIT = ''
-SHA256 = ''
+BUILD_RUN = 43907206771
+BUILD_COMMIT = '74e9aeaeda8e69ada71f60d01cf69afbe09c3d42'
+SHA256 = 'e0ffe3f5fa146fb8d6128cc597e7818e126deb75c177eb5332bba2ff10bebf6b'
 RUNTIME_BASELINE = '5bc09e9da7a3c9609e31fc5a91f28f797c985958'
 VERSION, BUILD = '0.1.53', 97
 TAG = 'macos-v0.1.53-97'

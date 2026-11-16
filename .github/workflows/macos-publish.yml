@@ -9,7 +9,7 @@ concurrency:
   group: hongguotv-stable-publication
   cancel-in-progress: false
 env:
-  MACOS_BUILD_RUN: '0'
+  MACOS_BUILD_RUN: '43907206771'
 jobs:
   publish:
     runs-on: ubuntu-latest
