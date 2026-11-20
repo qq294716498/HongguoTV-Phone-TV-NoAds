@@ -33,33 +33,21 @@ class DownloadPicker extends StatefulWidget {
 class _DownloadPickerState extends State<DownloadPicker> {
   late final _selected = widget.detail.episodes
       .where((episode) => widget.preferences.includeVip || !episode.vip)
-      .take(500)
       .map((episode) => episode.number)
       .toSet();
   late int _quality = widget.preferences.quality;
   bool _submitting = false;
 
   void _select(Iterable<Episode> episodes) {
-    final choices = episodes.toList();
     setState(() {
-      _selected.clear();
-      _selected.addAll(choices.take(500).map((episode) => episode.number));
+      _selected
+        ..clear()
+        ..addAll(episodes.map((episode) => episode.number));
     });
-    if (choices.length > 500) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('已选前 500 集；可清空后选择其他集数，或从发现页使用整剧批量下载')),
-      );
-    }
   }
 
   void _toggle(Episode episode) {
     if (_submitting) return;
-    if (!_selected.contains(episode.number) && _selected.length >= 500) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('一次最多加入 500 集，请分批下载')));
-      return;
-    }
     setState(() {
       if (!_selected.remove(episode.number)) _selected.add(episode.number);
     });
@@ -228,6 +216,7 @@ class _DownloadPickerState extends State<DownloadPicker> {
                   compact: widget.embedded,
                   unpaged: phone,
                   preserveScrollOnResize: true,
+                  selectionLimit: episodes.length,
                   onSelected: (index) => _toggle(episodes[index]),
                   onSelectionChanged: _submitting
                       ? null
@@ -237,10 +226,6 @@ class _DownloadPickerState extends State<DownloadPicker> {
                             _selected.addAll(selected);
                           });
                         },
-                  onSelectionLimit: () =>
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('一次最多加入 500 集，请分批下载')),
-                      ),
                 ),
               ),
               Padding(

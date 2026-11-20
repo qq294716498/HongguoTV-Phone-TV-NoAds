@@ -92,7 +92,7 @@ jobs:
         run: python scripts/configure_signing.py --clean
       - uses: actions/upload-artifact@v4
         with:
-          name: hongguojian-test-0.1.54-99
+          name: test-apk
           path: dist/android/*
           if-no-files-found: error
           retention-days: 14

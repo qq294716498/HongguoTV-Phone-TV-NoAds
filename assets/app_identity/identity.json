@@ -8,6 +8,6 @@
   "repository": "https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds",
   "androidIconReference": "@drawable/app_icon",
   "androidBrandSource": "android/app/src/main/res/drawable-nodpi/hongguo_logo.png",
-  "brandSha256": "290a1681b2085c3665ccb5639987ded9f9b971729d0eab2d30dea462f8428501",
+  "brandSha256": "31bc5e9a9ac0f06925466c96bdd94a95938e5a86933e2e4f2a5c57c73b2039a5",
   "windowsIcoSha256": "c87ae822647d098dd96bcd777ae74f1dce3bba04d6faa7bce61f5da7952b3a41"
 }

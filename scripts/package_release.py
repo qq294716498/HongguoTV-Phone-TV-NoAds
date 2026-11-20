@@ -24,7 +24,7 @@ output.mkdir(parents=True, exist_ok=True)
 artifacts = []
 
 if options.platform == 'android':
-    for abi in options.abi or ['arm64-v8a', 'armeabi-v7a', 'x86_64']:
+    for abi in options.abi or ['arm64-v8a', 'armeabi-v7a']:
         source = root / 'build' / 'app' / 'outputs' / 'flutter-apk' / f'app-{abi}-release.apk'
         if not source.is_file():
             raise SystemExit('缺少 APK：' + str(source))
@@ -35,8 +35,7 @@ if options.platform == 'android':
             missing = set(required) - names
             if missing:
                 raise SystemExit('APK 缺少原生库：' + ', '.join(sorted(missing)))
-        artifact_name = (f'HongguoTV-{version.split("+")[0]}-{abi}.apk' if variant.all_sources
-                         else f'{variant.slug}-{version}-{abi}.apk')
+        artifact_name = f'果子乐-{version.split("+")[0]}-{abi}.apk'
         target = output / artifact_name
         shutil.copy2(source, target)
         artifacts.append(target)
@@ -77,4 +76,4 @@ for artifact in sorted(artifacts):
             digest.update(chunk)
     checksums.append(f'{digest.hexdigest()}  {artifact.name}')
     print(artifact)
-(output / 'SHA256SUMS.txt').write_text('\n'.join(checksums) + '\n', encoding='ascii')
+(output / 'SHA256SUMS.txt').write_text('\n'.join(checksums) + '\n', encoding='utf-8')

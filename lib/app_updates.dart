@@ -93,20 +93,22 @@ class AppRelease {
     final code = offset + build;
     if (code <= installed.code) return null;
     final version = match[1]!;
-    final name = 'HongguoTV-$version-${installed.abi}.apk';
+    final name = '果子乐-$version-${installed.abi}.apk';
+    final accepted = <String>{name, 'HongguoTV-$version-${installed.abi}.apk'};
     final assets = json['assets'];
     if (assets is! List) throw const FormatException('缺少安装包列表');
     final matches = assets
         .whereType<Map>()
-        .where((a) => a['name'] == name)
+        .where((a) => accepted.contains(a['name']))
         .toList();
     if (matches.length != 1) throw const FormatException('未找到适合当前架构的唯一安装包');
     final asset = matches.single;
+    final assetName = asset['name'] as String;
     final bytes = asset['size'];
     final digest = asset['digest'];
     final url = Uri.tryParse(asset['browser_download_url']?.toString() ?? '');
     final expected = Uri.parse(
-      'https://github.com/$updateRepository/releases/download/$tag/$name',
+      'https://github.com/$updateRepository/releases/download/$tag/$assetName',
     );
     if (bytes is! int ||
         bytes <= 0 ||

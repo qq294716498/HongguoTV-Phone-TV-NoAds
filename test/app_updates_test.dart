@@ -10,6 +10,7 @@ const installed = InstalledApp(version: '0.1.5', code: 2027, abi: 'arm64-v8a');
 Map<String, dynamic> releaseJson({
   String abi = 'arm64-v8a',
   int build = 28,
+  String prefix = '果子乐',
 }) => {
   'draft': false,
   'prerelease': false,
@@ -17,12 +18,12 @@ Map<String, dynamic> releaseJson({
   'body': '修复与安全更新',
   'assets': [
     {
-      'name': 'HongguoTV-0.1.6-$abi.apk',
+      'name': '$prefix-0.1.6-$abi.apk',
       'size': 4,
       'state': 'uploaded',
       'digest': 'sha256:${'a' * 64}',
       'browser_download_url':
-          'https://github.com/$updateRepository/releases/download/app-v0.1.6-$build/HongguoTV-0.1.6-$abi.apk',
+          'https://github.com/$updateRepository/releases/download/app-v0.1.6-$build/$prefix-0.1.6-$abi.apk',
     },
   ],
 };
@@ -139,6 +140,13 @@ void main() {
         expect(candidate.abi, abi);
         expect(candidate.code, app.code + 1);
       }
+    });
+    test('accepts both 果子乐 and legacy HongguoTV asset names', () {
+      expect(AppRelease.parse(releaseJson(), installed), isNotNull);
+      expect(
+        AppRelease.parse(releaseJson(prefix: 'HongguoTV'), installed),
+        isNotNull,
+      );
     });
     test(
       'ignores same or lower actual version code regardless of displayed name',

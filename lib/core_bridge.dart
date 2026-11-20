@@ -1000,47 +1000,57 @@ class NativeRepository extends AppRepository {
         .toList();
   }
 
+  static const downloadBatchSize = 500;
+
   @override
   Future<int> enqueueDownloads(
     DramaDetail detail,
     List<Episode> episodes, {
     int quality = 0,
-  }) async {
-    _authorize(detail.drama.source, download: true);
-    final epoch = access?.profileEpoch;
-    await BackgroundDownloads.ensureStarted();
-    if (epoch != access?.profileEpoch) throw AppFailure('用户已切换，请重新操作');
-    final result = await _call({
-      'action': 'enqueueDownloads',
-      'drama': detail.drama.toJson(),
-      'quality': quality,
-      'entries': episodes
-          .map((episode) => {'chapter': episode.raw, 'index': episode.number})
-          .toList(),
-    });
-    return intValue(result['added']);
-  }
+  }) => _enqueueDownloadBatches(detail, episodes, quality: quality);
 
   @override
   Future<int> updateDownloadCollection(
     DramaDetail detail,
     List<Episode> episodes, {
     int quality = 0,
+  }) =>
+      _enqueueDownloadBatches(detail, episodes, quality: quality, force: true);
+
+  Future<int> _enqueueDownloadBatches(
+    DramaDetail detail,
+    List<Episode> episodes, {
+    required int quality,
+    bool force = false,
   }) async {
     _authorize(detail.drama.source, download: true);
     final epoch = access?.profileEpoch;
     await BackgroundDownloads.ensureStarted();
     if (epoch != access?.profileEpoch) throw AppFailure('用户已切换，请重新操作');
-    final result = await _call({
-      'action': 'enqueueDownloads',
-      'force': true,
-      'drama': detail.drama.toJson(),
-      'quality': quality,
-      'entries': episodes
-          .map((episode) => {'chapter': episode.raw, 'index': episode.number})
-          .toList(),
-    });
-    return intValue(result['added']);
+    var added = 0;
+    var offset = 0;
+    while (offset < episodes.length || offset == 0) {
+      final end = offset + downloadBatchSize;
+      final chunk = episodes.sublist(
+        offset,
+        end < episodes.length ? end : episodes.length,
+      );
+      final result = await _call({
+        'action': 'enqueueDownloads',
+        if (force) 'force': true,
+        'drama': detail.drama.toJson(),
+        'quality': quality,
+        'entries': chunk
+            .map((episode) => {'chapter': episode.raw, 'index': episode.number})
+            .toList(),
+      });
+      added += intValue(result['added']);
+      offset = end;
+      if (epoch != access?.profileEpoch) {
+        throw AppFailure('用户已切换，请重新操作；已加入的任务保留');
+      }
+    }
+    return added;
   }
 
   @override
@@ -1051,7 +1061,9 @@ class NativeRepository extends AppRepository {
   }) async {
     _downloadPermission();
     final epoch = access?.profileEpoch;
-    if (ids.isEmpty || ids.length > 500) throw AppFailure('每批请选择 1 至 500 个任务');
+    if (ids.isEmpty || ids.length > downloadBatchSize) {
+      throw AppFailure('每批请选择 1 至 $downloadBatchSize 个任务');
+    }
     final visible = (await downloads()).map((job) => job.id).toSet();
     if (ids.any((id) => !visible.contains(id))) {
       throw AppFailure('部分任务已删除或当前用户无权操作，请刷新');

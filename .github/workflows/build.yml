@@ -45,14 +45,6 @@ jobs:
     needs: checks
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - edition: hongguojian
-            arguments: ''
-          - edition: zhenguojian
-            arguments: '--all-sources'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -86,7 +78,7 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-      - run: python scripts/build_android.py ${{ matrix.arguments }}
+      - run: python scripts/build_android.py --all-sources
       - name: 校验 APK 签名证书
         shell: bash
         run: |
@@ -106,7 +98,7 @@ jobs:
         run: python scripts/configure_signing.py --clean
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.edition }}-android
+          name: android
           path: dist/android/*
           if-no-files-found: error
           retention-days: 14
@@ -181,13 +173,10 @@ jobs:
           version=$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml | head -n1)
           tag="app-v${version//+/-}"
           {
-            printf '%s\n\n' "版本 ${version}。两个版本功能相同，区别只在站源范围，按需选择："
-            printf '%s\n' "- 红果鉴 hongguojian：仅红果站源"
-            printf '%s\n' "- 真果鉴 zhenguojian：全部站源"
-            printf '\n%s\n' "Android（固定正式证书签名，可覆盖 0.1.0 / 0.1.1，未做真实手机 / TV 验收）："
-            printf '%s\n' "- *-arm64-v8a.apk：绝大多数手机选这个"
-            printf '%s\n' "- *-armeabi-v7a.apk：较老的 32 位手机"
-            printf '%s\n' "- *-x86_64.apk：模拟器"
+            printf '%s\n\n' "版本 ${version}。正式版只有一个安装包版本（包含全部站源），按设备架构选择："
+            printf '%s\n' "Android（固定正式证书签名，可覆盖 0.1.0 / 0.1.1，未做真实手机 / TV 验收）："
+            printf '%s\n' "- *-arm64-v8a.apk：绝大多数手机 / TV 选这个"
+            printf '%s\n' "- *-armeabi-v7a.apk：较老的 32 位设备"
             printf '\n%s\n' "源码提交：${{ github.sha }}"
             printf '%s\n' "校验：SHA256SUMS.txt"
             printf '%s\n' "签名证书 SHA-256：55c3c3395a00e56e99b8bfd580b14c99618da74db19692a2e42606eb05c47ba9"

@@ -28,7 +28,7 @@ class TestApkValidationTests(unittest.TestCase):
             header[4] = elf_class
             header[5] = 1
             header[18:20] = struct.pack('<H', 62 if wrong_elf else machine)
-            with zipfile.ZipFile(self.directory / f'HongguoTV-0.1.48-test.1-{abi}.apk', 'w') as archive:
+            with zipfile.ZipFile(self.directory / f'果子乐-0.1.48-test.1-{abi}.apk', 'w') as archive:
                 for library in LIBRARIES:
                     archive.writestr(f'lib/{abi}/{library}', header)
                 if extra_abi:

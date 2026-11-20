@@ -253,6 +253,7 @@ class EpisodeBrowser extends StatefulWidget {
     this.compactHeader = false,
     this.onSelectionChanged,
     this.onSelectionLimit,
+    this.selectionLimit = 500,
   });
   final List<Episode> episodes;
   final ValueChanged<int> onSelected;
@@ -267,6 +268,7 @@ class EpisodeBrowser extends StatefulWidget {
   final bool compactHeader;
   final ValueChanged<Set<int>>? onSelectionChanged;
   final VoidCallback? onSelectionLimit;
+  final int selectionLimit;
   @override
   State<EpisodeBrowser> createState() => _EpisodeBrowserState();
 }
@@ -358,6 +360,7 @@ class _EpisodeBrowserState extends State<EpisodeBrowser> {
       selected: widget.selectedNumbers ?? {},
       onChanged: widget.onSelectionChanged,
       onLimit: widget.onSelectionLimit,
+      limit: widget.selectionLimit,
       child: child,
     );
   }

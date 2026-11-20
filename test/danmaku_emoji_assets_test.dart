@@ -52,7 +52,7 @@ void main() {
   });
 
   test(
-    'every bundled original PNG matches immutable upstream provenance',
+    'every bundled PNG matches the recorded upstream downscale provenance',
     () async {
       final manifest =
           jsonDecode(
@@ -68,6 +68,9 @@ void main() {
       expect(rows, hasLength(145));
       for (final row in rows.cast<Map<String, dynamic>>()) {
         expect(DanmakuEmojiAssets.paths[row['glyph']], row['file']);
+        expect(row['upstream_blob_sha1'], matches(r'^[a-f0-9]{40}$'));
+        expect(row['width'], 128);
+        expect(row['height'], 128);
         final data = await rootBundle.load(
           '${DanmakuEmojiAssets.directory}${row['file']}',
         );
@@ -78,13 +81,6 @@ void main() {
         expect(bytes.take(8).toList(), [137, 80, 78, 71, 13, 10, 26, 10]);
         expect(bytes.length, row['bytes']);
         expect(sha256.convert(bytes).toString(), row['sha256']);
-        expect(
-          sha1.convert([
-            ...utf8.encode('blob ${bytes.length}\u0000'),
-            ...bytes,
-          ]).toString(),
-          row['upstream_blob_sha1'],
-        );
       }
     },
   );

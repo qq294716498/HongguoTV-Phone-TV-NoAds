@@ -27,13 +27,13 @@ def validate_apks(directory, package_version, tools, identity, architectures=Non
     if not match:
         raise ValueError('Only explicitly marked test versions are accepted')
     version, build = match.group(1), int(match.group(2))
-    expected_names = {f'HongguoTV-{version}-{abi}.apk' for abi in selected}
+    expected_names = {f'果子乐-{version}-{abi}.apk' for abi in selected}
     if {path.name for path in directory.glob('*.apk')} != expected_names:
         raise ValueError('Expected exactly the selected ARM test APKs')
     results = []
     for abi in selected:
         offset, elf_class, machine = ARCHITECTURES[abi]
-        apk = directory / f'HongguoTV-{version}-{abi}.apk'
+        apk = directory / f'果子乐-{version}-{abi}.apk'
         badging = run(str(tools / 'aapt'), 'dump', 'badging', str(apk))
         expected = f"package: name='com.hongguo.tv' versionCode='{offset + build}' versionName='{version}'"
         if (not badging.startswith(expected) or "sdkVersion:'26'" not in badging
