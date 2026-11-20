@@ -40,7 +40,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        manifestPlaceholders["appLabel"] = if (isolatedTest) "红果取流测试" else if (flutter.versionName.contains("-test.")) "红果TV（测试）" else "红果TV"
+        manifestPlaceholders["appLabel"] = if (isolatedTest) "果子乐取流测试" else if (flutter.versionName.contains("-test.")) "果子乐（测试）" else "果子乐"
         manifestPlaceholders["appBanner"] = "@drawable/tv_banner_hongguo"
     }
 

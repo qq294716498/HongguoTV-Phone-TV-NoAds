@@ -142,7 +142,7 @@ class TelevisionNavigationState extends State<TelevisionNavigation> {
       final accepted = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('退出红果TV？'),
+          title: const Text('退出果子乐？'),
           content: const Text('观看记录会保留。'),
           actions: [
             TextButton(

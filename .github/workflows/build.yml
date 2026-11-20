@@ -200,4 +200,4 @@ jobs:
             echo "版本已存在；请递增版本后发布，禁止覆盖既有发布文件。" >&2
             exit 1
           fi
-          gh release create "$tag" release/* --target "${{ github.sha }}" --title "红果TV ${version}" --notes-file notes.md
+          gh release create "$tag" release/* --target "${{ github.sha }}" --title "果子乐 ${version}" --notes-file notes.md

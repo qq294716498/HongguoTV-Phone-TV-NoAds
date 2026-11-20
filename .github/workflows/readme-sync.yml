@@ -21,7 +21,7 @@ jobs:
           persist-credentials: false
       - name: Check README and preserve source
         run: |
-          python3 -c "from pathlib import Path; text = Path('README.md').read_text(encoding='utf-8'); assert text.startswith('# 红果TV'); assert '## 下载安装' in text; assert '## 应用内更新' in text"
+          python3 -c "from pathlib import Path; text = Path('README.md').read_text(encoding='utf-8'); assert text.startswith('# 果子乐'); assert '## 下载安装' in text; assert '## 应用内更新' in text"
           python3 scripts/finish_task.py --message "README 更新为面向使用者的版本说明"
           python3 scripts/sync_source.py --check
           mkdir -p dist/readme

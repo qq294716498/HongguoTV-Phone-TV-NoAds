@@ -360,7 +360,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       ListTile(
                         leading: const Icon(Icons.exit_to_app_rounded),
-                        title: const Text('退出红果TV'),
+                        title: const Text('退出果子乐'),
                         subtitle: const Text('保存观看进度并结束进程'),
                         onTap: () => saveUserChange(context, desktop.quit),
                       ),

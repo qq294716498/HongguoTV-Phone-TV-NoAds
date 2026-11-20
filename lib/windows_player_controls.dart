@@ -770,7 +770,7 @@ class _WindowsPlayerControlsState extends State<WindowsPlayerControls> {
                                     ),
                                     _button(
                                       'windows-mini-quit',
-                                      '退出红果TV',
+                                      '退出果子乐',
                                       Icons.close_rounded,
                                       WindowsDesktop.current?.quit,
                                     ),
