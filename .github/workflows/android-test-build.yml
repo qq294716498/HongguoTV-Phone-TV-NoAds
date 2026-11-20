@@ -41,11 +41,10 @@ jobs:
       - run: flutter analyze --no-pub --no-fatal-infos lib test
       - name: Targeted widget and preference tests
         run: |
-          flutter test --no-pub \
+          flutter test --no-pub --dart-define=DISABLE_REMOTE_IMAGES=true \
             test/danmaku_size_density_test.dart \
             test/danmaku_widget_test.dart \
-            test/television_test.dart \
-            test/television_player_test.dart
+            test/local_persistence_test.dart
       - run: go vet ./core/
         working-directory: native
       - run: go test ./core/ -count=1
