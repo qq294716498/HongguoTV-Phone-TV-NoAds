@@ -1,17 +1,17 @@
 {
   "schema": 1,
   "release": {
-    "tag_name": "windows-v0.1.53-97",
+    "tag_name": "windows-v0.1.56-101",
     "draft": false,
     "prerelease": false,
-    "body": "优化之前无法播放\n\n源码提交：https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/commit/309ca9c8e7ef5ce7e2a6d37d5ca11020d1cebb22\n\nCI：https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/43916427498\n\n校验：SHA256SUMS.txt。",
+    "body": "## 本版变化\n\n- 安装包从 6 个减到 2 个，只保留全站源版本；文件名沿用 `HongguoTV-` 前缀，旧版可以在应用内直接检查更新。\n- 体积减小：应用图标与弹幕表情按实际显示尺寸重新编码，Android 包从 40.0 MB 降到 34.5 MB，画质无变化。\n- 选集不再限制 500 集，超过 500 集自动按 500 一批分批提交。\n- 修复整剧批量下载失败：下载任务不再被当作后台预取而跳过 video_tab 回退取流。\n- 批量下载限速：红果取流串行、间隔至少 1.5 秒，连续 4 次空响应整体冷却 45 秒，避免触发接口风控导致整台设备取不到片源。\n\n## 安装说明\n\n解压后运行 `HongguoTV.exe`。可覆盖 0.1.53 / 0.1.54 / 0.1.55，配置、观看历史与设备身份都在同一目录，升级不会丢。\n\n未做代码签名，首次运行如遇 SmartScreen 提示请选择「更多信息 → 仍要运行」。\n\n源码提交：d307cc79a93f359e5b3e2e67841f1eba07373b46\n\nCI：https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/actions/runs/44721725930\n\n校验：SHA256SUMS.txt",
     "assets": [
       {
-        "name": "HongguoTV-0.1.53-windows-x64.zip",
-        "size": 101769040,
-        "digest": "sha256:a11a6dae85218aac96ec559be3c485dd3bf2a80eee3a672d3b934dcbf158a6b6",
+        "name": "HongguoTV-0.1.56-windows-x64.zip",
+        "size": 99316740,
+        "digest": "sha256:ee10fea3bd9ca56dd6822768fa98764a055c1aba18032a547d995fa76cba5ff0",
         "state": "uploaded",
-        "browser_download_url": "https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.53-97/HongguoTV-0.1.53-windows-x64.zip"
+        "browser_download_url": "https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.56-101/HongguoTV-0.1.56-windows-x64.zip"
       }
     ]
   }
