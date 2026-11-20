@@ -29,9 +29,14 @@ func (d *Downloader) resolveHongguoMobileMedia(ctx context.Context, videoID stri
 	if !hongguoNumericID.MatchString(videoID) {
 		return providerMedia{}, errors.New("红果视频 ID 无效")
 	}
-	budget := 8 * time.Second
+	// 下载任务同样带 backgroundCatalogKey（避免批量下载挤占播放通道），但它是用户
+	// 主动发起的：不能像空闲预取那样压到 2 秒预算并跳过 video_tab 回退，否则 v5
+	// 返回空正文时播放能靠回退取流、下载却直接失败。
 	background, _ := ctx.Value(backgroundCatalogKey{}).(bool)
-	if background {
+	download, _ := ctx.Value(hongguoDownloadKey{}).(bool)
+	passive := background && !download
+	budget := 8 * time.Second
+	if passive {
 		budget = 2 * time.Second
 	}
 	ctx, cancel := context.WithTimeout(ctx, budget)
@@ -40,7 +45,7 @@ func (d *Downloader) resolveHongguoMobileMedia(ctx context.Context, videoID stri
 	if err == nil {
 		return media, nil
 	}
-	if !errors.Is(err, errHongguoEmptyResponse) || ctx.Err() != nil || background {
+	if !errors.Is(err, errHongguoEmptyResponse) || ctx.Err() != nil || passive {
 		return providerMedia{}, err
 	}
 	model, tabErr := d.fetchHongguoVideoTabModel(ctx, videoID)
