@@ -18,6 +18,9 @@ func TestHongguoBatchDownloadsRecoverAfterTwoSuccessfulEpisodes(t *testing.T) {
 	}))
 	defer upstream.Close()
 	manager := downloadTestManager(t)
+	// 本用例验证重试与恢复，不验证限速节奏：把间隔与冷却压到极限，免得触发 6 秒超时。
+	manager.hongguoSpacing = time.Nanosecond
+	manager.hongguoCooldown = time.Nanosecond
 	var mu sync.Mutex
 	calls := map[int]int{}
 	var active atomic.Int32

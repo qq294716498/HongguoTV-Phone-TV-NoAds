@@ -70,6 +70,12 @@ type nativeDownloads struct {
 	resolve            func(context.Context, nativeDownloadJob) (providerMedia, error)
 	hongguoResolveOnce sync.Once
 	hongguoResolveSlot chan struct{}
+	// 红果批量下载限速状态（受 mu 保护）：最近一次取流结束时刻，以及连续空响应次数。
+	hongguoLastResolve time.Time
+	hongguoEmptyStreak int
+	// 0 表示取 hongguoDownloadSpacing / hongguoDownloadCooldown 默认值，测试可覆盖。
+	hongguoSpacing  time.Duration
+	hongguoCooldown time.Duration
 }
 
 func nativeDownloadID(drama string, episode int) string {
