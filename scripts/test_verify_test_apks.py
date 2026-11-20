@@ -18,7 +18,7 @@ class TestApkValidationTests(unittest.TestCase):
                          'brandSha256': hashlib.sha256(b'brand').hexdigest()}
         self.badging_suffix = ''
         self.certificate = CERTIFICATE
-        self.label = '红果TV（测试）'
+        self.label = '果子乐（测试）'
         self.make_apks()
 
     def make_apks(self, wrong_elf=False, extra_abi=False):
@@ -86,10 +86,10 @@ class TestApkValidationTests(unittest.TestCase):
             self.validate()
 
     def test_missing_test_label_and_debug_or_test_only_installation_are_rejected(self):
-        self.label = '红果TV'
+        self.label = '果子乐'
         with self.assertRaisesRegex(ValueError, 'identity'):
             self.validate()
-        self.label = '红果TV（测试）'
+        self.label = '果子乐（测试）'
         for flag in ['application-debuggable', 'application-testOnly']:
             self.badging_suffix = flag
             with self.assertRaisesRegex(ValueError, 'identity'):

@@ -447,7 +447,7 @@ void main() {
         await frames(tester);
         expect(tester.state(find.byType(PlayerControls)), same(playerState));
         expect(find.byTooltip('返回原窗口'), findsOneWidget);
-        expect(find.byTooltip('退出红果TV'), findsOneWidget);
+        expect(find.byTooltip('退出果子乐'), findsOneWidget);
         expect(find.byKey(const ValueKey('player-episodes')), findsNothing);
         await tester.drag(
           find.byKey(const ValueKey('windows-mini-drag')),

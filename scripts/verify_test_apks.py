@@ -37,7 +37,7 @@ def validate_apks(directory, package_version, tools, identity, architectures=Non
         badging = run(str(tools / 'aapt'), 'dump', 'badging', str(apk))
         expected = f"package: name='com.hongguo.tv' versionCode='{offset + build}' versionName='{version}'"
         if (not badging.startswith(expected) or "sdkVersion:'26'" not in badging
-                or "application-label:'红果TV（测试）'" not in badging
+                or "application-label:'果子乐（测试）'" not in badging
                 or 'application-debuggable' in badging or 'application-testOnly' in badging):
             raise ValueError('Test APK identity, label or release mode mismatch: ' + abi)
         signed = run(str(tools / 'apksigner'), 'verify', '--verbose', '--print-certs', str(apk))

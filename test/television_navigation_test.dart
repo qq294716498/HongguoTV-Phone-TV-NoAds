@@ -62,13 +62,13 @@ void main() {
       await showApp(tester);
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
-      expect(find.text('退出红果TV？'), findsOneWidget);
+      expect(find.text('退出果子乐？'), findsOneWidget);
       expect(exits, 0);
       final current = FocusManager.instance.primaryFocus?.context;
       expect(current, isNotNull);
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
-      expect(find.text('退出红果TV？'), findsNothing);
+      expect(find.text('退出果子乐？'), findsNothing);
       expect(exits, 0);
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
@@ -107,7 +107,7 @@ void main() {
       );
       await nativeBack(tester);
       expect(find.byKey(const ValueKey('history-search')), findsNothing);
-      expect(find.text('退出红果TV？'), findsNothing);
+      expect(find.text('退出果子乐？'), findsNothing);
       expect(exits, 0);
     },
   );
@@ -126,7 +126,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.sendKeyUpEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
-      expect(find.text('退出红果TV？'), findsNothing);
+      expect(find.text('退出果子乐？'), findsNothing);
       expect(exits, 0);
     },
   );
@@ -178,7 +178,7 @@ void main() {
       expect(exits, 0);
       await nativeBack(tester);
       expect(find.text('合成设置页'), findsNothing);
-      expect(find.text('退出红果TV？'), findsNothing);
+      expect(find.text('退出果子乐？'), findsNothing);
       expect(exits, 0);
     },
   );
@@ -217,7 +217,7 @@ void main() {
   ) async {
     await showApp(tester, tv: false);
     await nativeBack(tester);
-    expect(find.text('退出红果TV？'), findsNothing);
+    expect(find.text('退出果子乐？'), findsNothing);
     expect(exits, 0);
   });
   testWidgets(
@@ -232,11 +232,11 @@ void main() {
       );
       await tester.pumpAndSettle();
       await nativeBack(tester);
-      expect(find.text('退出红果TV？'), findsOneWidget);
+      expect(find.text('退出果子乐？'), findsOneWidget);
       expect(exits, 0);
       await tester.tap(find.text('继续使用'));
       await tester.pumpAndSettle();
-      expect(find.text('退出红果TV？'), findsNothing);
+      expect(find.text('退出果子乐？'), findsNothing);
     },
   );
 }

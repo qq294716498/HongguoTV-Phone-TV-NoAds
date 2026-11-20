@@ -209,7 +209,7 @@ def main():
         notes_file.write_text(notes, encoding='utf-8')
         assets = [output / f'HongguoTV-{version}-{abi}.apk' for abi in offsets] + [source_package, output / 'APK-validation.json', output / 'Source-and-checks.json', output / 'Signing-availability.json', output / 'Android-player-tests.json']
         subprocess.run(['gh', 'release', 'create', tag, *map(str, assets), '--target', head,
-                        '--title', f'红果TV Android {version} · 发布验证中', '--notes-file', str(notes_file), '--prerelease', '--latest=false'], check=True)
+                        '--title', f'果子乐 Android {version} · 发布验证中', '--notes-file', str(notes_file), '--prerelease', '--latest=false'], check=True)
         Path('staged-release.json').write_text(json.dumps(release(tag)), encoding='utf-8')
     elif phase == 'promote':
         head = json.loads(github('api', f'repos/{repository}/git/ref/heads/{release_branch}'))['object']['sha']
@@ -225,7 +225,7 @@ def main():
         checks = json.loads((root / 'dist/update-check/staged-update-check.json').read_text())
         if {row['abi'] for row in checks} != set(offsets) or not all(row['downloadVerified'] for row in checks):
             raise ValueError('Public updater download not verified for all ABIs')
-        subprocess.run(['gh', 'release', 'edit', tag, '--prerelease=false', '--latest', '--title', f'红果TV Android {version} · 手机 / TV 正式版'], check=True)
+        subprocess.run(['gh', 'release', 'edit', tag, '--prerelease=false', '--latest', '--title', f'果子乐 Android {version} · 手机 / TV 正式版'], check=True)
     elif phase == 'finalize':
         before = read('Release-before.json')
         latest = json.loads(github('api', f'repos/{repository}/releases/latest'))

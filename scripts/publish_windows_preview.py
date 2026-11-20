@@ -101,7 +101,7 @@ def main():
         assets = [package, source_package] + [output / name for name in
                  ['Windows-validation.json', 'Windows-smoke.json', 'Windows-signature.json', 'Source-and-checks.json']]
         subprocess.run(['gh', 'release', 'create', tag, *map(str, assets), '--target', commit,
-                        '--title', f'红果TV Windows {version} · x64 未签名测试版',
+                        '--title', f'果子乐 Windows {version} · x64 未签名测试版',
                         '--notes-file', str(notes_file), '--prerelease', '--latest=false'], check=True)
         with Path(os.environ['GITHUB_ENV']).open('a', encoding='utf-8') as stream:
             stream.write(f'EXPECTED_WINDOWS_TAG={tag}\nEXPECTED_ANDROID_TAG={android["tag"]}\n')

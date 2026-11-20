@@ -11,7 +11,7 @@ BEGIN
   BEGIN
     BLOCK "040904b0"
     BEGIN
-      VALUE "FileDescription", "红果TV更新助手"
+      VALUE "FileDescription", "果子乐更新助手"
       VALUE "FileVersion", "@FLUTTER_VERSION@"
       VALUE "InternalName", "HongguoTV-updater.exe"
       VALUE "OriginalFilename", "HongguoTV-updater.exe"

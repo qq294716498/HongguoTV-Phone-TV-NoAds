@@ -436,7 +436,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Synthetic drama 0001'), findsOneWidget);
     expect(find.text('Synthetic drama 0999'), findsOneWidget);
-    expect(find.text('退出红果TV？'), findsNothing);
+    expect(find.text('退出果子乐？'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
   }, skip: !allSourcesEnabled);

@@ -344,7 +344,7 @@ def main():
         assets = [package, source_package] + [output / name for name in
                  ['Windows-validation.json', 'Windows-smoke.json', 'Windows-signature.json', 'Windows-update-transaction.json', 'Windows-single-instance-native.json', 'Windows-playback-queue.json', 'Windows-app-autoplay-chain.json', 'Source-and-checks.json']]
         subprocess.run(['gh', 'release', 'create', tag, *map(str, assets), '--target', commit,
-                        '--title', f'红果TV Windows {version} · x64 未签名正式版',
+                        '--title', f'果子乐 Windows {version} · x64 未签名正式版',
                         '--notes-file', str(notes_file), '--draft', '--latest=false'], check=True)
         subprocess.run(['gh', 'release', 'edit', tag, '--draft=false', '--prerelease=false', '--latest=false'], check=True)
         published = json.loads(github('api', f'repos/{repository}/releases/tags/{tag}'))

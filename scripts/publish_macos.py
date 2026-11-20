@@ -384,7 +384,7 @@ def main():
     notes_file.write_text(notes(), encoding='utf-8')
     subprocess.run(['gh', 'release', 'create', TAG,
                     *[str(options.output / name) for name in result['files']], '--repo', REPO,
-                    '--target', result['sourceCommit'], '--title', f'红果TV {VERSION} · macOS 通用版',
+                    '--target', result['sourceCommit'], '--title', f'果子乐 {VERSION} · macOS 通用版',
                     '--notes-file', str(notes_file), '--latest=false'], check=True)
     print(json.dumps(verify_public(options.output), ensure_ascii=False))
 

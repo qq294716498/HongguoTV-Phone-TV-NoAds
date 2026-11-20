@@ -23,7 +23,7 @@ bool FlutterWindow::AddTray() {
   icon.uCallbackMessage = kTrayMessage;
   tray_icon_ = LoadIcon(GetModuleHandle(nullptr), MAKEINTRESOURCE(IDI_APP_ICON));
   icon.hIcon = tray_icon_;
-  wcscpy_s(icon.szTip, L"红果TV · 右键恢复 / 播放暂停 / 退出");
+  wcscpy_s(icon.szTip, L"果子乐 · 右键恢复 / 播放暂停 / 退出");
   tray_active_ = Shell_NotifyIconW(NIM_ADD, &icon) != FALSE;
   if (tray_active_) {
     icon.uVersion = NOTIFYICON_VERSION_4;
@@ -54,7 +54,7 @@ void FlutterWindow::TrayMenu() {
   AppendMenuW(menu, MF_STRING | (playback_attached_ ? MF_ENABLED : MF_GRAYED),
     kToggle, playing_ ? L"暂停" : L"播放");
   AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-  AppendMenuW(menu, MF_STRING, kQuit, L"退出红果TV");
+  AppendMenuW(menu, MF_STRING, kQuit, L"退出果子乐");
   POINT position{};
   GetCursorPos(&position);
   SetForegroundWindow(GetHandle());
