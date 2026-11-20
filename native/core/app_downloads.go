@@ -17,6 +17,10 @@ import (
 
 var errNativeLocalFile = errors.New("本地文件缺失或不完整，请重新下载或选择在线播放")
 
+// 未归档任务的总上限。整剧批量下载一次就是几百集，追更多部剧很快累积到数千条，
+// 这里留出足够宽松的额度，让用户先把任务全部排进队列，再由下载调度器限速执行。
+const nativeDownloadTaskLimit = 12000
+
 type nativeDownloadEpisode struct {
 	Chapter Chapter `json:"chapter"`
 	Index   int     `json:"index"`
@@ -301,9 +305,9 @@ func (manager *nativeDownloads) enqueueContext(ctx context.Context, input native
 			}
 			if input.Force && (existing.State == "failed" || existing.State == "completed" && !manager.localFilesValid(*existing)) {
 				if existing.Archived {
-					if tasks >= 5000 {
+					if tasks >= nativeDownloadTaskLimit {
 						rollback()
-						return 0, errors.New("下载任务已满，请先清理已完成任务")
+						return 0, errors.New("下载任务已达上限，请先清理已完成任务")
 					}
 					tasks++
 				}
@@ -313,9 +317,9 @@ func (manager *nativeDownloads) enqueueContext(ctx context.Context, input native
 			}
 			continue
 		}
-		if tasks >= 5000 {
+		if tasks >= nativeDownloadTaskLimit {
 			rollback()
-			return 0, errors.New("下载记录已满，请清理不再需要的任务")
+			return 0, errors.New("下载任务已达上限，请清理不再需要的任务")
 		}
 		manager.jobs[id] = &nativeDownloadRecord{nativeDownloadJob: nativeDownloadJob{
 			ID: id, Drama: input.Drama, Chapter: entry.Chapter, Index: entry.Index,
@@ -392,7 +396,7 @@ func (manager *nativeDownloads) controlExpected(id, action, version string) erro
 			if job.State != "completed" {
 				return errors.New("只能清理已完成的下载任务，未完成的分集请先暂停或取消")
 			}
-			if action == "restore" && job.Archived && manager.unarchivedCountLocked() >= 5000 {
+			if action == "restore" && job.Archived && manager.unarchivedCountLocked() >= nativeDownloadTaskLimit {
 				return errors.New("下载任务已满，请先清理其他已完成任务；视频仍保留")
 			}
 			job.Archived = action == "archive"
@@ -460,8 +464,15 @@ func (manager *nativeDownloads) scheduleLocked() {
 	}
 	for len(manager.active) < max(1, manager.concurrency) {
 		var next *nativeDownloadRecord
+		// 红果取流接口对高频请求会返回 HTTP 200 + 0 字节正文（软风控），触发后同一台
+		// 设备连播放都拿不到片源。任务允许全部入队，但红果同一时刻只跑一个，
+		// 配合取流侧的最小间隔把实际请求频率压下来。
+		hongguoBusy := manager.hongguoActiveLocked()
 		for _, candidate := range manager.jobs {
 			if candidate.State != "queued" || manager.active[candidate.ID] != nil || !nativeDownloadAvailable(candidate.nativeDownloadJob) {
+				continue
+			}
+			if hongguoBusy && sourceFromDramaID(candidate.Drama.ID) == sourceHongguo {
 				continue
 			}
 			if next == nil || candidate.Created < next.Created ||
@@ -489,6 +500,16 @@ func (manager *nativeDownloads) scheduleLocked() {
 		manager.workers.Add(1)
 		go manager.run(ctx, copy)
 	}
+}
+
+// hongguoActiveLocked 判断当前是否已有红果任务在执行（调用方需持有 mu）。
+func (manager *nativeDownloads) hongguoActiveLocked() bool {
+	for id := range manager.active {
+		if job := manager.jobs[id]; job != nil && sourceFromDramaID(job.Drama.ID) == sourceHongguo {
+			return true
+		}
+	}
+	return false
 }
 
 func (manager *nativeDownloads) progress(id string, downloaded, total int64, progress float64) {
