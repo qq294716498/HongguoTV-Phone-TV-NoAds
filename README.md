@@ -12,11 +12,11 @@
 
 | 平台 | 系统要求 | 当前正式版 | 下载入口 |
 | --- | --- | --- | --- |
-| Android 手机 / 平板 | Android 8.0 及以上 | 0.1.52 | [64 位 APK](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.52-92/HongguoTV-0.1.52-arm64-v8a.apk) · [32 位 APK](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.52-92/HongguoTV-0.1.52-armeabi-v7a.apk) |
-| Android TV / 电视盒子 | Android 8.0 及以上 | 0.1.52 | [64 位 APK](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.52-92/HongguoTV-0.1.52-arm64-v8a.apk) · [32 位 APK](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.52-92/HongguoTV-0.1.52-armeabi-v7a.apk) |
-| Windows 电脑 | Windows 10 / 11，x64 | 0.1.52 | [Windows 完整 ZIP](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.52-92/HongguoTV-0.1.52-windows-x64.zip) |
+| Android 手机 / 平板 | Android 8.0 及以上 | 0.1.51 | [64 位 APK](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.51-87/HongguoTV-0.1.51-arm64-v8a.apk) · [32 位 APK](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.51-87/HongguoTV-0.1.51-armeabi-v7a.apk) |
+| Android TV / 电视盒子 | Android 8.0 及以上 | 0.1.51 | [64 位 APK](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.51-87/HongguoTV-0.1.51-arm64-v8a.apk) · [32 位 APK](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.51-87/HongguoTV-0.1.51-armeabi-v7a.apk) |
+| Windows 电脑 | Windows 10 / 11，x64 | 0.1.51 | [Windows 完整 ZIP](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.51-87/HongguoTV-0.1.51-windows-x64.zip) |
 | Mac 电脑 | macOS 13 及以上，Apple 芯片 / Intel | 0.1.48 | [macOS 通用 ZIP](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/macos-v0.1.48-74/HongguoTV-0.1.48-macos-universal.zip) |
-| Android x86_64 模拟器 | Android 8.0 及以上，x86_64 | 0.1.52 | [x86_64 APK](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.52-92/HongguoTV-0.1.52-x86_64.apk) |
+| Android x86_64 模拟器 | Android 8.0 及以上，x86_64 | 0.1.51 | [x86_64 APK](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.51-87/HongguoTV-0.1.51-x86_64.apk) |
 | iPhone / iPad | 暂无已签名安装包 | — | 暂不提供下载，仅保留 iOS 工程 |
 
 ### 怎么选、怎么装
@@ -26,7 +26,7 @@
 - **Windows：** 将完整 ZIP 解压到可写目录后启动，保留全部 DLL 和资源文件，不要只复制 EXE。手动升级前从托盘彻底退出旧版；若旧更新器报错，可将新版完整包解压到新目录使用，保留原应用数据。当前 EXE 未签名。
 - **Mac：** 解压 ZIP，将 `HongguoTV.app` 移入“应用程序”。当前应用为 ad-hoc 签名，未经过 Apple Developer ID 签名和公证；首次启动可能需要在“系统设置 → 隐私与安全性”中允许打开。
 
-找不到附件时，在对应发布页展开 **Assets**：[Android](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/app-v0.1.52-92) · [Windows](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/windows-v0.1.52-92) · [macOS](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/macos-v0.1.48-74)。源码、SHA-256 校验清单和验证报告也在发布附件中；安装应用请选择 APK 或平台 ZIP，不要下载 GitHub 自动生成的 Source code。
+找不到附件时，在对应发布页展开 **Assets**：[Android](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/app-v0.1.51-87) · [Windows](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/windows-v0.1.51-87) · [macOS](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/macos-v0.1.48-74)。源码、SHA-256 校验清单和验证报告也在发布附件中；安装应用请选择 APK 或平台 ZIP，不要下载 GitHub 自动生成的 Source code。
 
 ## 主要功能
 
@@ -55,7 +55,7 @@
 
 ### 追剧、下载与备份
 
-从“查看全季”选择季与集数；加入追剧后，可继续观看并检查是否有下一季。已有下一季标签的卡片跳过检查；其他卡片每次查询正常返回后即结束，不再换关键词或翻页搜索。成功检查后 12 小时内不自动重复，手动刷新可立即重查，切换底部页面不打断正在进行的检查。详情页或播放页支持分集下载，下载后的内容可本地播放。更换设备或重装前，建议先在设置中导出备份。
+从“查看全季”选择季与集数；加入追剧后，可继续观看并检查是否有下一季。详情页或播放页支持分集下载，下载后的内容可本地播放。更换设备或重装前，建议先在设置中导出备份。
 
 ## 应用内更新
 
@@ -110,5 +110,3 @@ python3 scripts/sync_source.py --check
 ```
 
 </details>
-
-红果 v5 播放请求与签名适配参考 [N3urda/hongguoTV](https://github.com/N3urda/hongguoTV/tree/6672b55d5308ea1ec26d2fe0bc0b2401ef4aa0c3/kotlin-tv) 的 `MobilePlayback`、`Signer`、`AesV3` 和 `V5Constants`（GPL-3.0-only）。本项目将该协议移植为 Go，保留已有匿名身份持久化；移植涉及的源码及合成验证向量遵循 [GPL-3.0](native/core/HONGGUO-V5-LICENSE.txt)。摘要及封装向量源于上游测试，完整签名向量由上游 Kotlin 使用固定合成输入生成，不含真实设备或账号数据。
