@@ -177,6 +177,7 @@ jobs:
             printf '%s\n' "Android（固定正式证书签名，可覆盖 0.1.0 / 0.1.1，未做真实手机 / TV 验收）："
             printf '%s\n' "- *-arm64-v8a.apk：绝大多数手机 / TV 选这个"
             printf '%s\n' "- *-armeabi-v7a.apk：较老的 32 位设备"
+            printf '\n%s\n\n' "安装包文件名沿用 HongguoTV- 前缀，是为了让已安装的旧版本能通过应用内「检查更新」直接升级；应用内名称与图标均为「果子乐」。"
             printf '\n%s\n' "源码提交：${{ github.sha }}"
             printf '%s\n' "校验：SHA256SUMS.txt"
             printf '%s\n' "签名证书 SHA-256：55c3c3395a00e56e99b8bfd580b14c99618da74db19692a2e42606eb05c47ba9"

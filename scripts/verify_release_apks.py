@@ -32,7 +32,7 @@ def main():
     identity = json.loads((root / 'assets/app_identity/identity.json').read_text())
     results = []
     for abi, offset in [('arm64-v8a', 2000), ('armeabi-v7a', 1000)]:
-        apk = output / f'果子乐-{name}-{abi}.apk'
+        apk = output / f'HongguoTV-{name}-{abi}.apk'
         badging = run(str(sdk / 'aapt'), 'dump', 'badging', str(apk))
         expected = f"package: name='com.hongguo.tv' versionCode='{offset + int(build)}' versionName='{name}'"
         if not badging.startswith(expected) or "sdkVersion:'26'" not in badging or 'application-debuggable' in badging:

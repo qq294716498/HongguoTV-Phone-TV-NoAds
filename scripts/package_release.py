@@ -35,7 +35,7 @@ if options.platform == 'android':
             missing = set(required) - names
             if missing:
                 raise SystemExit('APK 缺少原生库：' + ', '.join(sorted(missing)))
-        artifact_name = f'果子乐-{version.split("+")[0]}-{abi}.apk'
+        artifact_name = f'HongguoTV-{version.split("+")[0]}-{abi}.apk'
         target = output / artifact_name
         shutil.copy2(source, target)
         artifacts.append(target)
