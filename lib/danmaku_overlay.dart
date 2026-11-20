@@ -12,6 +12,34 @@ import 'danmaku_models.dart';
 import 'danmaku_text.dart';
 import 'windows_danmaku_overlay.dart';
 
+/// 弹幕字号：TV 基础 14、手机 16、桌面按宽度 12 / 14，再乘档位系数。
+double danmakuFontSizeFor(
+  DanmakuFontSize size, {
+  required bool mobile,
+  bool television = false,
+  required double width,
+}) {
+  final base = mobile
+      ? 16.0
+      : television
+      ? 14.0
+      : width < 600
+      ? 12.0
+      : 14.0;
+  return base * size.scale;
+}
+
+/// 弹幕轨道上限：TV 少量 2 条、正常 4 条，手机 5 条，桌面 3 条。
+int danmakuRowLimit(
+  DanmakuDensity density, {
+  required bool mobile,
+  bool television = false,
+}) => mobile
+    ? 5
+    : television
+    ? (density == DanmakuDensity.sparse ? 2 : 4)
+    : 3;
+
 String danmakuFlightText(DanmakuItem item) {
   final buffer = StringBuffer();
   var remaining = 100;
@@ -103,6 +131,8 @@ class DanmakuOverlay extends StatefulWidget {
     this.mobile = false,
     this.speed,
     this.opacity,
+    this.fontSize = DanmakuFontSize.small,
+    this.density = DanmakuDensity.normal,
     this.desktop = false,
     this.animationBehavior,
     this.currentVisible = true,
@@ -114,6 +144,8 @@ class DanmakuOverlay extends StatefulWidget {
   final bool mobile;
   final double? speed;
   final double? opacity;
+  final DanmakuFontSize fontSize;
+  final DanmakuDensity density;
   final bool desktop;
   final AnimationBehavior? animationBehavior;
   final bool currentVisible;
@@ -514,13 +546,12 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
                     constraints.maxHeight,
                     constraints.maxWidth / aspect,
                   );
-            final fontSize = _mobile
-                ? 16.0
-                : widget.television
-                ? 14.0
-                : width < 600
-                ? 12.0
-                : 14.0;
+            final fontSize = danmakuFontSizeFor(
+              widget.fontSize,
+              mobile: _mobile,
+              television: widget.television,
+              width: width,
+            );
             final lifetimeMs = widget.television
                 ? 32000
                 : (danmakuLifetimeMs / danmakuBaselineSpeed).round();
@@ -564,12 +595,20 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
               rowHeight,
               MediaQuery.paddingOf(context),
             );
+            final regionRatio = widget.television
+                ? (widget.density == DanmakuDensity.sparse ? .18 : .30)
+                : .38;
+            final rowLimit = danmakuRowLimit(
+              widget.density,
+              mobile: _mobile,
+              television: widget.television,
+            );
             final rows = portrait
                 ? portraitTops.length
-                : ((height * (widget.television ? .18 : .38) - topInset) /
-                          rowHeight)
-                      .floor()
-                      .clamp(0, _mobile ? 5 : (widget.television ? 2 : 3));
+                : ((height * regionRatio - topInset) / rowHeight).floor().clamp(
+                    0,
+                    rowLimit,
+                  );
             final style = TextStyle(
               fontSize: fontSize,
               fontWeight: FontWeight.w400,

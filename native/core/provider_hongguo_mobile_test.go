@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -144,13 +145,15 @@ func TestHongguoV5ProductionRouteAndCompressedSignature(t *testing.T) {
 }
 
 func TestHongguoV5FailureDoesNotRotateOrUseLegacy(t *testing.T) {
+	// 空正文单独由 video_tab 回退覆盖（见 TestHongguoV5EmptyUsesVideoTabOnce）：
+	// 其余失败形态既不能轮换身份，也不能落到旧接口。
 	for _, tc := range []struct {
 		name   string
 		status int
 		body   string
 		retry  bool
 	}{
-		{"empty", 200, "", false}, {"rejected", 403, "denied", false}, {"limited", 429, "limited", false},
+		{"rejected", 403, "denied", false}, {"limited", 429, "limited", false},
 		{"retryAfter", 200, "", true}, {"business", 200, `{"code":110001}`, false},
 		{"wrongEpisode", 200, mobileFixtureModel("9002", true, false), false}, {"oversize", 200, strings.Repeat(" ", (2<<20)+1), false},
 	} {
@@ -186,6 +189,104 @@ func TestHongguoV5BackgroundNeverRegisters(t *testing.T) {
 	ctx := context.WithValue(context.Background(), backgroundCatalogKey{}, true)
 	if _, err := d.resolveHongguoMobileMedia(ctx, "9001"); err == nil {
 		t.Fatal("unregistered background request")
+	}
+}
+
+func videoTabFixtureModel(id string) string {
+	model := `{"video_list":[{"main_url":"https://media.example.test/test.mp4","video_meta":{"definition":"720p","codec_type":"h264"}}]}`
+	return fmt.Sprintf(`{"code":0,"data":{"video_model_data":{%q:{"video_model":%s}}}}`, id, model)
+}
+
+// v5 空正文时按官方 GET video_tab 路径补一次，且只用同一注册身份。
+func TestHongguoV5EmptyUsesVideoTabOnce(t *testing.T) {
+	mobileCalls, tabCalls := 0, 0
+	d := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Path {
+		case "/novel/player/multi_video_model/player/v1":
+			mobileCalls++
+			return sourceFixtureResponse(r, 200, ""), nil
+		case hongguoVideoTabPath:
+			tabCalls++
+			if r.Method != http.MethodGet {
+				t.Fatalf("video_tab must be GET, got %s", r.Method)
+			}
+			q := r.URL.Query()
+			if q.Get("video_id") != "9001" || q.Get("video_id_type") != "0" || q.Get("device_level") != "1" ||
+				q.Get("video_platform") != "1024" || q.Get("device_id") != "1234567890123456" || q.Get("iid") != "2345678901234567" {
+				t.Fatalf("video_tab profile: %s", r.URL.RawQuery)
+			}
+			if q.Get("version_code") != "73932" || q.Get("version_name") != "7.3.9.32" || q.Get("device_type") != "25053RT47C" {
+				t.Fatalf("video_tab version: %s", r.URL.RawQuery)
+			}
+			if r.Header.Get("X-Gorgon") == "" || r.Header.Get("X-Medusa") == "" || r.Header.Get("X-Khronos") == "" || r.Header.Get("X-Helios") == "" {
+				t.Fatal("legacy signature headers missing")
+			}
+			if r.Header.Get("X-SS-Req-Ticket") == "" || r.Header.Get("X-SS-Req-Ticket") != q.Get("_rticket") {
+				t.Fatal("request ticket mismatch")
+			}
+			if r.Header.Get("Cookie") != "install_id=2345678901234567; store-region=cn" {
+				t.Fatalf("anonymous playback cookie: %q", r.Header.Get("Cookie"))
+			}
+			ts, err := strconv.ParseUint(r.Header.Get("X-Khronos"), 10, 32)
+			if err != nil {
+				t.Fatal(err)
+			}
+			iv := hgGetIv(hgGetIv(hgGetIv(0x20230928, hgSM3([]byte(r.URL.RawQuery))), make([]byte, 16)), hgLe32(uint32(ts)))
+			if iv%3 != 0 {
+				t.Fatal("video_tab signature branch is not 0")
+			}
+			return sourceFixtureResponse(r, 200, videoTabFixtureModel("9001")), nil
+		}
+		t.Fatalf("unexpected path %s", r.URL.Path)
+		return nil, fmt.Errorf("unexpected")
+	})
+	searchFixtureIdentity(d)
+	media, err := d.resolveHongguoMobileMedia(context.Background(), "9001")
+	if err != nil || media.URL != "https://media.example.test/test.mp4" {
+		t.Fatalf("video_tab fallback: %v", err)
+	}
+	if mobileCalls != 1 || tabCalls != 1 {
+		t.Fatalf("unexpected calls mobile=%d tab=%d", mobileCalls, tabCalls)
+	}
+}
+
+// 两条路径都空时不再重试，也不轮换设备身份。
+func TestHongguoV5EmptyVideoTabAlsoEmptyFails(t *testing.T) {
+	calls := 0
+	d := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
+		calls++
+		switch r.URL.Path {
+		case "/novel/player/multi_video_model/player/v1", hongguoVideoTabPath:
+			return sourceFixtureResponse(r, 200, ""), nil
+		}
+		t.Fatalf("unexpected path %s", r.URL.Path)
+		return nil, fmt.Errorf("unexpected")
+	})
+	searchFixtureIdentity(d)
+	_, err := d.resolveHongguoMobileMedia(context.Background(), "9001")
+	if err == nil || !errors.Is(err, errHongguoEmptyResponse) {
+		t.Fatalf("expected empty response error, got %v", err)
+	}
+	if calls != 2 {
+		t.Fatalf("unexpected retries: %d", calls)
+	}
+}
+
+// video_tab 返回别的剧集时绝不能静默播放。
+func TestHongguoV5VideoTabWrongEpisodeRejected(t *testing.T) {
+	d := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Path {
+		case "/novel/player/multi_video_model/player/v1":
+			return sourceFixtureResponse(r, 200, ""), nil
+		case hongguoVideoTabPath:
+			return sourceFixtureResponse(r, 200, videoTabFixtureModel("9002")), nil
+		}
+		t.Fatalf("unexpected path %s", r.URL.Path)
+		return nil, fmt.Errorf("unexpected")
+	})
+	searchFixtureIdentity(d)
+	if _, err := d.resolveHongguoMobileMedia(context.Background(), "9001"); err == nil {
+		t.Fatal("accepted another episode")
 	}
 }
 

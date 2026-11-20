@@ -7,6 +7,38 @@ const danmakuLifetimeMs = 8000;
 const danmakuMaxDurationMs = 86400000;
 const danmakuMergeWindowMs = 3000;
 
+/// 弹幕字号档位。TV 端默认小号（历史上的 14 号字）。
+enum DanmakuFontSize {
+  small('小', 1),
+  medium('中', 1.28),
+  large('大', 1.62);
+
+  const DanmakuFontSize(this.label, this.scale);
+
+  final String label;
+  final double scale;
+
+  static DanmakuFontSize parse(Object? value) => values.firstWhere(
+    (size) => size.name == value,
+    orElse: () => DanmakuFontSize.small,
+  );
+}
+
+/// 弹幕密度档位。少量模式仅保留两条轨道，正常模式铺满可用安全区。
+enum DanmakuDensity {
+  normal('正常'),
+  sparse('少量');
+
+  const DanmakuDensity(this.label);
+
+  final String label;
+
+  static DanmakuDensity parse(Object? value) => values.firstWhere(
+    (density) => density.name == value,
+    orElse: () => DanmakuDensity.normal,
+  );
+}
+
 class DanmakuItem {
   const DanmakuItem({
     required this.id,

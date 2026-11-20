@@ -1,3 +1,4 @@
+import 'danmaku_models.dart';
 import 'tv_decoder_settings.dart';
 import 'video_enhancement_preferences.dart';
 import 'watch_reminder_models.dart';
@@ -19,6 +20,8 @@ class PlaybackPreferences {
     this.danmaku = true,
     this.danmakuSpeed,
     this.danmakuOpacity,
+    this.danmakuFontSize = DanmakuFontSize.small,
+    this.danmakuDensity = DanmakuDensity.normal,
     this.reminders = const WatchReminderPreferences(),
     this.preload = true,
     this.tvTextureOutput = false,
@@ -34,6 +37,8 @@ class PlaybackPreferences {
   final bool danmaku;
   final double? danmakuSpeed;
   final double? danmakuOpacity;
+  final DanmakuFontSize danmakuFontSize;
+  final DanmakuDensity danmakuDensity;
   final WatchReminderPreferences reminders;
 
   final bool preload;
@@ -64,6 +69,8 @@ class PlaybackPreferences {
     bool? danmaku,
     double? danmakuSpeed,
     double? danmakuOpacity,
+    DanmakuFontSize? danmakuFontSize,
+    DanmakuDensity? danmakuDensity,
     WatchReminderPreferences? reminders,
     bool? preload,
     bool? tvTextureOutput,
@@ -78,6 +85,8 @@ class PlaybackPreferences {
     danmaku: danmaku ?? this.danmaku,
     danmakuSpeed: danmakuSpeed ?? this.danmakuSpeed,
     danmakuOpacity: danmakuOpacity ?? this.danmakuOpacity,
+    danmakuFontSize: danmakuFontSize ?? this.danmakuFontSize,
+    danmakuDensity: danmakuDensity ?? this.danmakuDensity,
     reminders: reminders ?? this.reminders,
     preload: preload ?? this.preload,
     tvTextureOutput: tvTextureOutput ?? this.tvTextureOutput,
@@ -95,6 +104,8 @@ class PlaybackPreferences {
     'danmaku': danmaku,
     if (danmakuSpeed != null) 'danmakuSpeed': danmakuSpeed,
     if (danmakuOpacity != null) 'danmakuOpacity': danmakuOpacity,
+    'danmakuFontSize': danmakuFontSize.name,
+    'danmakuDensity': danmakuDensity.name,
     'reminders': reminders.toJson(),
     'preload': preload,
     'tvTextureOutput': tvTextureOutput,
@@ -127,6 +138,8 @@ class PlaybackPreferences {
       danmakuOpacity: danmakuOpacities.contains(value['danmakuOpacity'])
           ? (value['danmakuOpacity'] as num).toDouble()
           : null,
+      danmakuFontSize: DanmakuFontSize.parse(value['danmakuFontSize']),
+      danmakuDensity: DanmakuDensity.parse(value['danmakuDensity']),
       reminders: WatchReminderPreferences.fromJson(value['reminders']),
       preload: preload,
       tvTextureOutput: value['tvTextureOutput'] as bool? ?? false,

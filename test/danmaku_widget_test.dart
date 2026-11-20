@@ -116,7 +116,7 @@ void main() {
       );
       await render(true);
       await tester.pump();
-      expect(flights(), findsNWidgets(2));
+      expect(flights(), findsNWidgets(4));
       final text = tester.widget<Text>(find.text('合成 TV 弹幕 0'));
       expect(text.style!.fontSize, 14);
       expect(text.style!.fontWeight, FontWeight.w400);

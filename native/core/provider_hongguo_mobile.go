@@ -20,6 +20,11 @@ type hongguoMobileModelKey struct{}
 
 const hongguoMobileModelURL = "https://api5-normal-sinfonlinea.fqnovel.com/novel/player/multi_video_model/player/v1"
 
+// resolveHongguoMobileMedia 取某集片源：v5 播放模型优先。
+//
+// v5 会间歇性返回 HTTP 200 + 0 字节正文（上游按时间窗与身份波动）。此时按官方
+// App 的 GET /reading/bookapi/video_tab/... 路径对当前集补一次；两条路径都用同一
+// 注册身份，不轮换设备、不带账户 Cookie。参考 N3urda/hongguoTV 0.16.10。
 func (d *Downloader) resolveHongguoMobileMedia(ctx context.Context, videoID string) (providerMedia, error) {
 	if !hongguoNumericID.MatchString(videoID) {
 		return providerMedia{}, errors.New("红果视频 ID 无效")
@@ -31,8 +36,40 @@ func (d *Downloader) resolveHongguoMobileMedia(ctx context.Context, videoID stri
 	}
 	ctx, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
-	ctx = context.WithValue(ctx, hongguoMobileModelKey{}, true)
-	identity, err := d.ensureHongguoDeviceIdentity(ctx)
+	media, err := d.fetchHongguoMobileModel(ctx, videoID)
+	if err == nil {
+		return media, nil
+	}
+	if !errors.Is(err, errHongguoEmptyResponse) || ctx.Err() != nil || background {
+		return providerMedia{}, err
+	}
+	model, tabErr := d.fetchHongguoVideoTabModel(ctx, videoID)
+	if tabErr != nil {
+		d.recordDiagnostic(diagnosticEvent{
+			Event: "hongguo.video_tab_fallback_failed", Level: "warning", Source: sourceHongguo,
+			Host: "api5-normal-sinfonlineb.fqnovel.com", Attempt: 1,
+			Message: "v5 播放模型空响应，video_tab 回退仍失败：" + fmt.Sprint(publicError(tabErr)),
+		})
+		return providerMedia{}, errors.Join(err, tabErr)
+	}
+	fallback, fallbackErr := d.resolveHongguoModelMedia(ctx, model)
+	if fallbackErr != nil {
+		return providerMedia{}, fallbackErr
+	}
+	d.recordDiagnostic(diagnosticEvent{
+		Event: "hongguo.video_tab_fallback", Level: "warning", Source: sourceHongguo,
+		Host: "api5-normal-sinfonlineb.fqnovel.com", Attempt: 1,
+		Message: "v5 播放模型空响应，已用 video_tab 取回同一集片源",
+	})
+	return fallback, nil
+}
+
+// fetchHongguoMobileModel 走 v5 播放协议（74332 查询 + v04.10.03 签名 + gzip 正文）。
+func (d *Downloader) fetchHongguoMobileModel(ctx context.Context, videoID string) (providerMedia, error) {
+	budget := hongguoVideoTabTimeout(ctx)
+	requestCtx, cancel := context.WithTimeout(context.WithValue(ctx, hongguoMobileModelKey{}, true), budget)
+	defer cancel()
+	identity, err := d.ensureHongguoDeviceIdentity(requestCtx)
 	if err != nil {
 		return providerMedia{}, err
 	}
@@ -51,7 +88,7 @@ func (d *Downloader) resolveHongguoMobileMedia(ctx context.Context, videoID stri
 		"channel": {"vivo_8662_64"}, "device_platform": {"android"}, "device_type": {"PGT-AN10"}, "os_version": {"12"}, "update_version_code": {"74332"},
 		"iid": {identity.InstallID}, "cdid": {identity.CDID}, "device_id": {identity.DeviceID},
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, hongguoMobileModelURL, bytes.NewReader(body))
+	request, err := http.NewRequestWithContext(requestCtx, http.MethodPost, hongguoMobileModelURL, bytes.NewReader(body))
 	if err != nil {
 		return providerMedia{}, err
 	}
@@ -84,7 +121,7 @@ func (d *Downloader) resolveHongguoMobileMedia(ctx context.Context, videoID stri
 	if readErr != nil {
 		return providerMedia{}, readErr
 	}
-	if err = ctx.Err(); err != nil {
+	if err = requestCtx.Err(); err != nil {
 		return providerMedia{}, err
 	}
 	if response.StatusCode != http.StatusOK || catalogResponseBlockReason(response, content) != "" {
@@ -121,5 +158,5 @@ func (d *Downloader) resolveHongguoMobileMedia(ctx context.Context, videoID stri
 	if !hongguoModelHasVideoList(model) && hongguoFallbackAddress(model["fallback_api"]) == "" {
 		return providerMedia{}, errors.New("红果 v5 未返回所选集的可播放媒体")
 	}
-	return d.resolveHongguoModelMedia(ctx, model)
+	return d.resolveHongguoModelMedia(requestCtx, model)
 }

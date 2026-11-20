@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 
+import 'danmaku_models.dart';
 import 'models.dart';
 import 'playback_preferences.dart';
 import 'video_enhancement.dart';
@@ -872,6 +873,8 @@ class TelevisionPlaybackSetting {
     this.danmaku,
     this.danmakuSpeed,
     this.danmakuOpacity,
+    this.danmakuFontSize,
+    this.danmakuDensity,
     this.preload,
     this.enhancement,
   });
@@ -883,6 +886,8 @@ class TelevisionPlaybackSetting {
   final bool? danmaku;
   final double? danmakuSpeed;
   final double? danmakuOpacity;
+  final DanmakuFontSize? danmakuFontSize;
+  final DanmakuDensity? danmakuDensity;
   final bool? preload;
   final VideoEnhancementPreferences? enhancement;
 }
@@ -901,6 +906,8 @@ class TelevisionSettingsDialog extends StatelessWidget {
     this.danmaku = true,
     this.danmakuSpeed,
     this.danmakuOpacity,
+    this.danmakuFontSize = DanmakuFontSize.small,
+    this.danmakuDensity = DanmakuDensity.normal,
     this.showDanmaku = false,
     this.danmakuStatus = '',
     this.onRetryDanmaku,
@@ -920,6 +927,8 @@ class TelevisionSettingsDialog extends StatelessWidget {
   final bool danmaku;
   final double? danmakuSpeed;
   final double? danmakuOpacity;
+  final DanmakuFontSize danmakuFontSize;
+  final DanmakuDensity danmakuDensity;
   final bool showDanmaku;
   final String danmakuStatus;
   final VoidCallback? onRetryDanmaku;
@@ -1030,6 +1039,46 @@ class TelevisionSettingsDialog extends StatelessWidget {
                   context,
                   TelevisionPlaybackSetting(danmaku: !danmaku),
                 ),
+              ),
+              const SizedBox(height: 8),
+              const Text('弹幕字号（小号是原来的默认大小）'),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final size in DanmakuFontSize.values)
+                    RemoteButton(
+                      key: ValueKey('tv-danmaku-font-${size.name}'),
+                      label: size == DanmakuFontSize.small
+                          ? '小号（默认）'
+                          : '${size.label}号',
+                      selected: size == danmakuFontSize,
+                      onPressed: () => Navigator.pop(
+                        context,
+                        TelevisionPlaybackSetting(danmakuFontSize: size),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              const Text('弹幕数量（正常四轨，少量两轨）'),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final density in DanmakuDensity.values)
+                    RemoteButton(
+                      key: ValueKey('tv-danmaku-density-${density.name}'),
+                      label: density == DanmakuDensity.normal ? '正常（默认）' : '少量',
+                      selected: density == danmakuDensity,
+                      onPressed: () => Navigator.pop(
+                        context,
+                        TelevisionPlaybackSetting(danmakuDensity: density),
+                      ),
+                    ),
+                ],
               ),
               const SizedBox(height: 8),
               const Text('弹幕速度（独立于视频倍速）'),
