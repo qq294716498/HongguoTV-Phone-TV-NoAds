@@ -231,8 +231,8 @@ func TestHongguoV5EmptyUsesVideoTabOnce(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			iv := hgGetIv(hgGetIv(hgGetIv(0x20230928, hgSM3([]byte(r.URL.RawQuery))), make([]byte, 16)), hgLe32(uint32(ts)))
-			if iv%3 != 0 {
+			probe := hongguoAppBaseURL + r.URL.Path + "?" + r.URL.RawQuery
+			if hgBranchOf(probe, nil, uint32(ts)) != 0 {
 				t.Fatal("video_tab signature branch is not 0")
 			}
 			return sourceFixtureResponse(r, 200, videoTabFixtureModel("9001")), nil
