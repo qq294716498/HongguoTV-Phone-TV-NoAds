@@ -66,8 +66,9 @@ void main() {
               .transform
               .storage[12];
           final starts = [x(0), x(1)];
+          // TV 正常档已从两轨改为四轨，溢出断言要留出四轨的余量。
           expect(
-            find.byKey(const ValueKey('danmaku-item-batch-2')),
+            find.byKey(const ValueKey('danmaku-item-batch-6')),
             findsNothing,
           );
           final frame = Duration(
