@@ -218,11 +218,18 @@ func TestHongguoV5EmptyUsesVideoTabOnce(t *testing.T) {
 			if q.Get("version_code") != "73932" || q.Get("version_name") != "7.3.9.32" || q.Get("device_type") != "25053RT47C" {
 				t.Fatalf("video_tab version: %s", r.URL.RawQuery)
 			}
-			if r.Header.Get("X-Gorgon") == "" || r.Header.Get("X-Medusa") == "" || r.Header.Get("X-Khronos") == "" || r.Header.Get("X-Helios") == "" {
-				t.Fatal("legacy signature headers missing")
+			// 官方现行 GET 走 v5 验签：只保留 x-khronos / x-helios / x-medusa。
+			if r.Header.Get("X-Medusa") == "" || r.Header.Get("X-Khronos") == "" || r.Header.Get("X-Helios") == "" {
+				t.Fatal("v5 signature headers missing")
 			}
-			if r.Header.Get("X-SS-Req-Ticket") == "" || r.Header.Get("X-SS-Req-Ticket") != q.Get("_rticket") {
-				t.Fatal("request ticket mismatch")
+			if r.Header.Get("X-Gorgon") != "" || r.Header.Get("X-Argus") != "" || r.Header.Get("X-Ladon") != "" {
+				t.Fatalf("v5 shape must not carry legacy signatures: %v", r.Header)
+			}
+			if r.Header.Get("X-SS-Req-Ticket") != "" || r.Header.Get("Sdk-Version") != "" {
+				t.Fatal("v5 shape must not carry legacy transport headers")
+			}
+			if r.Header.Get("User-Agent") != hongguoVideoTabUserAgent || r.Header.Get("Accept-Language") != "zh-CN,zh;q=0.9" {
+				t.Fatalf("v5 shape transport: ua=%q lang=%q", r.Header.Get("User-Agent"), r.Header.Get("Accept-Language"))
 			}
 			if r.Header.Get("Cookie") != "install_id=2345678901234567; store-region=cn" {
 				t.Fatalf("anonymous playback cookie: %q", r.Header.Get("Cookie"))
@@ -231,9 +238,10 @@ func TestHongguoV5EmptyUsesVideoTabOnce(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			probe := hongguoAppBaseURL + r.URL.Path + "?" + r.URL.RawQuery
-			if hgBranchOf(probe, nil, uint32(ts)) != 0 {
-				t.Fatal("video_tab signature branch is not 0")
+			query := hgSM3([]byte(r.URL.RawQuery))
+			iv := hgGetIv(hgGetIv(hgGetIv(0x20230928, query), hgMD5(nil)), hgLe32(uint32(ts)))
+			if iv&15 != 12 {
+				t.Fatal("video_tab v5 signature branch mismatch")
 			}
 			return sourceFixtureResponse(r, 200, videoTabFixtureModel("9001")), nil
 		}
@@ -267,8 +275,39 @@ func TestHongguoV5EmptyVideoTabAlsoEmptyFails(t *testing.T) {
 	if err == nil || !errors.Is(err, errHongguoEmptyResponse) {
 		t.Fatalf("expected empty response error, got %v", err)
 	}
-	if calls != 2 {
+	// v5 播放模型 + video_tab 的 v5 形态与旧六头形态，共三次。
+	if calls != 3 {
 		t.Fatalf("unexpected retries: %d", calls)
+	}
+}
+
+// v5 形态被验签短路时，旧六头形态仍能取回同一集。
+func TestHongguoVideoTabLegacyShapeAfterV5Empty(t *testing.T) {
+	legacy := 0
+	d := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Path {
+		case "/novel/player/multi_video_model/player/v1":
+			return sourceFixtureResponse(r, 200, ""), nil
+		case hongguoVideoTabPath:
+			if r.Header.Get("X-Medusa") != "" && r.Header.Get("X-Gorgon") == "" {
+				return sourceFixtureResponse(r, 200, ""), nil
+			}
+			legacy++
+			if r.Header.Get("X-Gorgon") == "" || r.Header.Get("Cookie") != "install_id=2345678901234567; store-region=cn" {
+				t.Fatal("legacy shape must carry six headers and anonymous cookie")
+			}
+			return sourceFixtureResponse(r, 200, videoTabFixtureModel("9001")), nil
+		}
+		t.Fatalf("unexpected path %s", r.URL.Path)
+		return nil, fmt.Errorf("unexpected")
+	})
+	searchFixtureIdentity(d)
+	media, err := d.resolveHongguoMobileMedia(context.Background(), "9001")
+	if err != nil || media.URL != "https://media.example.test/test.mp4" {
+		t.Fatalf("legacy video_tab fallback: %v", err)
+	}
+	if legacy != 1 {
+		t.Fatalf("legacy attempts: %d", legacy)
 	}
 }
 

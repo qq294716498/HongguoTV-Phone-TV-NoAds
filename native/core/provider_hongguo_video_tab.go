@@ -27,6 +27,10 @@ const hongguoVideoTabPath = "/reading/bookapi/video_tab/multi_video_model/v1/"
 // 播放模型请求使用的厂商 UA；旧 /novel/player 与 video_tab 接口一致。
 const hongguoPlayerUserAgent = "com.phoenix.read/71532 (Linux; U; Android 9; SM-N9860; Build/PQ3A.190705.10241111;tt-ok/3.12.13.20)"
 
+// video_tab 的 v5 形态沿用目录请求的 UA（Cronet 版本）。参考实现的签名层只保留三个
+// 验签头，UA 由通用请求构造提供，因此这里必须显式带上这一版 UA。
+const hongguoVideoTabUserAgent = "com.phoenix.read/71332 (Linux; U; Android 16; zh_CN; 25053RT47C; Build/BP2A.250605.031.A3; Cronet/TTNetVersion:04657795 2026-01-23 QuicVersion:c67e9834 2025-09-08)"
+
 // hongguoVideoTabQuery 组装 video_tab 的查询参数：注册身份 + 播放模型参数。
 func hongguoVideoTabQuery(identity hongguoDeviceIdentity, videoID string, ticket int64) url.Values {
 	values := url.Values{
@@ -64,7 +68,11 @@ func hongguoPlaybackCookie(raw string) string {
 }
 
 // fetchHongguoVideoTabModel 用注册身份取一次 video_tab 播放模型。
-// 只返回该集本身的 video_model，避免静默播放到别的剧集。
+//
+// 官方现行 GET 走 v5 验签（v04.10.03）：只保留 x-khronos / x-helios / x-medusa，
+// 连 UA、Cookie、sdk-version 都不带。服务端对播放模型的放行策略按「签名套系 ×
+// 时间窗」收紧，验签不符会在验签阶段短路成 HTTP 200 + 0 字节。因此这里先按 v5
+// 形态取一次，仍空时才退回旧六头形态（部分时间窗只对旧形态放行）。
 func (downloader *Downloader) fetchHongguoVideoTabModel(ctx context.Context, videoID string) (map[string]any, error) {
 	if !hongguoNumericID.MatchString(videoID) {
 		return nil, errors.New("红果视频 ID 无效")
@@ -73,15 +81,40 @@ func (downloader *Downloader) fetchHongguoVideoTabModel(ctx context.Context, vid
 	if err != nil {
 		return nil, err
 	}
+	model, err := downloader.fetchHongguoVideoTabProfile(ctx, identity, videoID, true)
+	if err == nil {
+		return model, nil
+	}
+	if !errors.Is(err, errHongguoEmptyResponse) || ctx.Err() != nil {
+		return nil, err
+	}
+	legacy, legacyErr := downloader.fetchHongguoVideoTabProfile(ctx, identity, videoID, false)
+	if legacyErr != nil {
+		return nil, errors.Join(err, legacyErr)
+	}
+	return legacy, nil
+}
+
+// fetchHongguoVideoTabProfile 按指定验签形态发一次 video_tab GET。
+// v5 为真时只带 v5 三头（官方现行形态）；为假时保持旧六头 + 匿名播放 Cookie。
+func (downloader *Downloader) fetchHongguoVideoTabProfile(ctx context.Context, identity hongguoDeviceIdentity, videoID string, v5 bool) (map[string]any, error) {
 	query := hongguoVideoTabQuery(identity, videoID, time.Now().UnixMilli())
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, hongguoAppBaseURL+hongguoVideoTabPath+"?"+query.Encode(), nil)
 	if err != nil {
 		return nil, err
 	}
-	request.Header.Set("User-Agent", hongguoPlayerUserAgent)
-	request.Header.Set("Accept", "application/json; charset=utf-8,application/x-protobuf")
-	request.Header.Set("Sdk-Version", "2")
-	request.Header.Set("X-XS-From-Web", "0")
+	if v5 {
+		// 官方现行形态：目录 UA + Accept-Language + 匿名 Cookie，配 v5 三头验签。
+		request.Header.Set("User-Agent", hongguoVideoTabUserAgent)
+		request.Header.Set("Accept-Language", "zh-CN,zh;q=0.9")
+	} else {
+		request.Header.Set("User-Agent", hongguoPlayerUserAgent)
+		request.Header.Set("Accept", "application/json; charset=utf-8,application/x-protobuf")
+		request.Header.Set("Sdk-Version", "2")
+		request.Header.Set("X-XS-From-Web", "0")
+	}
+	// 匿名播放 Cookie（install_id/ttreq/store-region）两种形态都带：这一头是显式头，
+	// 与 CookieJar 无关；参考实现只在缺它时才被验签短路。
 	if cookie := hongguoPlaybackCookie(identity.Cookie); cookie != "" {
 		request.Header.Set("Cookie", cookie)
 	}
@@ -89,8 +122,14 @@ func (downloader *Downloader) fetchHongguoVideoTabModel(ctx context.Context, vid
 	transport := *downloader.client
 	transport.Jar = nil
 	transport.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	var signingErr error
 	response, err := downloader.doPreparedCatalogRequestWithClient(request, hongguoVideoTabTimeout(ctx), func(prepared *http.Request) {
 		now := time.Now()
+		if v5 {
+			// v5 验签自身会把 _rticket 抖动到目标分支，并只写三个验签头。
+			signingErr = signHongguoMobileRequest(prepared, nil, now)
+			return
+		}
 		khronos := uint32(now.Unix())
 		ticket := now.UnixMilli()
 		for offset := 0; offset < 1024; offset++ {
@@ -104,6 +143,9 @@ func (downloader *Downloader) fetchHongguoVideoTabModel(ctx context.Context, vid
 		}
 		prepared.Header.Set("X-SS-Req-Ticket", prepared.URL.Query().Get("_rticket"))
 	}, &transport)
+	if signingErr != nil {
+		return nil, signingErr
+	}
 	if err != nil {
 		return nil, err
 	}

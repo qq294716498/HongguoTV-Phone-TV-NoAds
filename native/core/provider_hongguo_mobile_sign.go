@@ -115,23 +115,30 @@ func hgV5Carrier(key, source, iv []byte, ts uint32) []byte {
 }
 
 func hgV5Medusa(rawURL string, body []byte, ts uint32, deviceID string, ctx hgMedusaContext, nonce, packedRand uint32) string {
-	query := hgSM3([]byte(hgQueryOf(rawURL)))
+	queryText := hgQueryOf(rawURL)
+	query := hgSM3([]byte(queryText))
+	// 版本、系统、机型、渠道必须与本次请求的 query 一致：服务端会核对 medusa 明文
+	// 与 query 参数，写死只对 v5 POST 成立（video_tab 走 73932/16/25053RT47C/update_64）。
+	version := hgParamOf(queryText, "version_name", "7.4.3.32")
+	osVersion := hgParamOf(queryText, "os_version", "12")
+	deviceType := hgParamOf(queryText, "device_type", "PGT-AN10")
+	channel := hgParamOf(queryText, "channel", "vivo_8662_64")
 	f13 := hgV5Hash(query, hgMD5(body), ts)
 	flags := make([]byte, 8)
 	device := hgProto(
 		hgProtoField{1, int64(1), "sint"}, hgProtoField{2, int64(2), "sint"},
 		hgProtoField{3, "8662", ""}, hgProtoField{4, deviceID, ""}, hgProtoField{5, ctx.Nonce, ""},
 		hgProtoField{6, "!noperm!", ""}, hgProtoField{12, "Asia/Shanghai,8", ""}, hgProtoField{13, "zh_CN", ""},
-		hgProtoField{22, "12", ""}, hgProtoField{25, ctx.Started, "sint"},
-		hgProtoField{30, "PGT-AN10", ""}, hgProtoField{31, "HONOR", ""}, hgProtoField{32, "PGT-AN10", ""}, hgProtoField{34, "HONOR", ""},
+		hgProtoField{22, osVersion, ""}, hgProtoField{25, ctx.Started, "sint"},
+		hgProtoField{30, deviceType, ""}, hgProtoField{31, "HONOR", ""}, hgProtoField{32, deviceType, ""}, hgProtoField{34, "HONOR", ""},
 	)
-	env := hgProto(hgProtoField{6, "v04.10.03.04-bugfix", ""}, hgProtoField{8, "vivo_8662_64", ""},
-		hgProtoField{12, device, "message"}, hgProtoField{14, "7.4.3.32", ""})
+	env := hgProto(hgProtoField{6, "v04.10.03.04-bugfix", ""}, hgProtoField{8, channel, ""},
+		hgProtoField{12, device, "message"}, hgProtoField{14, version, ""})
 	counts := hgProto(hgProtoField{1, int64(1), "sint"}, hgProtoField{2, int64(1), "sint"}, hgProtoField{3, int64(1), "sint"}, hgProtoField{5, int64(1), "sint"})
 	message := hgProto(
 		hgProtoField{1, hgV5Magic, "bytes"}, hgProtoField{2, int64(5), "sint"}, hgProtoField{3, int64(ctx.MessageRand), "sint"},
 		hgProtoField{4, "8662", ""}, hgProtoField{5, deviceID, ""}, hgProtoField{6, "646637794", ""},
-		hgProtoField{7, "7.4.3.32", ""}, hgProtoField{8, "v04.10.03-ml-android", ""}, hgProtoField{9, int64(0x040a0300), "sint"},
+		hgProtoField{7, version, ""}, hgProtoField{8, "v04.10.03-ml-android", ""}, hgProtoField{9, int64(0x040a0300), "sint"},
 		hgProtoField{10, flags, "bytes"}, hgProtoField{12, int64(ts), "sint"}, hgProtoField{13, f13, "bytes"}, hgProtoField{14, query[:6], "bytes"},
 		hgProtoField{15, counts, "message"}, hgProtoField{17, int64(ts), "sint"}, hgProtoField{20, "none", ""}, hgProtoField{21, int64(377), "sint"},
 		hgProtoField{23, env, "message"}, hgProtoField{24, `{"cmr":16777216,"cmr2":16777216,"un_h":11,"vpn":0,"kd":0,"dyn":"","do":1,"tk":true}`, ""},
