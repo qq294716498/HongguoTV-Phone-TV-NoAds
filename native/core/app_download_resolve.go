@@ -18,8 +18,14 @@ const (
 	hongguoDownloadEmptyLimit = 4
 )
 
+// hongguoPacedDownload 判断该任务是否要走红果的签名取流接口。只有这类任务需要
+// 限速：接口被高频请求打满后，红果会对整台设备返回 HTTP 200 + 0 字节正文。
+func hongguoPacedDownload(job nativeDownloadJob) bool {
+	return sourceFromDramaID(job.Drama.ID) == sourceHongguo && strings.HasPrefix(job.Chapter.VideoURL, "hongguo-cenc://")
+}
+
 func (manager *nativeDownloads) resolveDownloadMedia(ctx context.Context, job nativeDownloadJob) (providerMedia, error) {
-	if sourceFromDramaID(job.Drama.ID) != sourceHongguo || !strings.HasPrefix(job.Chapter.VideoURL, "hongguo-cenc://") {
+	if !hongguoPacedDownload(job) {
 		return manager.resolve(ctx, job)
 	}
 	manager.hongguoResolveOnce.Do(func() { manager.hongguoResolveSlot = make(chan struct{}, 1) })

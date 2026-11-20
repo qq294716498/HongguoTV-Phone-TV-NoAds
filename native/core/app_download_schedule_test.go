@@ -29,7 +29,7 @@ func TestHongguoScheduleRunsSingleTaskAtATime(t *testing.T) {
 		manager.jobs[id] = &nativeDownloadRecord{nativeDownloadJob: nativeDownloadJob{
 			ID:      id,
 			Drama:   nativeDrama{ID: "hongguo:100", Source: "hongguo", Title: "合成下载测试"},
-			Chapter: Chapter{ID: strconv.Itoa(index)},
+			Chapter: Chapter{ID: strconv.Itoa(index), VideoURL: "hongguo-cenc://" + strconv.Itoa(index)},
 			Index:   index,
 			State:   "queued",
 			Created: int64(index),
@@ -66,7 +66,7 @@ func TestHongguoScheduleLeavesOtherSourcesParallel(t *testing.T) {
 	manager.jobs["a"] = &nativeDownloadRecord{nativeDownloadJob: nativeDownloadJob{
 		ID:      "a",
 		Drama:   nativeDrama{ID: "hongguo:100", Source: "hongguo", Title: "红果"},
-		Chapter: Chapter{ID: "1"},
+		Chapter: Chapter{ID: "1", VideoURL: "hongguo-cenc://1"},
 		Index:   1, State: "queued", Created: 1,
 	}}
 	manager.jobs["b"] = &nativeDownloadRecord{nativeDownloadJob: nativeDownloadJob{

@@ -472,7 +472,7 @@ func (manager *nativeDownloads) scheduleLocked() {
 			if candidate.State != "queued" || manager.active[candidate.ID] != nil || !nativeDownloadAvailable(candidate.nativeDownloadJob) {
 				continue
 			}
-			if hongguoBusy && sourceFromDramaID(candidate.Drama.ID) == sourceHongguo {
+			if hongguoBusy && hongguoPacedDownload(candidate.nativeDownloadJob) {
 				continue
 			}
 			if next == nil || candidate.Created < next.Created ||
@@ -505,7 +505,7 @@ func (manager *nativeDownloads) scheduleLocked() {
 // hongguoActiveLocked 判断当前是否已有红果任务在执行（调用方需持有 mu）。
 func (manager *nativeDownloads) hongguoActiveLocked() bool {
 	for id := range manager.active {
-		if job := manager.jobs[id]; job != nil && sourceFromDramaID(job.Drama.ID) == sourceHongguo {
+		if job := manager.jobs[id]; job != nil && hongguoPacedDownload(job.nativeDownloadJob) {
 			return true
 		}
 	}
