@@ -44,7 +44,8 @@ jobs:
           flutter test --no-pub --dart-define=DISABLE_REMOTE_IMAGES=true \
             test/danmaku_size_density_test.dart \
             test/danmaku_widget_test.dart \
-            test/local_persistence_test.dart
+            test/local_persistence_test.dart \
+            test/download_picker_large_selection_test.dart
       - run: go vet ./core/
         working-directory: native
       - run: go test ./core/ -count=1
@@ -86,7 +87,7 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-      - run: python scripts/build_android.py --abi arm64-v8a
+      - run: python scripts/build_android.py --abi arm64-v8a --all-sources
       - name: Remove signing files
         if: always()
         run: python scripts/configure_signing.py --clean
