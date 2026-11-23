@@ -72,14 +72,6 @@ type nativeDownloads struct {
 	concurrency        int
 	bySource           bool
 	resolve            func(context.Context, nativeDownloadJob) (providerMedia, error)
-	hongguoResolveOnce sync.Once
-	hongguoResolveSlot chan struct{}
-	// 红果批量下载限速状态（受 mu 保护）：最近一次取流结束时刻，以及连续空响应次数。
-	hongguoLastResolve time.Time
-	hongguoEmptyStreak int
-	// 0 表示取 hongguoDownloadSpacing / hongguoDownloadCooldown 默认值，测试可覆盖。
-	hongguoSpacing  time.Duration
-	hongguoCooldown time.Duration
 }
 
 func nativeDownloadID(drama string, episode int) string {
@@ -464,15 +456,8 @@ func (manager *nativeDownloads) scheduleLocked() {
 	}
 	for len(manager.active) < max(1, manager.concurrency) {
 		var next *nativeDownloadRecord
-		// 红果取流接口对高频请求会返回 HTTP 200 + 0 字节正文（软风控），触发后同一台
-		// 设备连播放都拿不到片源。任务允许全部入队，但红果同一时刻只跑一个，
-		// 配合取流侧的最小间隔把实际请求频率压下来。
-		hongguoBusy := manager.hongguoActiveLocked()
 		for _, candidate := range manager.jobs {
 			if candidate.State != "queued" || manager.active[candidate.ID] != nil || !nativeDownloadAvailable(candidate.nativeDownloadJob) {
-				continue
-			}
-			if hongguoBusy && hongguoPacedDownload(candidate.nativeDownloadJob) {
 				continue
 			}
 			if next == nil || candidate.Created < next.Created ||
@@ -500,16 +485,6 @@ func (manager *nativeDownloads) scheduleLocked() {
 		manager.workers.Add(1)
 		go manager.run(ctx, copy)
 	}
-}
-
-// hongguoActiveLocked 判断当前是否已有红果任务在执行（调用方需持有 mu）。
-func (manager *nativeDownloads) hongguoActiveLocked() bool {
-	for id := range manager.active {
-		if job := manager.jobs[id]; job != nil && hongguoPacedDownload(job.nativeDownloadJob) {
-			return true
-		}
-	}
-	return false
 }
 
 func (manager *nativeDownloads) progress(id string, downloaded, total int64, progress float64) {

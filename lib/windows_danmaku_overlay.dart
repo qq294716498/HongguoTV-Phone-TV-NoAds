@@ -8,11 +8,16 @@ import 'danmaku_emoji_render.dart';
 import 'danmaku_exit_motion.dart';
 import 'danmaku_models.dart';
 
-double windowsDanmakuFontSize(Size viewport, {double textScale = 1}) =>
+double windowsDanmakuFontSize(
+  Size viewport, {
+  double textScale = 1,
+  double sizeScale = 1,
+}) =>
     (18 *
             math.sqrt(viewport.width * viewport.height / (960 * 540)) *
-            textScale.clamp(1, 1.15))
-        .clamp(12, 28);
+            textScale.clamp(1, 1.15) *
+            sizeScale.clamp(1, 2))
+        .clamp(12, 44);
 
 class WindowsDanmakuOverlay extends StatefulWidget {
   const WindowsDanmakuOverlay({
@@ -22,6 +27,7 @@ class WindowsDanmakuOverlay extends StatefulWidget {
     required this.flightText,
     this.speed = 1,
     this.opacity = .62,
+    this.fontSize = DanmakuFontSize.small,
     this.currentVisible = true,
   });
   final DanmakuController controller;
@@ -29,6 +35,7 @@ class WindowsDanmakuOverlay extends StatefulWidget {
   final String Function(DanmakuItem) flightText;
   final double speed;
   final double opacity;
+  final DanmakuFontSize fontSize;
   final bool currentVisible;
   @override
   State<WindowsDanmakuOverlay> createState() => _WindowsDanmakuOverlayState();
@@ -344,6 +351,7 @@ class _WindowsDanmakuOverlayState extends State<WindowsDanmakuOverlay>
             final font = windowsDanmakuFontSize(
               size,
               textScale: MediaQuery.textScalerOf(context).scale(1),
+              sizeScale: widget.fontSize.scale,
             );
             final style = TextStyle(
               fontSize: font,

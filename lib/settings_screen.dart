@@ -334,7 +334,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 key: const ValueKey('global-danmaku-settings'),
                 leading: const Icon(Icons.subtitles_rounded),
                 title: const Text('弹幕设置'),
-                subtitle: const Text('红果源的弹幕开关、速度与不透明度'),
+                subtitle: const Text('红果源的弹幕开关、字号、速度与不透明度'),
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: _danmakuSettings,
               ),

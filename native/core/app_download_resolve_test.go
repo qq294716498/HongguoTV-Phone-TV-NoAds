@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -18,17 +17,9 @@ func TestHongguoBatchDownloadsRecoverAfterTwoSuccessfulEpisodes(t *testing.T) {
 	}))
 	defer upstream.Close()
 	manager := downloadTestManager(t)
-	// 本用例验证重试与恢复，不验证限速节奏：把间隔与冷却压到极限，免得触发 6 秒超时。
-	manager.hongguoSpacing = time.Nanosecond
-	manager.hongguoCooldown = time.Nanosecond
 	var mu sync.Mutex
 	calls := map[int]int{}
-	var active atomic.Int32
 	manager.resolve = func(ctx context.Context, job nativeDownloadJob) (providerMedia, error) {
-		if active.Add(1) != 1 {
-			t.Error("Hongguo download metadata requests overlapped")
-		}
-		defer active.Add(-1)
 		if download, _ := ctx.Value(hongguoDownloadKey{}).(bool); !download {
 			t.Error("download did not select its own route budget")
 		}
@@ -92,28 +83,19 @@ func TestHongguoDownloadResolveStopsAtBoundAndOnRejection(t *testing.T) {
 	}
 }
 
-func TestHongguoDownloadResolveCancellationReleasesWaitingJobs(t *testing.T) {
-	entered := make(chan struct{})
-	manager := &nativeDownloads{resolve: func(ctx context.Context, _ nativeDownloadJob) (providerMedia, error) {
-		close(entered)
-		<-ctx.Done()
-		return providerMedia{}, ctx.Err()
+func TestHongguoDownloadResolveStopsBeforeFetchingWhenCanceled(t *testing.T) {
+	calls := 0
+	manager := &nativeDownloads{resolve: func(context.Context, nativeDownloadJob) (providerMedia, error) {
+		calls++
+		return providerMedia{}, nil
 	}}
 	job := nativeDownloadJob{Drama: nativeDrama{ID: "hongguo:100"}, Chapter: Chapter{VideoURL: "hongguo-cenc://9001"}}
 	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan error, 1)
-	go func() { _, err := manager.resolveDownloadMedia(ctx, job); done <- err }()
-	<-entered
-	waiting, stop := context.WithCancel(context.Background())
-	stop()
-	if _, err := manager.resolveDownloadMedia(waiting, job); !errors.Is(err, context.Canceled) {
-		t.Fatal(err)
-	}
 	cancel()
-	if err := <-done; !errors.Is(err, context.Canceled) {
+	if _, err := manager.resolveDownloadMedia(ctx, job); !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
-	if len(manager.hongguoResolveSlot) != 0 {
-		t.Fatal("resolution slot leaked")
+	if calls != 0 {
+		t.Fatalf("canceled download still fetched media: calls=%d", calls)
 	}
 }

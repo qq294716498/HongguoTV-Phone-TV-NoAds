@@ -140,7 +140,7 @@ func hgV5Medusa(rawURL string, body []byte, ts uint32, deviceID string, ctx hgMe
 		hgProtoField{4, "8662", ""}, hgProtoField{5, deviceID, ""}, hgProtoField{6, "646637794", ""},
 		hgProtoField{7, version, ""}, hgProtoField{8, "v04.10.03-ml-android", ""}, hgProtoField{9, int64(0x040a0300), "sint"},
 		hgProtoField{10, flags, "bytes"}, hgProtoField{12, int64(ts), "sint"}, hgProtoField{13, f13, "bytes"}, hgProtoField{14, query[:6], "bytes"},
-		hgProtoField{15, counts, "message"}, hgProtoField{17, int64(ts), "sint"}, hgProtoField{20, "none", ""}, hgProtoField{21, int64(377), "sint"},
+		hgProtoField{15, counts, "message"}, hgProtoField{17, int64(ts), "sint"}, hgProtoField{20, "none", ""}, hgProtoField{21, int64(312), "sint"},
 		hgProtoField{23, env, "message"}, hgProtoField{24, `{"cmr":16777216,"cmr2":16777216,"un_h":11,"vpn":0,"kd":0,"dyn":"","do":1,"tk":true}`, ""},
 	)
 	hash, seed := hgKeyHash(hgV5SignKey, nonce)

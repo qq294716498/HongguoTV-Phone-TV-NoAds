@@ -70,6 +70,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsOneWidget);
+    await tester.tap(find.widgetWithText(TextButton, '系统输入法'));
+    await tester.pumpAndSettle();
     expect(tester.widget<TextField>(field).readOnly, isFalse);
     expect(tester.testTextInput.isVisible, isTrue);
     final editing = FocusManager.instance.primaryFocus;
@@ -159,6 +162,9 @@ void main() {
       expect(tester.testTextInput.isVisible, isFalse);
       await tester.sendKeyEvent(LogicalKeyboardKey.select);
       await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsOneWidget);
+      await tester.tap(find.widgetWithText(TextButton, '系统输入法'));
+      await tester.pumpAndSettle();
       tester.testTextInput.updateEditingValue(
         const TextEditingValue(
           text: '合',
@@ -239,6 +245,8 @@ void main() {
       );
       await tester.sendKeyEvent(LogicalKeyboardKey.select);
       await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, '系统输入法'));
+      await tester.pumpAndSettle();
       tester.view.viewInsets = const FakeViewPadding(bottom: 260);
       await tester.pumpAndSettle();
       expect(
@@ -286,5 +294,35 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       controller.dispose();
     }
+  });
+
+  testWidgets('TV on-screen keyboard types and submits without system IME', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    final submitted = <String>[];
+    await mount(
+      tester,
+      TelevisionSearchField(
+        controller: controller,
+        autofocus: true,
+        decoration: const InputDecoration(hintText: '搜索'),
+        onSubmitted: submitted.add,
+      ),
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(tester.testTextInput.isVisible, isFalse);
+    await tester.tap(find.widgetWithText(TextButton, 'A'));
+    await tester.tap(find.widgetWithText(TextButton, 'B'));
+    await tester.pumpAndSettle();
+    expect(controller.text, 'ab');
+    await tester.tap(find.widgetWithText(TextButton, '搜索'));
+    await tester.pumpAndSettle();
+    expect(submitted, ['ab']);
+    expect(find.byType(AlertDialog), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+    controller.dispose();
   });
 }

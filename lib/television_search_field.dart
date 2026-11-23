@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'app_layout.dart';
+import 'television_keyboard.dart';
 
 class TelevisionSearchField extends StatelessWidget {
   const TelevisionSearchField({
@@ -107,8 +108,16 @@ class _TelevisionSearchEditorState extends State<_TelevisionSearchEditor>
     }
   }
 
-  void _beginEditing() {
+  Future<void> _beginEditing() async {
     if (_editing) return;
+    final field = widget.field;
+    final result = await showTelevisionKeyboard(
+      context,
+      controller: field.controller,
+      onChanged: field.onChanged,
+      onSubmitted: field.onSubmitted,
+    );
+    if (!mounted || result != TelevisionKeyboardResult.systemIme) return;
     _navigation.requestFocus();
     setState(() {
       _editing = true;

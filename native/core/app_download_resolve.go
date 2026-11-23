@@ -8,64 +8,20 @@ import (
 	"time"
 )
 
-const (
-	hongguoDownloadRetryDelay = 2 * time.Second
-	// 红果对高频取流会返回 HTTP 200 + 0 字节正文（软风控），一旦触发会影响同一台
-	// 设备上的全部取流，连播放都拿不到片源。批量下载必须限速：串行 slot 之外再
-	// 加一层最小间隔，连续空响应则整体冷却，等上游放开再继续。
-	hongguoDownloadSpacing    = 1500 * time.Millisecond
-	hongguoDownloadCooldown   = 45 * time.Second
-	hongguoDownloadEmptyLimit = 4
-)
+const hongguoDownloadRetryDelay = 2 * time.Second
 
-// hongguoPacedDownload 判断该任务是否要走红果的签名取流接口。只有这类任务需要
-// 限速：接口被高频请求打满后，红果会对整台设备返回 HTTP 200 + 0 字节正文。
-func hongguoPacedDownload(job nativeDownloadJob) bool {
+// hongguoSignedDownload 判断该任务是否要走红果的签名取流接口；只有这类任务需要
+// 下载专用的取流预算与标记，其他源保持原有取流路径。
+func hongguoSignedDownload(job nativeDownloadJob) bool {
 	return sourceFromDramaID(job.Drama.ID) == sourceHongguo && strings.HasPrefix(job.Chapter.VideoURL, "hongguo-cenc://")
 }
 
 func (manager *nativeDownloads) resolveDownloadMedia(ctx context.Context, job nativeDownloadJob) (providerMedia, error) {
-	if !hongguoPacedDownload(job) {
+	if !hongguoSignedDownload(job) {
 		return manager.resolve(ctx, job)
 	}
-	manager.hongguoResolveOnce.Do(func() { manager.hongguoResolveSlot = make(chan struct{}, 1) })
-	select {
-	case manager.hongguoResolveSlot <- struct{}{}:
-	case <-ctx.Done():
-		return providerMedia{}, ctx.Err()
-	}
-	defer func() { <-manager.hongguoResolveSlot }()
-	manager.mu.Lock()
-	spacing, cooldown := manager.hongguoSpacing, manager.hongguoCooldown
-	if spacing <= 0 {
-		spacing = hongguoDownloadSpacing
-	}
-	if cooldown <= 0 {
-		cooldown = hongguoDownloadCooldown
-	}
-	wait := time.Until(manager.hongguoLastResolve.Add(spacing))
-	cooling := manager.hongguoEmptyStreak >= hongguoDownloadEmptyLimit
-	manager.mu.Unlock()
-	if cooling {
-		wait = cooldown
-	}
-	if wait > 0 {
-		timer := time.NewTimer(wait)
-		select {
-		case <-timer.C:
-		case <-ctx.Done():
-			timer.Stop()
-			return providerMedia{}, ctx.Err()
-		}
-	}
-	// 后注册先执行：先记下本次结束时刻，再释放 slot，下一次任务据此计算间隔。
-	defer func() {
-		manager.mu.Lock()
-		manager.hongguoLastResolve = time.Now()
-		manager.mu.Unlock()
-	}()
 	ctx = context.WithValue(ctx, backgroundCatalogKey{}, true)
-	ctx, cancel := context.WithTimeout(context.WithValue(ctx, hongguoDownloadKey{}, true), 2*hongguoDownloadBudget+cooldown)
+	ctx, cancel := context.WithTimeout(context.WithValue(ctx, hongguoDownloadKey{}, true), 2*hongguoDownloadBudget)
 	defer cancel()
 	var lastErr error
 	for attempt := 0; attempt < 2; attempt++ {
@@ -73,13 +29,7 @@ func (manager *nativeDownloads) resolveDownloadMedia(ctx context.Context, job na
 			return providerMedia{}, err
 		}
 		if attempt > 0 {
-			delay := hongguoDownloadRetryDelay
-			manager.mu.Lock()
-			if manager.hongguoEmptyStreak >= hongguoDownloadEmptyLimit {
-				delay = cooldown
-			}
-			manager.mu.Unlock()
-			timer := time.NewTimer(delay)
+			timer := time.NewTimer(hongguoDownloadRetryDelay)
 			select {
 			case <-timer.C:
 			case <-ctx.Done():
@@ -89,15 +39,7 @@ func (manager *nativeDownloads) resolveDownloadMedia(ctx context.Context, job na
 		}
 		media, err := manager.resolve(ctx, job)
 		if err == nil {
-			manager.mu.Lock()
-			manager.hongguoEmptyStreak = 0
-			manager.mu.Unlock()
 			return media, ctx.Err()
-		}
-		if errors.Is(err, errHongguoEmptyResponse) {
-			manager.mu.Lock()
-			manager.hongguoEmptyStreak++
-			manager.mu.Unlock()
 		}
 		lastErr = err
 		var blocked *requestBackoff

@@ -516,6 +516,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
           flightText: danmakuFlightText,
           speed: widget.speed ?? 1,
           opacity: widget.opacity ?? .62,
+          fontSize: widget.fontSize,
           currentVisible: widget.currentVisible,
         )
       : _legacy(context);

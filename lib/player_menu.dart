@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 
 import 'app_layout.dart';
+import 'danmaku_models.dart';
 import 'models.dart';
 import 'episode_browser.dart';
 import 'playback_preferences.dart';
@@ -351,6 +352,32 @@ class _PlayerMenuState extends State<PlayerMenu> {
                     ),
                   ),
           ),
+          const Text('弹幕字号'),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final size in DanmakuFontSize.values)
+                ChoiceChip(
+                  key: ValueKey('menu-danmaku-font-${size.name}'),
+                  label: Text(
+                    size == DanmakuFontSize.small
+                        ? '${size.label}（默认）'
+                        : size.label,
+                  ),
+                  selected: size == preferences.danmakuFontSize,
+                  onSelected: _busy
+                      ? null
+                      : (_) => _run(
+                          () => widget.onPreferences(
+                            preferences.copyWith(danmakuFontSize: size),
+                          ),
+                        ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
           if (widget.section == PlayerMenuSection.danmaku ||
               widget.mobile ||
               (!AppLayout.isTelevision(context) &&

@@ -2,6 +2,7 @@ import 'package:duanju_app/danmaku_controller.dart';
 import 'package:duanju_app/danmaku_models.dart';
 import 'package:duanju_app/danmaku_overlay.dart';
 import 'package:duanju_app/playback_preferences.dart';
+import 'package:duanju_app/windows_danmaku_overlay.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -54,6 +55,17 @@ void main() {
       2,
     );
     expect(danmakuRowLimit(DanmakuDensity.normal, mobile: true), 5);
+  });
+
+  test('桌面弹幕字号跟随档位放大', () {
+    const viewport = Size(960, 540);
+    final small = windowsDanmakuFontSize(viewport);
+    final large = windowsDanmakuFontSize(
+      viewport,
+      sizeScale: DanmakuFontSize.large.scale,
+    );
+    expect(large, greaterThan(small));
+    expect(large, closeTo(small * DanmakuFontSize.large.scale, .001));
   });
 
   testWidgets('TV 正常模式铺满四轨，少量模式只留两轨，大号字更大', (tester) async {

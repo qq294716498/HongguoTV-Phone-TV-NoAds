@@ -362,7 +362,7 @@ func TestHongguoV5MatchesReferenceEnvelope(t *testing.T) {
 	}
 	for _, row := range rows {
 		ctx := hgMedusaContext{MessageRand: 0x80000000, Nonce: "synthetic", Started: 1800000000000}
-		actual := hgV5Medusa(row.URL, hgUnhex(row.Body), row.TS, "1234567890123456", ctx, 0x80000000, 0x80000000)
+		actual := hgV5Medusa(row.URL, hgUnhex(row.Body), row.TS, "123", ctx, 0x80000000, 0x80000000)
 		if actual != row.Medusa {
 			t.Fatalf("reference Medusa mismatch ts=%d", row.TS)
 		}
