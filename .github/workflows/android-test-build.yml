@@ -2,7 +2,7 @@ name: Android test package
 
 on:
   push:
-    branches: [fix/hongguo-playback-0.1.54]
+    branches: [fix/hongguo-playback-0.1.54, test/play-host-switch-0.1.56]
   workflow_dispatch:
 
 permissions:

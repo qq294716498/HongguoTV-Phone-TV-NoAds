@@ -34,7 +34,7 @@ func TestHongguoDownloadEmptyResponseUsesVideoTabFallback(t *testing.T) {
 	if media.URL != "https://media.example.test/test.mp4" {
 		t.Fatalf("unexpected media url %q", media.URL)
 	}
-	if mobileCalls != 1 || tabCalls != 1 {
+	if mobileCalls != len(hongguoPlayModelHosts) || tabCalls != 1 {
 		t.Fatalf("unexpected calls mobile=%d tab=%d", mobileCalls, tabCalls)
 	}
 }

@@ -18,7 +18,7 @@ import (
 
 type hongguoMobileModelKey struct{}
 
-const hongguoMobileModelURL = "https://api5-normal-sinfonlinea.fqnovel.com/novel/player/multi_video_model/player/v1"
+const hongguoMobileModelURL = "https://api5-normal-sinfonlinea.fqnovel.com" + hongguoPlayModelPath
 
 // resolveHongguoMobileMedia 取某集片源：v5 播放模型优先。
 //
@@ -70,14 +70,72 @@ func (d *Downloader) resolveHongguoMobileMedia(ctx context.Context, videoID stri
 }
 
 // fetchHongguoMobileModel 走 v5 播放协议（74332 查询 + v04.10.03 签名 + gzip 正文）。
+//
+// 换机策略见 provider_hongguo_play_hosts.go：官方客户端把播放请求分散在多台
+// api5/api3-normal 主机上并按健康度排序，本仓库此前只写死 sinfonlinea 一台。这里
+// 按同一顺序逐台尝试，单台的空正文与网络失败会换下一台，整体预算仍是原来的
+// hongguoVideoTabTimeout。
 func (d *Downloader) fetchHongguoMobileModel(ctx context.Context, videoID string) (providerMedia, error) {
 	budget := hongguoVideoTabTimeout(ctx)
-	requestCtx, cancel := context.WithTimeout(context.WithValue(ctx, hongguoMobileModelKey{}, true), budget)
+	// hongguoMobileModelKey 必须在取身份之前打上：设备注册层用它在后台预取时跳过
+	// 注册、等前台先行，这里少带这个标记会让后台任务直接去注册设备。
+	modelCtx, cancel := context.WithTimeout(context.WithValue(ctx, hongguoMobileModelKey{}, true), budget)
 	defer cancel()
-	identity, err := d.ensureHongguoDeviceIdentity(requestCtx)
+	identity, err := d.ensureHongguoDeviceIdentity(modelCtx)
 	if err != nil {
 		return providerMedia{}, err
 	}
+	var lastErr error
+	state := d.hongguoPlayHostState()
+	hosts := state.order()
+	// 空闲预取（后台、非下载）保持单次请求：换机会把后台任务的行数放大数倍，
+	// 挤占播放通道，而预取失败本来就可以直接放弃。
+	if background, _ := modelCtx.Value(backgroundCatalogKey{}).(bool); background {
+		if download, _ := modelCtx.Value(hongguoDownloadKey{}).(bool); !download && len(hosts) > 1 {
+			hosts = hosts[:1]
+		}
+	}
+	for index, host := range hosts {
+		if index > 0 && modelCtx.Err() != nil {
+			break
+		}
+		media, hostErr := d.fetchHongguoMobileModelFrom(modelCtx, videoID, identity, host)
+		state.mark(host, hostErr)
+		if hostErr == nil {
+			if index > 0 {
+				d.recordDiagnostic(diagnosticEvent{
+					Event: "hongguo.play_host_switch", Level: "info", Source: sourceHongguo,
+					Host: hongguoPlayHostName(host), Attempt: index + 1,
+					Message: "v5 播放模型已换到可用主机取回",
+				})
+			}
+			return media, nil
+		}
+		lastErr = hostErr
+		if !hongguoPlayHostRetryable(hostErr) {
+			break
+		}
+		d.recordDiagnostic(diagnosticEvent{
+			Event: "hongguo.play_host_fail", Level: "warning", Source: sourceHongguo,
+			Host: hongguoPlayHostName(host), Attempt: index + 1,
+			Message: "v5 播放模型失败，准备换机：" + fmt.Sprint(publicError(hostErr)),
+		})
+	}
+	if lastErr == nil {
+		lastErr = modelCtx.Err()
+	}
+	if lastErr == nil {
+		lastErr = errHongguoEmptyResponse
+	}
+	return providerMedia{}, lastErr
+}
+
+// fetchHongguoMobileModelFrom 向指定主机发一次 v5 播放模型请求。
+func (d *Downloader) fetchHongguoMobileModelFrom(ctx context.Context, videoID string, identity hongguoDeviceIdentity, base string) (providerMedia, error) {
+	budget := hongguoVideoTabTimeout(ctx)
+	requestCtx, cancel := context.WithTimeout(context.WithValue(ctx, hongguoMobileModelKey{}, true), budget)
+	defer cancel()
+	var err error
 	payload := []byte(`{"biz_param":{"detail_page_version":0,"device_level":1,"disable_digg_stat":false,"disable_video_relate_book":false,"need_all_video_definition":true,"need_mp4_align":false,"use_os_player":false,"use_server_dns":false,"video_platform":1024},"mixed_video_id_map":{"1004":["` + videoID + `"]},"dr_scene":"player"}`)
 	var compressed bytes.Buffer
 	writer := gzip.NewWriter(&compressed)
@@ -93,7 +151,7 @@ func (d *Downloader) fetchHongguoMobileModel(ctx context.Context, videoID string
 		"channel": {"vivo_8662_64"}, "device_platform": {"android"}, "device_type": {"PGT-AN10"}, "os_version": {"12"}, "update_version_code": {"74332"},
 		"iid": {identity.InstallID}, "cdid": {identity.CDID}, "device_id": {identity.DeviceID},
 	}
-	request, err := http.NewRequestWithContext(requestCtx, http.MethodPost, hongguoMobileModelURL, bytes.NewReader(body))
+	request, err := http.NewRequestWithContext(requestCtx, http.MethodPost, base+hongguoPlayModelPath, bytes.NewReader(body))
 	if err != nil {
 		return providerMedia{}, err
 	}

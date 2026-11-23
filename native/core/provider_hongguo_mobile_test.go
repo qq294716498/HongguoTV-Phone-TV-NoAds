@@ -253,7 +253,7 @@ func TestHongguoV5EmptyUsesVideoTabOnce(t *testing.T) {
 	if err != nil || media.URL != "https://media.example.test/test.mp4" {
 		t.Fatalf("video_tab fallback: %v", err)
 	}
-	if mobileCalls != 1 || tabCalls != 1 {
+	if mobileCalls != len(hongguoPlayModelHosts) || tabCalls != 1 {
 		t.Fatalf("unexpected calls mobile=%d tab=%d", mobileCalls, tabCalls)
 	}
 }
@@ -275,8 +275,9 @@ func TestHongguoV5EmptyVideoTabAlsoEmptyFails(t *testing.T) {
 	if err == nil || !errors.Is(err, errHongguoEmptyResponse) {
 		t.Fatalf("expected empty response error, got %v", err)
 	}
-	// v5 播放模型 + video_tab 的 v5 形态与旧六头形态，共三次。
-	if calls != 3 {
+	// v5 播放模型按主机池逐台试（每台都返回空正文），再加 video_tab 的 v5 形态与
+	// 旧六头形态，共 len(主机池)+2 次。
+	if calls != len(hongguoPlayModelHosts)+2 {
 		t.Fatalf("unexpected retries: %d", calls)
 	}
 }
