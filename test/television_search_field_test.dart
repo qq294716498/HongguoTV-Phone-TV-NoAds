@@ -70,7 +70,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pumpAndSettle();
-    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.byType(Dialog), findsOneWidget);
     await tester.tap(find.widgetWithText(TextButton, '系统输入法'));
     await tester.pumpAndSettle();
     expect(tester.widget<TextField>(field).readOnly, isFalse);
@@ -162,7 +162,7 @@ void main() {
       expect(tester.testTextInput.isVisible, isFalse);
       await tester.sendKeyEvent(LogicalKeyboardKey.select);
       await tester.pumpAndSettle();
-      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(find.byType(Dialog), findsOneWidget);
       await tester.tap(find.widgetWithText(TextButton, '系统输入法'));
       await tester.pumpAndSettle();
       tester.testTextInput.updateEditingValue(
@@ -312,7 +312,7 @@ void main() {
     );
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pumpAndSettle();
-    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.byType(Dialog), findsOneWidget);
     expect(tester.testTextInput.isVisible, isFalse);
     await tester.tap(find.widgetWithText(TextButton, 'A'));
     await tester.tap(find.widgetWithText(TextButton, 'B'));
@@ -321,7 +321,7 @@ void main() {
     await tester.tap(find.widgetWithText(TextButton, '搜索'));
     await tester.pumpAndSettle();
     expect(submitted, ['ab']);
-    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.byType(Dialog), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
     controller.dispose();
   });
