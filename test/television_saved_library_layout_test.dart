@@ -16,6 +16,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'fixtures.dart';
+import 'television_search_ime.dart';
 import 'remote_test_helpers.dart';
 
 class SavedTelevisionRepository extends FixtureRepository {
@@ -455,6 +456,7 @@ void main() {
       searchNavigation(tester).requestFocus();
       await tester.pumpAndSettle();
       await press(tester, LogicalKeyboardKey.select);
+      await chooseTelevisionSystemIme(tester);
       final field = find.descendant(
         of: find.byKey(const ValueKey('favorites-search')),
         matching: find.byType(TextField),

@@ -12,12 +12,13 @@ double windowsDanmakuFontSize(
   Size viewport, {
   double textScale = 1,
   double sizeScale = 1,
-}) =>
-    (18 *
-            math.sqrt(viewport.width * viewport.height / (960 * 540)) *
-            textScale.clamp(1, 1.15) *
-            sizeScale.clamp(1, 2))
-        .clamp(12, 44);
+}) {
+  // 字号档位整体缩放上下限：默认档必须与历史行为逐像素一致，只有选更大档位才放宽上限。
+  final scale = sizeScale.clamp(1, 2);
+  final area = viewport.width * viewport.height / (960 * 540);
+  final base = 18 * math.sqrt(area) * textScale.clamp(1, 1.15);
+  return (base * scale).clamp(12 * scale, 28 * scale);
+}
 
 class WindowsDanmakuOverlay extends StatefulWidget {
   const WindowsDanmakuOverlay({

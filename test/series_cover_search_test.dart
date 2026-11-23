@@ -18,6 +18,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'fixtures.dart';
+import 'television_search_ime.dart';
 import 'remote_test_helpers.dart';
 
 class CoverSeriesRepository extends FixtureRepository {
@@ -662,6 +663,7 @@ void main() {
       final traffic = repository.traffic;
       await tester.tap(input());
       await tester.pumpAndSettle();
+      await chooseTelevisionSystemIme(tester);
       final editorFocus = FocusManager.instance.primaryFocus;
       expect(tester.widget<TextField>(input()).readOnly, false);
       await type(tester, '999');
@@ -717,6 +719,7 @@ void main() {
     await mount(tester, repository, store, television: true);
     await tester.tap(input());
     await tester.pump();
+    await chooseTelevisionSystemIme(tester);
     expect(tester.widget<TextField>(input()).readOnly, false);
     await type(tester, '第2季');
     expect(card(2), findsOneWidget);

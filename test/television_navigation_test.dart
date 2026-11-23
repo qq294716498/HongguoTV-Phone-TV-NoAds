@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'fixtures.dart';
 import 'remote_test_helpers.dart';
+import 'television_search_ime.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -90,6 +91,7 @@ void main() {
       final input = find.byKey(const ValueKey('history-search'));
       await tester.tap(input);
       await tester.pumpAndSettle();
+      await chooseTelevisionSystemIme(tester);
       expect(tester.testTextInput.isVisible, isTrue);
       await nativeBack(tester);
       expect(tester.testTextInput.isVisible, isFalse);
