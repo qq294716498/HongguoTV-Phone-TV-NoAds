@@ -14,10 +14,10 @@ double windowsDanmakuFontSize(
   double sizeScale = 1,
 }) {
   // 字号档位整体缩放上下限：默认档必须与历史行为逐像素一致，只有选更大档位才放宽上限。
-  final scale = sizeScale.clamp(1, 2);
+  final scale = sizeScale.clamp(1.0, 2.0);
   final area = viewport.width * viewport.height / (960 * 540);
-  final base = 18 * math.sqrt(area) * textScale.clamp(1, 1.15);
-  return (base * scale).clamp(12 * scale, 28 * scale);
+  final base = 18 * math.sqrt(area) * textScale.clamp(1.0, 1.15);
+  return (base * scale).clamp(12.0 * scale, 28.0 * scale).toDouble();
 }
 
 class WindowsDanmakuOverlay extends StatefulWidget {
