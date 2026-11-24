@@ -15,7 +15,7 @@
 | Android 手机 / 平板 | Android 8.0 及以上 | 0.1.51 | [64 位 APK](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.51-87/HongguoTV-0.1.51-arm64-v8a.apk) · [32 位 APK](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.51-87/HongguoTV-0.1.51-armeabi-v7a.apk) |
 | Android TV / 电视盒子 | Android 8.0 及以上 | 0.1.51 | [64 位 APK](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.51-87/HongguoTV-0.1.51-arm64-v8a.apk) · [32 位 APK](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.51-87/HongguoTV-0.1.51-armeabi-v7a.apk) |
 | Windows 电脑 | Windows 10 / 11，x64 | 0.1.51 | [Windows 完整 ZIP](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.51-87/HongguoTV-0.1.51-windows-x64.zip) |
-| Mac 电脑 | macOS 13 及以上，Apple 芯片 / Intel | 0.1.48 | [macOS 通用 ZIP](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/macos-v0.1.48-74/HongguoTV-0.1.48-macos-universal.zip) |
+| Mac 电脑 | macOS 13 及以上，Apple 芯片 / Intel | 0.1.58 | [macOS 通用 ZIP](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/macos-v0.1.58-103/HongguoTV-0.1.58-macos-universal.zip) |
 | Android x86_64 模拟器 | Android 8.0 及以上，x86_64 | 0.1.51 | [x86_64 APK](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/app-v0.1.51-87/HongguoTV-0.1.51-x86_64.apk) |
 | iPhone / iPad | 暂无已签名安装包 | — | 暂不提供下载，仅保留 iOS 工程 |
 
@@ -26,7 +26,7 @@
 - **Windows：** 将完整 ZIP 解压到可写目录后启动，保留全部 DLL 和资源文件，不要只复制 EXE。手动升级前从托盘彻底退出旧版；若旧更新器报错，可将新版完整包解压到新目录使用，保留原应用数据。当前 EXE 未签名。
 - **Mac：** 解压 ZIP，将 `HongguoTV.app` 移入“应用程序”。当前应用为 ad-hoc 签名，未经过 Apple Developer ID 签名和公证；首次启动可能需要在“系统设置 → 隐私与安全性”中允许打开。
 
-找不到附件时，在对应发布页展开 **Assets**：[Android](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/app-v0.1.51-87) · [Windows](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/windows-v0.1.51-87) · [macOS](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/macos-v0.1.48-74)。源码、SHA-256 校验清单和验证报告也在发布附件中；安装应用请选择 APK 或平台 ZIP，不要下载 GitHub 自动生成的 Source code。
+找不到附件时，在对应发布页展开 **Assets**：[Android](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/app-v0.1.51-87) · [Windows](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/windows-v0.1.51-87) · [macOS](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/macos-v0.1.58-103)。源码、SHA-256 校验清单和验证报告也在发布附件中；安装应用请选择 APK 或平台 ZIP，不要下载 GitHub 自动生成的 Source code。
 
 ## 主要功能
 
