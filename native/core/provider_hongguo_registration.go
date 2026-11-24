@@ -79,8 +79,9 @@ func (d *Downloader) ensureHongguoDeviceIdentity(ctx context.Context, rejected .
 				if json.Unmarshal(body, &saved) == nil {
 					client.deviceIdentity = saved
 					client.deviceIdentityPersisted = saved.valid() && restoredCurrent
-					// 0.1.60 之前不解析 klink_egdi，磁盘上的旧身份多半没有它。
-					client.deviceIdentityNeedsEGDI = restoredCurrent && saved.valid() && saved.EGDI == ""
+					// 0.1.60 之前不解析 klink_egdi，磁盘上的旧身份多半没有它 ——
+					// 包括从 hongguo-search-device.json 迁移过来的那一份。
+					client.deviceIdentityNeedsEGDI = saved.valid() && saved.EGDI == ""
 				}
 			}
 		}

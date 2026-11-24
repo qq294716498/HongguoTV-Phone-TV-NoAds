@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -182,6 +183,9 @@ func TestHongguoSearchRegistrationMatchesReferenceAndPersistsIdentity(t *testing
 		if r.URL.Path == hongguoSearchAPIPath {
 			return sourceFixtureResponse(r, 503, ""), nil
 		}
+		if r.URL.Path == "/service/2/app_alert_check/" {
+			return sourceFixtureResponse(r, 200, `{"message":"success"}`), nil
+		}
 		registrations.Add(1)
 		if r.URL.Path != "/service/2/device_register/" || r.Header.Get("X-Gorgon") != "" {
 			t.Error("registration route or headers wrong")
@@ -201,7 +205,7 @@ func TestHongguoSearchRegistrationMatchesReferenceAndPersistsIdentity(t *testing
 		if header["app_version"] != "7.3.5.32" || header["channel"] != "update_64" || header["os_version"] != "16" || header["device_id"] != nil || payload["magic_tag"] != "ss_app_log" {
 			t.Fatal("invalid registration profile")
 		}
-		response := sourceFixtureResponse(r, 200, `{"device_id_str":"3456789012345678","install_id":4567890123456789}`)
+		response := sourceFixtureResponse(r, 200, `{"device_id_str":"3456789012345678","install_id":4567890123456789,"klink_egdi":"AAKeP6Fc6mK7FI9sXotmUkiI_g9Kw19Yqok7SnzQIuSK84L_xKbmCdHx"}`)
 		response.Header.Add("Set-Cookie", "install_id=4567890123456789; Path=/")
 		return response, nil
 	}, false)
@@ -225,7 +229,7 @@ func TestHongguoSearchRegistrationMatchesReferenceAndPersistsIdentity(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode().Perm() != 0600 {
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0600 {
 		t.Fatalf("identity file permissions: %v", info.Mode())
 	}
 	restored := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {

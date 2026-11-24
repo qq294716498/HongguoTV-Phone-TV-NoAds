@@ -98,7 +98,7 @@ func TestHongguoMigratesPreviouslyRegisteredSearchIdentity(t *testing.T) {
 		t.Error("migration should reuse registered identity")
 		return nil, errors.New("unexpected registration")
 	}, false)
-	saved := hongguoDeviceIdentity{DeviceID: "123456", InstallID: "234567", Cookie: "install_id=234567"}
+	saved := hongguoDeviceIdentity{DeviceID: "123456", InstallID: "234567", Cookie: "install_id=234567", EGDI: "AAKeP6Fc6mK7FI9sXotmUkiI_g9Kw19Yqok7SnzQIuSK84L_xKbmCdHx"}
 	body, _ := json.Marshal(saved)
 	if err := os.WriteFile(filepath.Join(d.cfg.dataDir, "hongguo-search-device.json"), body, 0600); err != nil {
 		t.Fatal(err)
