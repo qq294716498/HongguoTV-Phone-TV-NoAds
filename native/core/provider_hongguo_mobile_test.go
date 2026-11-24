@@ -87,8 +87,15 @@ func TestHongguoV5ProductionRouteAndCompressedSignature(t *testing.T) {
 					t.Fatalf("wrong production path %s", r.URL.Path)
 				}
 				q := r.URL.Query()
-				if q.Get("device_id") != "1234567890123456" || q.Get("iid") == "" || q.Get("cdid") == "" || q.Get("version_code") != "74532" || q.Get("version_name") != "7.4.5.32" {
+				if q.Get("device_id") != "1234567890123456" || q.Get("iid") == "" || q.Get("cdid") == "" || q.Get("version_code") != "74332" || q.Get("version_name") != "7.4.3.32" {
 					t.Fatal("incorrect v5 profile")
+				}
+				// 设备画像不完整会被上游按「低质量设备」过滤成 200 + 0 字节，
+				// 这些分量缺一个就等于没有修复。
+				for _, name := range []string{"resolution", "dpi", "os_api", "rom_version", "host_abi", "dragon_device_type", "player_so_load", "klink_egdi"} {
+					if q.Get(name) == "" {
+						t.Fatalf("v5 query missing device profile: %s", name)
+					}
 				}
 				if cdid != "" && cdid != q.Get("cdid") {
 					t.Fatal("identity changed across requests")
@@ -122,7 +129,7 @@ func TestHongguoV5ProductionRouteAndCompressedSignature(t *testing.T) {
 				if err = json.Unmarshal(raw, &payload); err != nil {
 					t.Fatal(err)
 				}
-				if nestedMap(payload, "biz_param")["device_level"] != float64(2) || payload["dr_scene"] != "preload" {
+				if nestedMap(payload, "biz_param")["device_level"] != float64(1) || payload["dr_scene"] != "player" {
 					t.Fatal("wrong player payload")
 				}
 				if !strings.Contains(string(raw), `"1004":["9001"]`) {
@@ -161,7 +168,7 @@ func TestHongguoV5FailureDoesNotRotateOrUseLegacy(t *testing.T) {
 			calls := 0
 			d := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
 				calls++
-				if r.URL.Path != "/novel/player/multi_video_model/preload/v1" {
+				if r.URL.Path != "/novel/player/multi_video_model/player/v1" {
 					t.Fatal("legacy or registration fallback")
 				}
 				response := sourceFixtureResponse(r, tc.status, tc.body)
@@ -202,7 +209,7 @@ func TestHongguoV5EmptyUsesVideoTabOnce(t *testing.T) {
 	mobileCalls, tabCalls := 0, 0
 	d := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
 		switch r.URL.Path {
-		case "/novel/player/multi_video_model/preload/v1":
+		case "/novel/player/multi_video_model/player/v1":
 			mobileCalls++
 			return sourceFixtureResponse(r, 200, ""), nil
 		case hongguoVideoTabPath:
@@ -264,7 +271,7 @@ func TestHongguoV5EmptyVideoTabAlsoEmptyFails(t *testing.T) {
 	d := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
 		calls++
 		switch r.URL.Path {
-		case "/novel/player/multi_video_model/preload/v1", hongguoVideoTabPath:
+		case "/novel/player/multi_video_model/player/v1", hongguoVideoTabPath:
 			return sourceFixtureResponse(r, 200, ""), nil
 		}
 		t.Fatalf("unexpected path %s", r.URL.Path)
@@ -286,7 +293,7 @@ func TestHongguoVideoTabLegacyShapeAfterV5Empty(t *testing.T) {
 	legacy := 0
 	d := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
 		switch r.URL.Path {
-		case "/novel/player/multi_video_model/preload/v1":
+		case "/novel/player/multi_video_model/player/v1":
 			return sourceFixtureResponse(r, 200, ""), nil
 		case hongguoVideoTabPath:
 			if r.Header.Get("X-Medusa") != "" && r.Header.Get("X-Gorgon") == "" {
@@ -315,7 +322,7 @@ func TestHongguoVideoTabLegacyShapeAfterV5Empty(t *testing.T) {
 func TestHongguoV5VideoTabWrongEpisodeRejected(t *testing.T) {
 	d := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
 		switch r.URL.Path {
-		case "/novel/player/multi_video_model/preload/v1":
+		case "/novel/player/multi_video_model/player/v1":
 			return sourceFixtureResponse(r, 200, ""), nil
 		case hongguoVideoTabPath:
 			return sourceFixtureResponse(r, 200, videoTabFixtureModel("9002")), nil
@@ -348,7 +355,12 @@ func TestLiveHongguoV5Metadata(t *testing.T) {
 	t.Logf("v5 metadata ready elapsedMs=%d quality=%d variants=%d", time.Since(start).Milliseconds(), media.Quality, len(media.Variants))
 }
 
-func TestHongguoV5MatchesReferenceEnvelope(t *testing.T) {
+// TestHongguoV5EnvelopeRegressionLock 锁定 medusa/helios 的完整字节。
+//
+// 2026-11-24 服务端按「设备画像完整度」过滤后，信封从 14 字段 deviceInfo 扩到官方
+// 38 字段 + 9 字段 env + f16 设备令牌，旧的三方黄金向量（16 字段形态）已不适用。
+// 这里的向量取自修复后与线上实际放行一致的实现，作用是防止字段/顺序再被改回去。
+func TestHongguoV5EnvelopeRegressionLock(t *testing.T) {
 	data, err := os.ReadFile("testdata/hongguo-signing-v5-envelope.json")
 	if err != nil {
 		t.Fatal(err)
@@ -361,14 +373,28 @@ func TestHongguoV5MatchesReferenceEnvelope(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, row := range rows {
-		ctx := hgMedusaContext{MessageRand: 0x80000000, Nonce: "synthetic", Started: 1800000000000}
+		ctx := hgMedusaContext{MessageRand: 0x80000000, EnvLaunch: 105, EnvPID: 11000, Nonce: "synthetic", Started: 1800000000000, NowUnix: 1800000000}
 		actual := hgV5Medusa(row.URL, hgUnhex(row.Body), row.TS, "123", ctx, 0x80000000, 0x80000000)
 		if actual != row.Medusa {
-			t.Fatalf("reference Medusa mismatch ts=%d", row.TS)
+			t.Fatalf("medusa regression mismatch ts=%d", row.TS)
 		}
 		if hgHeliosLicense(row.TS, 0x80000000, "646637794") != row.Helios {
-			t.Fatalf("reference Helios mismatch ts=%d", row.TS)
+			t.Fatalf("helios regression mismatch ts=%d", row.TS)
 		}
+	}
+}
+
+// TestHongguoSecDeviceToken 锁定 f16 设备令牌形态：A + 24 字符。
+func TestHongguoSecDeviceToken(t *testing.T) {
+	if got := hgSecDeviceToken("synthetic"); got != "AsyntheticAAAAAAAAAAAAAAA" {
+		t.Fatalf("short nonce token: %q", got)
+	}
+	if got := hgSecDeviceToken("AAAAAAAAAAAAAAAAAAAAAAAA"); got != "AAAAAAAAAAAAAAAAAAAAAAAAA" {
+		t.Fatalf("25-char A token must pass through: %q", got)
+	}
+	long := "0123456789abcdefghijklmnopqrst"
+	if got := hgSecDeviceToken(long); len(got) != 25 || got[0] != 'A' || got[1:] != long[:24] {
+		t.Fatalf("long nonce truncated wrong: %q", got)
 	}
 }
 

@@ -114,6 +114,22 @@ func hgV5Carrier(key, source, iv []byte, ts uint32) []byte {
 	return append([]byte{cipher[31]}, out...)
 }
 
+// hgSecDeviceToken 组出官方 medusa 信封 f16 携带的 25 字符设备令牌：
+// 前缀 A + 24 字符进程 nonce。设备画像里 f5 与 f16 必须是同一个令牌。
+func hgSecDeviceToken(nonce string) string {
+	if len(nonce) == 25 && nonce[0] == 'A' {
+		return nonce
+	}
+	trimmed := nonce
+	if len(trimmed) > 24 {
+		trimmed = trimmed[:24]
+	}
+	for len(trimmed) < 24 {
+		trimmed += "A"
+	}
+	return "A" + trimmed
+}
+
 func hgV5Medusa(rawURL string, body []byte, ts uint32, deviceID string, ctx hgMedusaContext, nonce, packedRand uint32) string {
 	queryText := hgQueryOf(rawURL)
 	query := hgSM3([]byte(queryText))
@@ -126,23 +142,46 @@ func hgV5Medusa(rawURL string, body []byte, ts uint32, deviceID string, ctx hgMe
 	channel := hgParamOf(queryText, "channel", "vivo_8662_64")
 	brand := hgParamOf(queryText, "device_brand", "HONOR")
 	f13 := hgV5Hash(query, hgMD5(body), ts)
-	flags := make([]byte, 8)
+	// flags 全零会被判定为「低质量设备」，官方 v04.10.03 是 0x4480…。
+	flags := hgUnhex("4480000000000000")
+	secToken := hgSecDeviceToken(ctx.Nonce)
+	// deviceInfo 必须补齐官方 38 字段形态。缺 resolution/dpi/os_api 这类画像分量时
+	// 服务端不报错，直接回 HTTP 200 + 0 字节正文，客户端表现为「验签通过但无片源」。
 	device := hgProto(
 		hgProtoField{1, int64(1), "sint"}, hgProtoField{2, int64(2), "sint"},
-		hgProtoField{3, "8662", ""}, hgProtoField{4, deviceID, ""}, hgProtoField{5, ctx.Nonce, ""},
-		hgProtoField{6, "!noperm!", ""}, hgProtoField{12, "Asia/Shanghai,8", ""}, hgProtoField{13, "zh_CN", ""},
-		hgProtoField{22, osVersion, ""}, hgProtoField{25, ctx.Started, "sint"},
-		hgProtoField{30, deviceType, ""}, hgProtoField{31, brand, ""}, hgProtoField{32, deviceType, ""}, hgProtoField{34, brand, ""},
+		hgProtoField{3, "8662", ""}, hgProtoField{4, deviceID, ""}, hgProtoField{5, secToken, ""},
+		hgProtoField{6, "!noperm!", ""},
+		hgProtoField{7, int64(-888888), "sint"}, hgProtoField{8, int64(-888888), "sint"},
+		hgProtoField{9, int64(3), "sint"}, hgProtoField{10, int64(-888888), "sint"},
+		hgProtoField{11, "!notset!", ""}, hgProtoField{12, "Asia/Shanghai,8", ""}, hgProtoField{13, "zh_CN", ""},
+		hgProtoField{14, int64(4), "sint"},
+		hgProtoField{16, float64(0), "float"}, hgProtoField{17, float64(0), "float"}, hgProtoField{18, float64(0), "float"},
+		hgProtoField{19, float64(0), "float"}, hgProtoField{20, float64(0), "float"}, hgProtoField{21, float64(0), "float"},
+		hgProtoField{22, osVersion, ""}, hgProtoField{23, int64(41), "sint"}, hgProtoField{24, int64(36), "sint"},
+		hgProtoField{25, ctx.Started, "sint"}, hgProtoField{26, ctx.Started, "sint"},
+		hgProtoField{27, ctx.Started, "sint"}, hgProtoField{28, ctx.NowUnix * 1000, "sint"},
+		hgProtoField{29, int64(-1), "sint"}, hgProtoField{30, deviceType, ""}, hgProtoField{31, brand, ""},
+		hgProtoField{32, deviceType, ""}, hgProtoField{33, deviceType, ""}, hgProtoField{34, brand, ""},
+		hgProtoField{35, brand, ""}, hgProtoField{36, brand, ""},
+		hgProtoField{38, int64(31), "sint"},
 	)
-	env := hgProto(hgProtoField{6, "v04.10.03.04-bugfix", ""}, hgProtoField{8, channel, ""},
-		hgProtoField{12, device, "message"}, hgProtoField{14, version, ""})
-	counts := hgProto(hgProtoField{1, int64(1), "sint"}, hgProtoField{2, int64(1), "sint"}, hgProtoField{3, int64(1), "sint"}, hgProtoField{5, int64(1), "sint"})
+	// env 同样是画像的一部分：官方 9 个字段（含启动序号、进程号、环境子结构）。
+	envSub := hgProto(hgProtoField{1, int64(ts), "sint"}, hgProtoField{2, int64(-2), "sint"}, hgProtoField{4, int64(200), "sint"})
+	env := hgProto(
+		hgProtoField{1, ctx.EnvLaunch, "sint"}, hgProtoField{2, int64(247235599), "sint"}, hgProtoField{3, int64(247235596), "sint"},
+		hgProtoField{5, int64(7), "sint"}, hgProtoField{6, "v04.10.03.04-bugfix", ""}, hgProtoField{7, ctx.EnvPID, "sint"},
+		hgProtoField{8, channel, ""}, hgProtoField{12, device, "message"}, hgProtoField{13, envSub, "message"},
+		hgProtoField{14, version, ""},
+	)
+	nested := hgProto(hgProtoField{1, int64(305), "sint"}, hgProtoField{2, int64(4), "sint"},
+		hgProtoField{3, int64(694367), "sint"}, hgProtoField{5, int64(1621072674), "sint"})
 	message := hgProto(
 		hgProtoField{1, hgV5Magic, "bytes"}, hgProtoField{2, int64(5), "sint"}, hgProtoField{3, int64(ctx.MessageRand), "sint"},
 		hgProtoField{4, "8662", ""}, hgProtoField{5, deviceID, ""}, hgProtoField{6, "646637794", ""},
 		hgProtoField{7, version, ""}, hgProtoField{8, "v04.10.03-ml-android", ""}, hgProtoField{9, int64(0x040a0300), "sint"},
 		hgProtoField{10, flags, "bytes"}, hgProtoField{12, int64(ts), "sint"}, hgProtoField{13, f13, "bytes"}, hgProtoField{14, query[:6], "bytes"},
-		hgProtoField{15, counts, "message"}, hgProtoField{17, int64(ts), "sint"}, hgProtoField{20, "none", ""}, hgProtoField{21, int64(312), "sint"},
+		hgProtoField{15, nested, "message"}, hgProtoField{16, secToken, ""},
+		hgProtoField{17, int64(ts), "sint"}, hgProtoField{20, "none", ""}, hgProtoField{21, int64(312), "sint"},
 		hgProtoField{23, env, "message"}, hgProtoField{24, `{"cmr":16777216,"cmr2":16777216,"un_h":11,"vpn":0,"kd":0,"dyn":"","do":1,"tk":true}`, ""},
 	)
 	hash, seed := hgKeyHash(hgV5SignKey, nonce)

@@ -18,17 +18,17 @@ import (
 
 type hongguoMobileModelKey struct{}
 
-// v5 播放模型的当前线上端点。
+// v5 播放模型端点。
 //
-// 2026-11-23 服务端迁移：退役的 /novel/player/multi_video_model/player/v1 与
-// 7.4.3.32 profile 现在一律返回 HTTP 200 + 0 字节正文，且与签名是否正确无关 ——
-// 表现为「验签通过但拿不到片源」。官方客户端已改走 preload/v1 端点、7.4.5.32
-// profile、device_level=2、dr_scene=preload。参考 N3urda/hongguoTV PR #114。
-const hongguoMobileModelURL = "https://reading.snssdk.com/novel/player/multi_video_model/preload/v1"
+// 2026-11-23 起服务端不再单纯按签名放行，而是按「设备可信度」过滤：设备画像不完整的
+// 请求一律回 HTTP 200 + 0 字节正文，与签名是否正确无关。端点与 profile 本身没有变，
+// 仍然是 api5-normal-sinfonlinea 的 player/v1 + 7.4.3.32 —— 之前一度误判为端点迁移，
+// 改走 preload/v1 + 7.4.5.32 同样拿不到片源。参考 OOIUa/hongguo-android c0821c6f。
+const hongguoMobileModelURL = "https://api5-normal-sinfonlinea.fqnovel.com/novel/player/multi_video_model/player/v1"
 
-// hongguoMobileUserAgent 与 query 里的 version_code / 机型 / 系统保持一致：
+// hongguoMobileUserAgent 与 query 里的机型 / 系统保持一致：
 // medusa 明文同样从 query 取这些字段，UA 单独漂移会让三者对不上。
-const hongguoMobileUserAgent = "com.phoenix.read/74532 (Linux; U; Android 16; zh_CN; 25053RT47C; Build/BP2A.250605.031.A3;tt-ok/3.12.13.20)"
+const hongguoMobileUserAgent = "com.phoenix.read/73932 (Linux; U; Android 12; zh_CN_#Hans; PGT-AN10; Build/V417IR;tt-ok/3.12.13.20)"
 
 // resolveHongguoMobileMedia 取某集片源：v5 播放模型优先。
 //
@@ -88,9 +88,9 @@ func (d *Downloader) fetchHongguoMobileModel(ctx context.Context, videoID string
 	if err != nil {
 		return providerMedia{}, err
 	}
-	// device_level 从 1 提到 2 是本次迁移的一部分：服务端只在 device_level=2 时才
-	// 协商出兼容档位；dr_scene 也必须与 preload/v1 端点一致。
-	payload := []byte(`{"biz_param":{"detail_page_version":0,"device_level":2,"disable_digg_stat":false,"disable_video_relate_book":false,"need_all_video_definition":true,"need_mp4_align":false,"use_os_player":false,"use_server_dns":false,"video_platform":1024},"mixed_video_id_map":{"1004":["` + videoID + `"]},"dr_scene":"preload"}`)
+	// dr_scene 与 device_level 保持官方 player 形态：preload/v1 那套参数并不能
+	// 绕开设备可信度过滤，反而多了一层不匹配。
+	payload := []byte(`{"biz_param":{"detail_page_version":0,"device_level":1,"disable_digg_stat":false,"disable_video_relate_book":false,"need_all_video_definition":true,"need_mp4_align":false,"use_os_player":false,"use_server_dns":false,"video_platform":1024},"mixed_video_id_map":{"1004":["` + videoID + `"]},"dr_scene":"player"}`)
 	var compressed bytes.Buffer
 	writer := gzip.NewWriter(&compressed)
 	if _, err = writer.Write(payload); err != nil {
@@ -100,16 +100,25 @@ func (d *Downloader) fetchHongguoMobileModel(ctx context.Context, videoID string
 		return providerMedia{}, err
 	}
 	body := compressed.Bytes()
+	// 官方播放 query 的完整设备上下文（28 项）。缺 resolution / dpi / os_api /
+	// rom_version / host_abi / dragon_device_type / player_so_load 这些画像分量时，
+	// 签名照样合法，但上游按「设备画像不完整」回 200 + 0 字节。
 	query := url.Values{
 		"aid": {"8662"}, "app_name": {"novelread"},
-		"version_code": {"74532"}, "manifest_version_code": {"74532"}, "update_version_code": {"74532"},
-		"version_name": {"7.4.5.32"},
-		"channel": {"update_64"}, "device_platform": {"android"}, "os": {"android"},
-		"ssmix": {"a"}, "device_type": {"25053RT47C"}, "device_brand": {"Redmi"},
-		"language": {"zh"}, "os_api": {"36"}, "os_version": {"16"},
-		"resolution": {"1280*2772"}, "dpi": {"520"}, "ac": {"wifi"},
-		"host_abi": {"arm64-v8a"},
-		"iid": {identity.InstallID}, "cdid": {identity.CDID}, "device_id": {identity.DeviceID},
+		"version_code": {"74332"}, "manifest_version_code": {"74332"}, "update_version_code": {"74332"},
+		"version_name": {"7.4.3.32"},
+		"channel":      {"vivo_8662_64"}, "device_platform": {"android"}, "os": {"android"},
+		"ssmix": {"a"}, "device_type": {"PGT-AN10"}, "device_brand": {"HONOR"},
+		"language": {"zh"}, "os_api": {"31"}, "os_version": {"12"},
+		"resolution": {"1920*1080"}, "dpi": {"280"}, "ac": {"wifi"},
+		"host_abi": {"arm64-v8a"}, "dragon_device_type": {"phone"},
+		"pv_player": {"74332"}, "compliance_status": {"0"}, "need_personal_recommend": {"1"},
+		"player_so_load": {"1"}, "is_android_pad_screen": {"0"},
+		"rom_version": {"V417IR+release-keys"},
+		"iid":         {identity.InstallID}, "cdid": {identity.CDID}, "device_id": {identity.DeviceID},
+	}
+	if identity.EGDI != "" {
+		query.Set("klink_egdi", identity.EGDI)
 	}
 	request, err := http.NewRequestWithContext(requestCtx, http.MethodPost, hongguoMobileModelURL, bytes.NewReader(body))
 	if err != nil {

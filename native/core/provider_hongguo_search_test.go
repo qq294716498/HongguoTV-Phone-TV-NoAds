@@ -19,7 +19,7 @@ import (
 func searchFixtureIdentity(d *Downloader) {
 	client := d.hongguoClient()
 	client.deviceIdentityLoaded = true
-	client.deviceIdentity = hongguoDeviceIdentity{DeviceID: "1234567890123456", InstallID: "2345678901234567", Cookie: "install_id=2345678901234567; store-region=cn"}
+	client.deviceIdentity = hongguoDeviceIdentity{DeviceID: "1234567890123456", InstallID: "2345678901234567", Cookie: "install_id=2345678901234567; store-region=cn", EGDI: "AAKeP6Fc6mK7FI9sXotmUkiI_g9Kw19Yqok7SnzQIuSK84L_xKbmCdHx"}
 }
 
 func searchFixtureTab(request *http.Request, more bool, offset int, passback, data string) *http.Response {

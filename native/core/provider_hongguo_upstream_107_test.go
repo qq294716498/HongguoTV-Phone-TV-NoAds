@@ -29,7 +29,7 @@ func TestHongguoPlayerResponseFormatsAndRegistrationReuse(t *testing.T) {
 			d := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
 				if r.URL.Host == "log.snssdk.com" {
 					registrations.Add(1)
-					return sourceFixtureResponse(r, 200, `{"device_id_str":"123456","install_id_str":"789012"}`), nil
+					return sourceFixtureResponse(r, 200, `{"device_id_str":"123456","install_id_str":"789012","klink_egdi":"AAKeP6Fc6mK7FI9sXotmUkiI_g9Kw19Yqok7SnzQIuSK84L_xKbmCdHx"}`), nil
 				}
 				if r.URL.Path != "/novel/player/video_model/v1/" || r.Method != http.MethodPost {
 					return nil, fmt.Errorf("unexpected request")
@@ -104,7 +104,7 @@ func TestHongguoResolutionUsesOnlyOfficialRoutes(t *testing.T) {
 	var paths []string
 	d := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
 		paths = append(paths, r.URL.Host+r.URL.Path)
-		if r.URL.Host == "reading.snssdk.com" && r.URL.Path == "/novel/player/multi_video_model/preload/v1" {
+		if r.URL.Host == "api5-normal-sinfonlinea.fqnovel.com" && r.URL.Path == "/novel/player/multi_video_model/player/v1" {
 			return sourceFixtureResponse(r, 200, `{"code":100001}`), nil
 		}
 		if r.URL.Host != "hongguoduanju.com" {

@@ -39,7 +39,7 @@ func seedHongguoFixtureIdentity(d *Downloader) {
 	client := d.hongguoClient()
 	client.deviceIdentityLoaded = true
 	client.deviceIdentityPersisted = true
-	client.deviceIdentity = hongguoDeviceIdentity{DeviceID: client.state.DeviceID, InstallID: client.state.InstallID, Cookie: "install_id=" + client.state.InstallID}
+	client.deviceIdentity = hongguoDeviceIdentity{DeviceID: client.state.DeviceID, InstallID: client.state.InstallID, Cookie: "install_id=" + client.state.InstallID, EGDI: "A" + strings.Repeat("f", 24)}
 }
 
 func sourceFixtureEngine(t *testing.T, transport sourceFixtureTransport) *nativeEngine {

@@ -76,7 +76,7 @@ func TestHongguoPlaybackRoutesUseMobileV5ForAllContentTypes(t *testing.T) {
 	for _, contentType := range []int{1, 1004, 1007, 0, -1} {
 		t.Run(fmt.Sprint(contentType), func(t *testing.T) {
 			d := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
-				if r.URL.Path != "/novel/player/multi_video_model/preload/v1" {
+				if r.URL.Path != "/novel/player/multi_video_model/player/v1" {
 					t.Fatal("wrong production route")
 				}
 				return sourceFixtureResponse(r, 200, mobileFixtureModel("9001", true, false)), nil
@@ -130,7 +130,7 @@ func TestHongguoPlaybackHTTPBackoffSurvivesFallback(t *testing.T) {
 			calls := 0
 			d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
 				calls++
-				if request.URL.Path != "/novel/player/multi_video_model/preload/v1" {
+				if request.URL.Path != "/novel/player/multi_video_model/player/v1" {
 					if status == http.StatusTooManyRequests {
 						t.Fatalf("429 issued another route: %s", request.URL)
 					}
@@ -159,7 +159,7 @@ func TestHongguoV5SlowRequestHonorsCallerBudget(t *testing.T) {
 	calls := 0
 	d := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
 		calls++
-		if r.URL.Path != "/novel/player/multi_video_model/preload/v1" {
+		if r.URL.Path != "/novel/player/multi_video_model/player/v1" {
 			t.Fatal("unexpected fallback")
 		}
 		<-r.Context().Done()
@@ -178,7 +178,7 @@ func TestHongguoV5ForbiddenStopsProductionRoute(t *testing.T) {
 	calls := 0
 	d := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
 		calls++
-		if r.URL.Path != "/novel/player/multi_video_model/preload/v1" {
+		if r.URL.Path != "/novel/player/multi_video_model/player/v1" {
 			t.Fatal("fallback after rejection")
 		}
 		return sourceFixtureResponse(r, 403, "{}"), nil

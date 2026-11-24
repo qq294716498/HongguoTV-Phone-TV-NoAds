@@ -41,8 +41,8 @@ func hongguoVideoTabQuery(identity hongguoDeviceIdentity, videoID string, ticket
 		"resolution": {"1280*2772"}, "dpi": {"520"}, "update_version_code": {"73932"},
 		"host_abi": {"arm64-v8a"}, "dragon_device_type": {"phone"}, "pv_player": {"73932"},
 		"compliance_status": {"0"}, "need_personal_recommend": {"1"}, "player_so_load": {"1"},
-		"is_android_pad_screen": {"0"},
-		"device_id":             {identity.DeviceID}, "iid": {identity.InstallID},
+		"is_android_pad_screen": {"0"}, "rom_version": {"V417IR+release-keys"},
+		"device_id": {identity.DeviceID}, "iid": {identity.InstallID},
 		"video_id": {videoID}, "video_id_type": {"0"}, "device_level": {"1"},
 		"need_all_video_definition": {"1"}, "need_mp4_align": {"0"}, "use_os_player": {"0"},
 		"video_platform": {"1024"}, "source": {"0"}, "from_video_id": {""},
@@ -50,6 +50,10 @@ func hongguoVideoTabQuery(identity hongguoDeviceIdentity, videoID string, ticket
 	}
 	if identity.CDID != "" {
 		values.Set("cdid", identity.CDID)
+	}
+	// 注册下发的设备可信标识，官方播放 query 必带；缺了会落到「画像不完整」那一类。
+	if identity.EGDI != "" {
+		values.Set("klink_egdi", identity.EGDI)
 	}
 	return values
 }

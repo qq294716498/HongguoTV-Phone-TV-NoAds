@@ -103,7 +103,7 @@ func TestHongguoProductionSearchDetailAndResolverKeepEpisodeIdentity(t *testing.
 		case "/novel/player/video_detail/v1/":
 			details.Add(1)
 			return sourceFixtureResponse(request, 200, `{"data":{"video_data":{"series_id":"12345","series_title":"合成故事第三季","episode_cnt":4,"video_list":[{"vid":"9004","vid_index":4},{"vid":"9001","vid_index":1},{"vid":"9003","vid_index":3},{"vid":"9002","vid_index":2}]}}}`), nil
-		case "/novel/player/multi_video_model/preload/v1":
+		case "/novel/player/multi_video_model/player/v1":
 			models.Add(1)
 			var payload map[string]any
 			reader, err := gzip.NewReader(request.Body)
@@ -118,7 +118,7 @@ func TestHongguoProductionSearchDetailAndResolverKeepEpisodeIdentity(t *testing.
 			if videoID != "9001" && videoID != "9004" {
 				t.Errorf("wrong episode selected: %s", videoID)
 			}
-			if payload["dr_scene"] != "preload" || mapString(nestedMap(payload, "biz_param"), "video_platform") != "1024" || nestedMap(payload, "biz_param")["need_all_video_definition"] != true {
+			if payload["dr_scene"] != "player" || mapString(nestedMap(payload, "biz_param"), "video_platform") != "1024" || nestedMap(payload, "biz_param")["need_all_video_definition"] != true {
 				t.Error("production model request changed")
 			}
 			return sourceFixtureResponse(request, 200, fmt.Sprintf(`{"data":{"%s":{"video_model":{"video_list":{"high":{"main_url":"https://media.example.test/%s.mp4","video_meta":{"codec_type":"bytevc1","definition":"1080p"}},"unsupported":{"main_url":"https://media.example.test/unsupported.mp4","video_meta":{"codec_type":"bytevc2"}}}}}}}`, videoID, videoID)), nil

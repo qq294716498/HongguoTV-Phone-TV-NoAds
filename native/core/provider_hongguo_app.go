@@ -54,6 +54,9 @@ type hongguoAppClient struct {
 	deviceRotationPausedUntil time.Time
 	deviceIdentityLoaded      bool
 	deviceIdentityPersisted   bool
+	// 从磁盘恢复的旧身份缺 EGDI（0.1.60 之前没有解析过），需要补一次注册；
+	// 只试一次，避免注册接口不返回 klink_egdi 时反复重注册。
+	deviceIdentityNeedsEGDI bool
 	mu                        sync.Mutex
 	catalogMu                 sync.Mutex
 	baseURL                   string

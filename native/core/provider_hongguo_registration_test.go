@@ -157,7 +157,7 @@ func TestHongguoPersistedIdentitySurvivesPlaybackFailureAndRestart(t *testing.T)
 		return sourceFixtureResponse(r, 200, `{"data":{"video_model":{"video_list":[{"main_url":"https://media.example.test/a.mp4","video_meta":{"codec_type":"bytevc2"}}]}}}`), nil
 	}
 	d := sourceFixtureDownloader(t, transport, false)
-	saved := hongguoDeviceIdentity{DeviceID: "123456", InstallID: "234567"}
+	saved := hongguoDeviceIdentity{DeviceID: "123456", InstallID: "234567", EGDI: "AAKeP6Fc6mK7FI9sXotmUkiI_g9Kw19Yqok7SnzQIuSK84L_xKbmCdHx"}
 	body, _ := json.Marshal(saved)
 	path := filepath.Join(d.cfg.dataDir, "hongguo-device.json")
 	if err := os.WriteFile(path, body, 0600); err != nil {
@@ -190,5 +190,59 @@ func TestHongguoPersistedIdentitySurvivesPlaybackFailureAndRestart(t *testing.T)
 	unchanged, err := os.ReadFile(path)
 	if err != nil || string(unchanged) != string(body) {
 		t.Fatalf("unsupported codec changed persistent registration: %v", err)
+	}
+}
+
+// 0.1.60 之前不解析 klink_egdi：老用户磁盘上的身份没有它。播放接口现在按设备画像
+// 完整度过滤，缺 EGDI 会被判成低质量设备。这里锁定「补一次注册 + 激活」的升级路径。
+func TestHongguoLegacySavedIdentityBackfillsEGDI(t *testing.T) {
+	const egdi = "AAKeP6Fc6mK7FI9sXotmUkiI_g9Kw19Yqok7SnzQIuSK84L_xKbmCdHx"
+	var registrations, activations int
+	transport := func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Path {
+		case "/service/2/device_register/":
+			registrations++
+			return sourceFixtureResponse(r, 200, `{"device_id_str":"3456789012345678","install_id_str":"4567890123456789","klink_egdi":"`+egdi+`"}`), nil
+		case "/service/2/app_alert_check/":
+			activations++
+			if r.URL.Query().Get("device_id") != "3456789012345678" || r.URL.Query().Get("iid") != "4567890123456789" {
+				t.Error("activation used a different device")
+			}
+			return sourceFixtureResponse(r, 200, `{"message":"success"}`), nil
+		}
+		return sourceFixtureResponse(r, 503, ""), nil
+	}
+	d := sourceFixtureDownloader(t, transport, false)
+	legacy := hongguoDeviceIdentity{DeviceID: "123456", InstallID: "234567"}
+	body, _ := json.Marshal(legacy)
+	path := filepath.Join(d.cfg.dataDir, "hongguo-device.json")
+	if err := os.WriteFile(path, body, 0600); err != nil {
+		t.Fatal(err)
+	}
+	identity, err := d.ensureHongguoDeviceIdentity(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if identity.EGDI != egdi || identity.DeviceID != "3456789012345678" {
+		t.Fatalf("legacy identity was not upgraded: %+v", identity)
+	}
+	if registrations != 1 || activations != 1 {
+		t.Fatalf("unexpected bootstrap counts %d/%d", registrations, activations)
+	}
+	// 升级后已落盘，重启不该再注册。
+	restarted := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
+		t.Fatalf("restart registered again: %s", r.URL.Path)
+		return nil, errors.New("unexpected")
+	}, false)
+	restarted.cfg.dataDir = d.cfg.dataDir
+	restored, err := restarted.ensureHongguoDeviceIdentity(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restored.EGDI != egdi {
+		t.Fatalf("upgraded EGDI was not persisted: %+v", restored)
+	}
+	if registrations != 1 {
+		t.Fatalf("repeat registration after upgrade: %d", registrations)
 	}
 }
