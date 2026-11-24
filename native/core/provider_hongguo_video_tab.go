@@ -17,7 +17,7 @@ import (
 
 // 红果播放模型的 GET 回退路径。
 //
-// v5（POST /novel/player/multi_video_model/player/v1）会间歇性返回
+// v5（POST /novel/player/multi_video_model/preload/v1）会间歇性返回
 // HTTP 200 + 0 字节正文。官方 App 仍保留 GET
 // /reading/bookapi/video_tab/multi_video_model/v1/，同一注册身份可以取到
 // 同一集的 video_model。参考实现（N3urda/hongguoTV 0.16.10）在 v5 空响应后

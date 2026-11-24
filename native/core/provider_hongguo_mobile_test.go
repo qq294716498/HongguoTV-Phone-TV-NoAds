@@ -87,7 +87,7 @@ func TestHongguoV5ProductionRouteAndCompressedSignature(t *testing.T) {
 					t.Fatalf("wrong production path %s", r.URL.Path)
 				}
 				q := r.URL.Query()
-				if q.Get("device_id") != "1234567890123456" || q.Get("iid") == "" || q.Get("cdid") == "" || q.Get("version_code") != "74332" {
+				if q.Get("device_id") != "1234567890123456" || q.Get("iid") == "" || q.Get("cdid") == "" || q.Get("version_code") != "74532" || q.Get("version_name") != "7.4.5.32" {
 					t.Fatal("incorrect v5 profile")
 				}
 				if cdid != "" && cdid != q.Get("cdid") {
@@ -122,7 +122,7 @@ func TestHongguoV5ProductionRouteAndCompressedSignature(t *testing.T) {
 				if err = json.Unmarshal(raw, &payload); err != nil {
 					t.Fatal(err)
 				}
-				if nestedMap(payload, "biz_param")["device_level"] != float64(1) || payload["dr_scene"] != "player" {
+				if nestedMap(payload, "biz_param")["device_level"] != float64(2) || payload["dr_scene"] != "preload" {
 					t.Fatal("wrong player payload")
 				}
 				if !strings.Contains(string(raw), `"1004":["9001"]`) {
@@ -161,7 +161,7 @@ func TestHongguoV5FailureDoesNotRotateOrUseLegacy(t *testing.T) {
 			calls := 0
 			d := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
 				calls++
-				if r.URL.Path != "/novel/player/multi_video_model/player/v1" {
+				if r.URL.Path != "/novel/player/multi_video_model/preload/v1" {
 					t.Fatal("legacy or registration fallback")
 				}
 				response := sourceFixtureResponse(r, tc.status, tc.body)
@@ -202,7 +202,7 @@ func TestHongguoV5EmptyUsesVideoTabOnce(t *testing.T) {
 	mobileCalls, tabCalls := 0, 0
 	d := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
 		switch r.URL.Path {
-		case "/novel/player/multi_video_model/player/v1":
+		case "/novel/player/multi_video_model/preload/v1":
 			mobileCalls++
 			return sourceFixtureResponse(r, 200, ""), nil
 		case hongguoVideoTabPath:
@@ -264,7 +264,7 @@ func TestHongguoV5EmptyVideoTabAlsoEmptyFails(t *testing.T) {
 	d := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
 		calls++
 		switch r.URL.Path {
-		case "/novel/player/multi_video_model/player/v1", hongguoVideoTabPath:
+		case "/novel/player/multi_video_model/preload/v1", hongguoVideoTabPath:
 			return sourceFixtureResponse(r, 200, ""), nil
 		}
 		t.Fatalf("unexpected path %s", r.URL.Path)
@@ -286,7 +286,7 @@ func TestHongguoVideoTabLegacyShapeAfterV5Empty(t *testing.T) {
 	legacy := 0
 	d := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
 		switch r.URL.Path {
-		case "/novel/player/multi_video_model/player/v1":
+		case "/novel/player/multi_video_model/preload/v1":
 			return sourceFixtureResponse(r, 200, ""), nil
 		case hongguoVideoTabPath:
 			if r.Header.Get("X-Medusa") != "" && r.Header.Get("X-Gorgon") == "" {
@@ -315,7 +315,7 @@ func TestHongguoVideoTabLegacyShapeAfterV5Empty(t *testing.T) {
 func TestHongguoV5VideoTabWrongEpisodeRejected(t *testing.T) {
 	d := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
 		switch r.URL.Path {
-		case "/novel/player/multi_video_model/player/v1":
+		case "/novel/player/multi_video_model/preload/v1":
 			return sourceFixtureResponse(r, 200, ""), nil
 		case hongguoVideoTabPath:
 			return sourceFixtureResponse(r, 200, videoTabFixtureModel("9002")), nil

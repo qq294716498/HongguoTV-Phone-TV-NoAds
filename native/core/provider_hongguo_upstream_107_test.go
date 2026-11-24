@@ -104,7 +104,7 @@ func TestHongguoResolutionUsesOnlyOfficialRoutes(t *testing.T) {
 	var paths []string
 	d := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
 		paths = append(paths, r.URL.Host+r.URL.Path)
-		if r.URL.Host == "api5-normal-sinfonlinea.fqnovel.com" && r.URL.Path == "/novel/player/multi_video_model/player/v1" {
+		if r.URL.Host == "reading.snssdk.com" && r.URL.Path == "/novel/player/multi_video_model/preload/v1" {
 			return sourceFixtureResponse(r, 200, `{"code":100001}`), nil
 		}
 		if r.URL.Host != "hongguoduanju.com" {

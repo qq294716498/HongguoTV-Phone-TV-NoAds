@@ -18,7 +18,17 @@ import (
 
 type hongguoMobileModelKey struct{}
 
-const hongguoMobileModelURL = "https://api5-normal-sinfonlinea.fqnovel.com/novel/player/multi_video_model/player/v1"
+// v5 播放模型的当前线上端点。
+//
+// 2026-11-23 服务端迁移：退役的 /novel/player/multi_video_model/player/v1 与
+// 7.4.3.32 profile 现在一律返回 HTTP 200 + 0 字节正文，且与签名是否正确无关 ——
+// 表现为「验签通过但拿不到片源」。官方客户端已改走 preload/v1 端点、7.4.5.32
+// profile、device_level=2、dr_scene=preload。参考 N3urda/hongguoTV PR #114。
+const hongguoMobileModelURL = "https://reading.snssdk.com/novel/player/multi_video_model/preload/v1"
+
+// hongguoMobileUserAgent 与 query 里的 version_code / 机型 / 系统保持一致：
+// medusa 明文同样从 query 取这些字段，UA 单独漂移会让三者对不上。
+const hongguoMobileUserAgent = "com.phoenix.read/74532 (Linux; U; Android 16; zh_CN; 25053RT47C; Build/BP2A.250605.031.A3;tt-ok/3.12.13.20)"
 
 // resolveHongguoMobileMedia 取某集片源：v5 播放模型优先。
 //
@@ -69,7 +79,7 @@ func (d *Downloader) resolveHongguoMobileMedia(ctx context.Context, videoID stri
 	return fallback, nil
 }
 
-// fetchHongguoMobileModel 走 v5 播放协议（74332 查询 + v04.10.03 签名 + gzip 正文）。
+// fetchHongguoMobileModel 走 v5 播放协议（74532 查询 + v04.10.03 签名 + gzip 正文）。
 func (d *Downloader) fetchHongguoMobileModel(ctx context.Context, videoID string) (providerMedia, error) {
 	budget := hongguoVideoTabTimeout(ctx)
 	requestCtx, cancel := context.WithTimeout(context.WithValue(ctx, hongguoMobileModelKey{}, true), budget)
@@ -78,7 +88,9 @@ func (d *Downloader) fetchHongguoMobileModel(ctx context.Context, videoID string
 	if err != nil {
 		return providerMedia{}, err
 	}
-	payload := []byte(`{"biz_param":{"detail_page_version":0,"device_level":1,"disable_digg_stat":false,"disable_video_relate_book":false,"need_all_video_definition":true,"need_mp4_align":false,"use_os_player":false,"use_server_dns":false,"video_platform":1024},"mixed_video_id_map":{"1004":["` + videoID + `"]},"dr_scene":"player"}`)
+	// device_level 从 1 提到 2 是本次迁移的一部分：服务端只在 device_level=2 时才
+	// 协商出兼容档位；dr_scene 也必须与 preload/v1 端点一致。
+	payload := []byte(`{"biz_param":{"detail_page_version":0,"device_level":2,"disable_digg_stat":false,"disable_video_relate_book":false,"need_all_video_definition":true,"need_mp4_align":false,"use_os_player":false,"use_server_dns":false,"video_platform":1024},"mixed_video_id_map":{"1004":["` + videoID + `"]},"dr_scene":"preload"}`)
 	var compressed bytes.Buffer
 	writer := gzip.NewWriter(&compressed)
 	if _, err = writer.Write(payload); err != nil {
@@ -89,15 +101,21 @@ func (d *Downloader) fetchHongguoMobileModel(ctx context.Context, videoID string
 	}
 	body := compressed.Bytes()
 	query := url.Values{
-		"aid": {"8662"}, "app_name": {"novelread"}, "version_code": {"74332"}, "version_name": {"7.4.3.32"},
-		"channel": {"vivo_8662_64"}, "device_platform": {"android"}, "device_type": {"PGT-AN10"}, "os_version": {"12"}, "update_version_code": {"74332"},
+		"aid": {"8662"}, "app_name": {"novelread"},
+		"version_code": {"74532"}, "manifest_version_code": {"74532"}, "update_version_code": {"74532"},
+		"version_name": {"7.4.5.32"},
+		"channel": {"update_64"}, "device_platform": {"android"}, "os": {"android"},
+		"ssmix": {"a"}, "device_type": {"25053RT47C"}, "device_brand": {"Redmi"},
+		"language": {"zh"}, "os_api": {"36"}, "os_version": {"16"},
+		"resolution": {"1280*2772"}, "dpi": {"520"}, "ac": {"wifi"},
+		"host_abi": {"arm64-v8a"},
 		"iid": {identity.InstallID}, "cdid": {identity.CDID}, "device_id": {identity.DeviceID},
 	}
 	request, err := http.NewRequestWithContext(requestCtx, http.MethodPost, hongguoMobileModelURL, bytes.NewReader(body))
 	if err != nil {
 		return providerMedia{}, err
 	}
-	request.Header.Set("User-Agent", "com.phoenix.read/73932 (Linux; U; Android 12; zh_CN_#Hans; PGT-AN10; Build/V417IR;tt-ok/3.12.13.20)")
+	request.Header.Set("User-Agent", hongguoMobileUserAgent)
 	request.Header.Set("Accept", "application/json")
 	request.Header.Set("Content-Type", "application/json; charset=utf-8")
 	request.Header.Set("Content-Encoding", "gzip")

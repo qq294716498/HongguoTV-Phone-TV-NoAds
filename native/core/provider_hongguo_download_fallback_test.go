@@ -14,7 +14,7 @@ func TestHongguoDownloadEmptyResponseUsesVideoTabFallback(t *testing.T) {
 	mobileCalls, tabCalls := 0, 0
 	d := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
 		switch r.URL.Path {
-		case "/novel/player/multi_video_model/player/v1":
+		case "/novel/player/multi_video_model/preload/v1":
 			mobileCalls++
 			return sourceFixtureResponse(r, 200, ""), nil
 		case hongguoVideoTabPath:
@@ -44,7 +44,7 @@ func TestHongguoBackgroundPrefetchSkipsVideoTab(t *testing.T) {
 	mobileCalls, tabCalls := 0, 0
 	d := sourceFixtureDownloader(t, func(r *http.Request) (*http.Response, error) {
 		switch r.URL.Path {
-		case "/novel/player/multi_video_model/player/v1":
+		case "/novel/player/multi_video_model/preload/v1":
 			mobileCalls++
 			return sourceFixtureResponse(r, 200, ""), nil
 		case hongguoVideoTabPath:

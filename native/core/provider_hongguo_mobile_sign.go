@@ -118,11 +118,13 @@ func hgV5Medusa(rawURL string, body []byte, ts uint32, deviceID string, ctx hgMe
 	queryText := hgQueryOf(rawURL)
 	query := hgSM3([]byte(queryText))
 	// 版本、系统、机型、渠道必须与本次请求的 query 一致：服务端会核对 medusa 明文
-	// 与 query 参数，写死只对 v5 POST 成立（video_tab 走 73932/16/25053RT47C/update_64）。
+	// 与 query 参数，写死只对某一版 profile 成立。品牌同理 —— 迁移到 Redmi 机型后
+	// 明文里再写 HONOR 会与自己声明的 device_brand 冲突。
 	version := hgParamOf(queryText, "version_name", "7.4.3.32")
 	osVersion := hgParamOf(queryText, "os_version", "12")
 	deviceType := hgParamOf(queryText, "device_type", "PGT-AN10")
 	channel := hgParamOf(queryText, "channel", "vivo_8662_64")
+	brand := hgParamOf(queryText, "device_brand", "HONOR")
 	f13 := hgV5Hash(query, hgMD5(body), ts)
 	flags := make([]byte, 8)
 	device := hgProto(
@@ -130,7 +132,7 @@ func hgV5Medusa(rawURL string, body []byte, ts uint32, deviceID string, ctx hgMe
 		hgProtoField{3, "8662", ""}, hgProtoField{4, deviceID, ""}, hgProtoField{5, ctx.Nonce, ""},
 		hgProtoField{6, "!noperm!", ""}, hgProtoField{12, "Asia/Shanghai,8", ""}, hgProtoField{13, "zh_CN", ""},
 		hgProtoField{22, osVersion, ""}, hgProtoField{25, ctx.Started, "sint"},
-		hgProtoField{30, deviceType, ""}, hgProtoField{31, "HONOR", ""}, hgProtoField{32, deviceType, ""}, hgProtoField{34, "HONOR", ""},
+		hgProtoField{30, deviceType, ""}, hgProtoField{31, brand, ""}, hgProtoField{32, deviceType, ""}, hgProtoField{34, brand, ""},
 	)
 	env := hgProto(hgProtoField{6, "v04.10.03.04-bugfix", ""}, hgProtoField{8, channel, ""},
 		hgProtoField{12, device, "message"}, hgProtoField{14, version, ""})
