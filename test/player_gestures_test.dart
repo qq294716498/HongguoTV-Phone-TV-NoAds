@@ -671,4 +671,74 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets(
+    'slight touch jitter and brief pause during touch do not suppress tap',
+    (tester) async {
+      final platform = ScriptedPlayer();
+      final player = Player(platformPlayer: platform);
+      await player.open(Media('https://example.test/synthetic.mp4'));
+      final interactions = PlayerInteractions(
+        player: player,
+        available: () => true,
+        baseSpeed: () => 1,
+        onTogglePlayback: () {},
+        onFullscreen: () {},
+        onEpisode: (_) => '',
+      );
+      interactions.pointerDown(
+        const PointerDownEvent(
+          pointer: 10,
+          kind: PointerDeviceKind.touch,
+          position: Offset(200, 200),
+          buttons: kPrimaryButton,
+        ),
+        swipeEnabled: true,
+        fullscreen: true,
+        width: 400,
+        height: 400,
+      );
+      interactions.pointerMove(
+        const PointerMoveEvent(
+          pointer: 10,
+          kind: PointerDeviceKind.touch,
+          position: Offset(219, 204),
+        ),
+      );
+      interactions.pointerUp(
+        const PointerUpEvent(
+          pointer: 10,
+          kind: PointerDeviceKind.touch,
+          position: Offset(219, 204),
+        ),
+      );
+      expect(interactions.suppressTap, isFalse);
+
+      interactions.pointerDown(
+        const PointerDownEvent(
+          pointer: 11,
+          kind: PointerDeviceKind.touch,
+          position: Offset(200, 200),
+          buttons: kPrimaryButton,
+        ),
+        swipeEnabled: true,
+        fullscreen: false,
+        width: 400,
+        height: 400,
+      );
+      await player.pause();
+      await tester.pump();
+      interactions.pointerUp(
+        const PointerUpEvent(
+          pointer: 11,
+          kind: PointerDeviceKind.touch,
+          position: Offset(200, 200),
+        ),
+      );
+      expect(interactions.suppressTap, isFalse);
+
+      interactions.dispose();
+      await player.dispose();
+    },
+  );
 }

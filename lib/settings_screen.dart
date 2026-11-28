@@ -1,4 +1,5 @@
 import 'tv_decoder_settings.dart';
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -279,277 +280,348 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Widget _section(BuildContext context, String title, List<Widget> children) {
+    if (children.isEmpty) return const SizedBox.shrink();
+    final colors = Theme.of(context).colorScheme;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+            child: Text(
+              title,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: colors.primary,
+                letterSpacing: .3,
+              ),
+            ),
+          ),
+          Material(
+            color: colors.surfaceContainerLow,
+            clipBehavior: Clip.antiAlias,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+              side: BorderSide(
+                color: colors.outlineVariant.withValues(alpha: dark ? .55 : .7),
+                width: .7,
+              ),
+            ),
+            child: Column(
+              children: [
+                for (var i = 0; i < children.length; i++) ...[
+                  if (i > 0)
+                    Divider(
+                      height: 1,
+                      indent: 16,
+                      endIndent: 16,
+                      color: colors.outlineVariant.withValues(
+                        alpha: dark ? .42 : .55,
+                      ),
+                    ),
+                  children[i],
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: widget.store,
-    builder: (_, _) => Scaffold(
-      appBar: AppBar(title: const Text('设置与备份')),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 720),
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              const AppUpdateTile(),
-              if (defaultTargetPlatform == TargetPlatform.android &&
-                  !AppLayout.isTelevisionDevice(context) &&
-                  !AppLayout.isTelevision(context))
-                ListTile(
-                  key: const ValueKey('portrait-video-position-setting'),
-                  leading: const Icon(Icons.swap_vert_rounded),
-                  title: const Text('竖屏画面位置'),
-                  subtitle: const Text('上下滑动调整，保存后自动沿用'),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: _busy ? null : _portraitVideoPosition,
-                ),
-              if (defaultTargetPlatform == TargetPlatform.windows &&
-                  !AppLayout.isTelevision(context))
-                SwitchListTile(
-                  key: const ValueKey('windows-video-compatibility'),
-                  title: const Text('视频兼容模式'),
-                  subtitle: const Text(
-                    '用于缓解部分设备的视频绿边。可能增加性能开销，并影响硬件 VSR 增强。重新打开播放页后生效，当前播放不受影响。',
+    builder: (_, _) {
+      final playbackTiles = <Widget>[
+        if (defaultTargetPlatform == TargetPlatform.android &&
+            !AppLayout.isTelevisionDevice(context) &&
+            !AppLayout.isTelevision(context))
+          ListTile(
+            key: const ValueKey('portrait-video-position-setting'),
+            leading: const Icon(Icons.swap_vert_rounded),
+            title: const Text('竖屏画面位置'),
+            subtitle: const Text('上下滑动调整，保存后自动沿用'),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: _busy ? null : _portraitVideoPosition,
+          ),
+        if (defaultTargetPlatform == TargetPlatform.windows &&
+            !AppLayout.isTelevision(context))
+          SwitchListTile(
+            key: const ValueKey('windows-video-compatibility'),
+            title: const Text('视频兼容模式'),
+            subtitle: const Text(
+              '用于缓解部分设备的视频绿边。可能增加性能开销，并影响硬件 VSR 增强。重新打开播放页后生效，当前播放不受影响。',
+            ),
+            value: widget.store.playbackPreferences.windowsVideoCompatibility,
+            onChanged: _busy || _windowsVideoCompatibilitySaving
+                ? null
+                : _setWindowsVideoCompatibility,
+          ),
+        if (defaultTargetPlatform == TargetPlatform.android &&
+            AppLayout.isTelevisionDevice(context))
+          ListTile(
+            key: const ValueKey('global-tv-decoder-settings'),
+            leading: const Icon(Icons.memory_rounded),
+            title: const Text('TV 解码模式'),
+            subtitle: Text(
+              widget.store.playbackPreferences.tvDecoderMode.label,
+            ),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: _decoderSettings,
+          ),
+        ListTile(
+          key: const ValueKey('global-danmaku-settings'),
+          leading: const Icon(Icons.subtitles_rounded),
+          title: const Text('弹幕设置'),
+          subtitle: const Text('红果源的弹幕开关、字号、速度与不透明度'),
+          trailing: const Icon(Icons.chevron_right_rounded),
+          onTap: _danmakuSettings,
+        ),
+        if ((Platform.isAndroid || Platform.isIOS) &&
+            !AppLayout.isTelevision(context) &&
+            (context
+                    .dependOnInheritedWidgetOfExactType<AppLayout>()
+                    ?.mobileReminders ??
+                true))
+          WatchReminderSettings(
+            preferences: widget.store.playbackPreferences.reminders,
+            busy: _busy,
+            onChanged: (value) async {
+              if (_busy) return;
+              setState(() => _busy = true);
+              try {
+                await saveUserChange(
+                  context,
+                  () => widget.store.setPlaybackPreferences(
+                    widget.store.playbackPreferences.copyWith(reminders: value),
                   ),
-                  value: widget
-                      .store
-                      .playbackPreferences
-                      .windowsVideoCompatibility,
-                  onChanged: _busy || _windowsVideoCompatibilitySaving
-                      ? null
-                      : _setWindowsVideoCompatibility,
+                );
+              } finally {
+                if (mounted) setState(() => _busy = false);
+              }
+            },
+          ),
+      ];
+      final sourceTiles = <Widget>[
+        ListTile(
+          key: const ValueKey('lan-settings'),
+          leading: const Icon(Icons.devices_rounded),
+          title: const Text('设备互联'),
+          subtitle: const Text('局域网自动同步追剧与推送播放'),
+          trailing: const Icon(Icons.chevron_right_rounded),
+          onTap: () => openLanSync(context),
+        ),
+        if (widget.repository.supportsSourceManagement)
+          ListTile(
+            leading: const Icon(Icons.dns_outlined),
+            title: const Text('站源管理'),
+            subtitle: const Text('独立更新、连接与播放检测'),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => SourcesScreen(
+                  repository: widget.repository,
+                  store: widget.store,
                 ),
-              if (defaultTargetPlatform == TargetPlatform.android &&
-                  AppLayout.isTelevisionDevice(context))
-                ListTile(
-                  key: const ValueKey('global-tv-decoder-settings'),
-                  leading: const Icon(Icons.memory_rounded),
-                  title: const Text('TV 解码模式'),
-                  subtitle: Text(
-                    widget.store.playbackPreferences.tvDecoderMode.label,
-                  ),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: _decoderSettings,
-                ),
-              ListTile(
-                key: const ValueKey('global-danmaku-settings'),
-                leading: const Icon(Icons.subtitles_rounded),
-                title: const Text('弹幕设置'),
-                subtitle: const Text('红果源的弹幕开关、字号、速度与不透明度'),
-                trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: _danmakuSettings,
               ),
-              if (WindowsDesktop.current case final desktop?)
-                ListenableBuilder(
-                  listenable: desktop,
-                  builder: (context, _) => Column(
-                    children: [
-                      SwitchListTile(
-                        title: const Text('关闭窗口时进入托盘'),
-                        subtitle: Text(
-                          desktop.available
-                              ? '暂停并保存进度；从托盘恢复后需手动播放。托盘右键可播放/暂停或真正退出。关闭此项则直接退出。'
-                              : '系统托盘暂不可用，关闭窗口将直接退出。',
-                        ),
-                        value: desktop.closeToTray,
-                        onChanged: desktop.available
-                            ? (value) => saveUserChange(
-                                context,
-                                () => desktop.setCloseToTray(value),
-                              )
-                            : null,
-                      ),
-                      ListTile(
-                        leading: const Icon(Icons.exit_to_app_rounded),
-                        title: const Text('退出果子乐'),
-                        subtitle: const Text('保存观看进度并结束进程'),
-                        onTap: () => saveUserChange(context, desktop.quit),
-                      ),
-                      if (desktop.error != null) Text(desktop.error!),
-                    ],
-                  ),
+            ),
+          ),
+        if (widget.store.profile.admin)
+          ListTile(
+            leading: const Icon(Icons.settings_ethernet_rounded),
+            title: const Text('网络与资源'),
+            subtitle: const Text('代理、目录请求间隔、下载并发与站源目录'),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => ResourceSettingsScreen(
+                  repository: widget.repository,
+                  store: widget.store,
                 ),
-              if ((Platform.isAndroid || Platform.isIOS) &&
-                  !AppLayout.isTelevision(context) &&
-                  (context
-                          .dependOnInheritedWidgetOfExactType<AppLayout>()
-                          ?.mobileReminders ??
-                      true))
-                WatchReminderSettings(
-                  preferences: widget.store.playbackPreferences.reminders,
-                  busy: _busy,
-                  onChanged: (value) async {
-                    if (_busy) return;
-                    setState(() => _busy = true);
+              ),
+            ),
+          ),
+      ];
+      final downloadTiles = <Widget>[
+        if (widget.store.canDownload)
+          ListTile(
+            leading: const Icon(Icons.download_outlined),
+            title: const Text('下载偏好'),
+            subtitle: Text(widget.store.downloadPreferences.qualityLabel),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => DownloadPreferencesScreen(store: widget.store),
+              ),
+            ),
+          ),
+        if (widget.store.canDownload)
+          ListTile(
+            leading: const Icon(Icons.folder_outlined),
+            title: const Text('下载目录与空间'),
+            subtitle: const Text('查看存储用量、迁移已下载文件'),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => StorageScreen(
+                  repository: widget.repository,
+                  store: widget.store,
+                ),
+              ),
+            ),
+          ),
+        if (widget.store.profile.admin) ...[
+          SwitchListTile(
+            value: widget.store.autoExport,
+            title: const Text('下载完成后自动导出 Emby'),
+            subtitle: const Text(
+              '在下载目录的 exports 中生成视频和海报 URL 元数据，可将该目录加入 Emby 媒体库。',
+            ),
+            onChanged: _busy
+                ? null
+                : (value) async {
                     try {
-                      await saveUserChange(
-                        context,
-                        () => widget.store.setPlaybackPreferences(
-                          widget.store.playbackPreferences.copyWith(
-                            reminders: value,
-                          ),
-                        ),
-                      );
-                    } finally {
-                      if (mounted) setState(() => _busy = false);
+                      if (value) {
+                        await BackgroundDownloads.ensureStarted();
+                      }
+                      await widget.store.setAutoExport(value);
+                    } catch (error) {
+                      if (mounted) {
+                        setState(() => _message = error.toString());
+                      }
                     }
                   },
-                ),
-              ListTile(
-                key: const ValueKey('lan-settings'),
-                leading: const Icon(Icons.devices_rounded),
-                title: const Text('设备互联'),
-                subtitle: const Text('局域网自动同步追剧与推送播放'),
-                trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: () => openLanSync(context),
-              ),
-              if (widget.repository.supportsSourceManagement)
-                ListTile(
-                  leading: const Icon(Icons.dns_outlined),
-                  title: const Text('站源管理'),
-                  subtitle: const Text('独立更新、连接与播放检测'),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => Navigator.push(
+          ),
+          SwitchListTile(
+            value: widget.store.exportPosters,
+            title: const Text('同时导出海报文件'),
+            subtitle: const Text('默认只写海报 URL。源站海报需要解密或外部读取失败时可开启。'),
+            onChanged: _busy
+                ? null
+                : (value) => saveUserChange(
                     context,
-                    MaterialPageRoute<void>(
-                      builder: (_) => SourcesScreen(
-                        repository: widget.repository,
-                        store: widget.store,
-                      ),
-                    ),
+                    () => widget.store.setExportPosters(value),
                   ),
-                ),
-              ListTile(
-                key: const ValueKey('theme-setting'),
-                leading: const Icon(Icons.palette_outlined),
-                title: const Text('外观主题'),
-                subtitle: Text(AppTheme.label(widget.store.themeMode)),
-                trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: _chooseTheme,
-              ),
-              ListTile(
-                leading: const Icon(Icons.people_outline),
-                title: const Text('用户管理'),
-                subtitle: Text('当前：${widget.store.profile.name}'),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute<void>(
-                    builder: (_) => ProfilesScreen(store: widget.store),
-                  ),
-                ),
-              ),
-              ListTile(
-                key: const ValueKey('diary-setting'),
-                leading: const Icon(Icons.receipt_long_rounded),
-                title: const Text('播放调试日记'),
-                subtitle: const Text('查看并复制应用运行与播放器的详细事件日志'),
-                trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: () => DiaryService.showDiaryDialog(context),
-              ),
-              if (widget.store.canDownload)
-                ListTile(
-                  leading: const Icon(Icons.download_outlined),
-                  title: const Text('下载偏好'),
-                  subtitle: Text(widget.store.downloadPreferences.qualityLabel),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                      builder: (_) =>
-                          DownloadPreferencesScreen(store: widget.store),
-                    ),
-                  ),
-                ),
-              if (widget.store.canDownload)
-                ListTile(
-                  leading: const Icon(Icons.folder_outlined),
-                  title: const Text('下载目录与空间'),
-                  subtitle: const Text('查看存储用量、迁移已下载文件'),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                      builder: (_) => StorageScreen(
-                        repository: widget.repository,
-                        store: widget.store,
-                      ),
-                    ),
-                  ),
-                ),
-              if (widget.store.profile.admin) ...[
-                ListTile(
-                  leading: const Icon(Icons.settings_ethernet_rounded),
-                  title: const Text('网络与资源'),
-                  subtitle: const Text('代理、目录请求间隔、下载并发与站源目录'),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                      builder: (_) => ResourceSettingsScreen(
-                        repository: widget.repository,
-                        store: widget.store,
-                      ),
-                    ),
-                  ),
-                ),
-                SwitchListTile(
-                  value: widget.store.autoExport,
-                  title: const Text('下载完成后自动导出 Emby'),
-                  subtitle: const Text(
-                    '在下载目录的 exports 中生成视频和海报 URL 元数据，可将该目录加入 Emby 媒体库。',
-                  ),
-                  onChanged: _busy
-                      ? null
-                      : (value) async {
-                          try {
-                            if (value) {
-                              await BackgroundDownloads.ensureStarted();
-                            }
-                            await widget.store.setAutoExport(value);
-                          } catch (error) {
-                            if (mounted) {
-                              setState(() => _message = error.toString());
-                            }
-                          }
-                        },
-                ),
-                SwitchListTile(
-                  value: widget.store.exportPosters,
-                  title: const Text('同时导出海报文件'),
-                  subtitle: const Text('默认只写海报 URL。源站海报需要解密或外部读取失败时可开启。'),
-                  onChanged: _busy
-                      ? null
-                      : (value) => saveUserChange(
-                          context,
-                          () => widget.store.setExportPosters(value),
-                        ),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.backup_outlined),
-                  title: const Text('导出配置备份'),
-                  subtitle: const Text('包含本地用户、追剧、历史和设置，不含视频文件'),
-                  onTap: _busy ? null : () => _backup(false),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.restore),
-                  title: const Text('恢复配置备份'),
-                  onTap: _busy ? null : () => _backup(true),
-                ),
-              ],
-              if (Platform.isIOS)
-                const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text('iOS 下载和媒体处理需要保持应用在前台；切到后台会暂停，回到前台后可继续。'),
-                ),
-              if (_busy) const LinearProgressIndicator(),
-              if (_message != null)
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: SelectableText(_message!),
-                ),
-            ],
+          ),
+        ],
+      ];
+      final appearanceTiles = <Widget>[
+        ListTile(
+          key: const ValueKey('theme-setting'),
+          leading: const Icon(Icons.palette_outlined),
+          title: const Text('外观主题'),
+          subtitle: Text(AppTheme.label(widget.store.themeMode)),
+          trailing: const Icon(Icons.chevron_right_rounded),
+          onTap: _chooseTheme,
+        ),
+        ListTile(
+          leading: const Icon(Icons.people_outline),
+          title: const Text('用户管理'),
+          subtitle: Text('当前：${widget.store.profile.name}'),
+          trailing: const Icon(Icons.chevron_right_rounded),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute<void>(
+              builder: (_) => ProfilesScreen(store: widget.store),
+            ),
           ),
         ),
-      ),
-    ),
+        if (WindowsDesktop.current case final desktop?)
+          ListenableBuilder(
+            listenable: desktop,
+            builder: (context, _) => Column(
+              children: [
+                SwitchListTile(
+                  title: const Text('关闭窗口时进入托盘'),
+                  subtitle: Text(
+                    desktop.available
+                        ? '暂停并保存进度；从托盘恢复后需手动播放。托盘右键可播放/暂停或真正退出。关闭此项则直接退出。'
+                        : '系统托盘暂不可用，关闭窗口将直接退出。',
+                  ),
+                  value: desktop.closeToTray,
+                  onChanged: desktop.available
+                      ? (value) => saveUserChange(
+                          context,
+                          () => desktop.setCloseToTray(value),
+                        )
+                      : null,
+                ),
+                ListTile(
+                  leading: const Icon(Icons.exit_to_app_rounded),
+                  title: const Text('退出果子乐'),
+                  subtitle: const Text('保存观看进度并结束进程'),
+                  onTap: () => saveUserChange(context, desktop.quit),
+                ),
+                if (desktop.error != null) Text(desktop.error!),
+              ],
+            ),
+          ),
+      ];
+      final maintenanceTiles = <Widget>[
+        const AppUpdateTile(),
+        if (widget.store.profile.admin) ...[
+          ListTile(
+            leading: const Icon(Icons.backup_outlined),
+            title: const Text('导出配置备份'),
+            subtitle: const Text('包含本地用户、追剧、历史和设置，不含视频文件'),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: _busy ? null : () => _backup(false),
+          ),
+          ListTile(
+            leading: const Icon(Icons.restore),
+            title: const Text('恢复配置备份'),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: _busy ? null : () => _backup(true),
+          ),
+        ],
+        ListTile(
+          key: const ValueKey('diary-setting'),
+          leading: const Icon(Icons.receipt_long_rounded),
+          title: const Text('播放调试日记'),
+          subtitle: const Text('查看并复制应用运行与播放器的详细事件日志'),
+          trailing: const Icon(Icons.chevron_right_rounded),
+          onTap: () => DiaryService.showDiaryDialog(context),
+        ),
+      ];
+      return Scaffold(
+        appBar: AppBar(title: const Text('设置与备份')),
+        body: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 720),
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+              children: [
+                _section(context, '播放与弹幕', playbackTiles),
+                _section(context, '外观与账号', appearanceTiles),
+                _section(context, '互联与站源', sourceTiles),
+                _section(context, '下载与存储', downloadTiles),
+                _section(context, '更新与诊断', maintenanceTiles),
+                if (Platform.isIOS)
+                  const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Text('iOS 下载和媒体处理需要保持应用在前台；切到后台会暂停，回到前台后可继续。'),
+                  ),
+                if (_busy) const LinearProgressIndicator(),
+                if (_message != null)
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: SelectableText(_message!),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
   );
 }
 

@@ -16,14 +16,18 @@ class AppBottomNavigation extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
+    final dark = theme.brightness == Brightness.dark;
     return Material(
-      color: theme.scaffoldBackgroundColor,
+      color: dark ? colors.surface : colors.surfaceContainerLowest,
       child: SafeArea(
         top: false,
         child: DecoratedBox(
           decoration: BoxDecoration(
             border: Border(
-              top: BorderSide(color: colors.outlineVariant, width: .5),
+              top: BorderSide(
+                color: colors.outlineVariant.withValues(alpha: dark ? .5 : .7),
+                width: .6,
+              ),
             ),
           ),
           child: Row(
@@ -42,41 +46,42 @@ class AppBottomNavigation extends StatelessWidget {
                         onTap: () => onDestinationSelected(index),
                         child: ConstrainedBox(
                           constraints: const BoxConstraints(
-                            minHeight: 68,
+                            minHeight: 66,
                             minWidth: 48,
                           ),
                           child: Padding(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 4,
-                              vertical: 9,
+                              vertical: 8,
                             ),
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 AnimatedContainer(
-                                  duration: const Duration(milliseconds: 160),
-                                  curve: Curves.easeOut,
-                                  width: 18,
-                                  height: 3,
+                                  duration: const Duration(milliseconds: 180),
+                                  curve: Curves.easeOutCubic,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 4,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: index == selectedIndex
-                                        ? colors.primary
+                                        ? colors.primaryContainer
                                         : Colors.transparent,
-                                    borderRadius: BorderRadius.circular(1.5),
+                                    borderRadius: BorderRadius.circular(16),
                                   ),
-                                ),
-                                const SizedBox(height: 6),
-                                IconTheme(
-                                  data: IconThemeData(
-                                    size: 24,
-                                    color: index == selectedIndex
-                                        ? colors.primary
-                                        : colors.onSurfaceVariant,
+                                  child: IconTheme(
+                                    data: IconThemeData(
+                                      size: 22,
+                                      color: index == selectedIndex
+                                          ? colors.onPrimaryContainer
+                                          : colors.onSurfaceVariant,
+                                    ),
+                                    child: index == selectedIndex
+                                        ? destination.selectedIcon ??
+                                              destination.icon
+                                        : destination.icon,
                                   ),
-                                  child: index == selectedIndex
-                                      ? destination.selectedIcon ??
-                                            destination.icon
-                                      : destination.icon,
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
@@ -85,7 +90,7 @@ class AppBottomNavigation extends StatelessWidget {
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
-                                    fontSize: 12,
+                                    fontSize: 11.5,
                                     height: 1.2,
                                     fontWeight: index == selectedIndex
                                         ? FontWeight.w700

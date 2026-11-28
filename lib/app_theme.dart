@@ -81,13 +81,92 @@ abstract final class AppTheme {
         scrolledUnderElevation: 0,
         elevation: 0,
         centerTitle: false,
+        titleTextStyle: TextStyle(
+          color: scheme.onSurface,
+          fontSize: 20,
+          fontWeight: FontWeight.w700,
+          letterSpacing: -0.2,
+        ),
         systemOverlayStyle: systemBars(brightness),
       ),
-      dividerTheme: DividerThemeData(color: scheme.outlineVariant),
+      cardTheme: CardThemeData(
+        color: scheme.surfaceContainerLow,
+        elevation: 0,
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(
+            color: scheme.outlineVariant.withValues(alpha: dark ? .55 : .7),
+            width: .7,
+          ),
+        ),
+      ),
+      chipTheme: ChipThemeData(
+        backgroundColor: scheme.surfaceContainer,
+        selectedColor: scheme.primaryContainer,
+        disabledColor: scheme.surfaceContainerLow,
+        side: BorderSide.none,
+        shape: const StadiumBorder(),
+        labelStyle: TextStyle(
+          color: scheme.onSurface,
+          fontWeight: FontWeight.w500,
+          fontSize: 13.5,
+        ),
+        secondaryLabelStyle: TextStyle(
+          color: scheme.onPrimaryContainer,
+          fontWeight: FontWeight.w700,
+          fontSize: 13.5,
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: scheme.surfaceContainerLow,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: scheme.surfaceContainerLow,
+        surfaceTintColor: Colors.transparent,
+        showDragHandle: true,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+      listTileTheme: ListTileThemeData(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        iconColor: scheme.onSurfaceVariant,
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          side: BorderSide(color: scheme.outlineVariant),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        ),
+      ),
+      dividerTheme: DividerThemeData(
+        color: scheme.outlineVariant.withValues(alpha: dark ? .5 : .7),
+        thickness: .6,
+      ),
       navigationRailTheme: NavigationRailThemeData(
         backgroundColor: background,
-        useIndicator: false,
-        selectedIconTheme: IconThemeData(color: scheme.primary),
+        useIndicator: true,
+        indicatorColor: scheme.primaryContainer,
+        indicatorShape: const StadiumBorder(),
+        selectedIconTheme: IconThemeData(color: scheme.onPrimaryContainer),
         unselectedIconTheme: IconThemeData(color: scheme.onSurfaceVariant),
         selectedLabelTextStyle: TextStyle(
           color: scheme.primary,

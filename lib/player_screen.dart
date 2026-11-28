@@ -243,6 +243,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     danmaku: _danmakuEnabled,
     danmakuSpeed: _danmakuSpeed,
     danmakuOpacity: _danmakuOpacity,
+    danmakuFontSize: widget.store.playbackPreferences.danmakuFontSize,
+    danmakuDensity: widget.store.playbackPreferences.danmakuDensity,
     preload: _preloadEnabled,
     reminders: widget.store.playbackPreferences.reminders,
     tvTextureOutput: widget.store.playbackPreferences.tvTextureOutput,

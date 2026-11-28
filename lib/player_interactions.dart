@@ -35,7 +35,11 @@ class PlayerInteractions extends ChangeNotifier {
   }) {
     _unmutedVolume = initialUnmutedVolume.clamp(1.0, 100.0);
     _playing = player.stream.playing.listen((playing) {
-      if (!playing) cancel();
+      if (!playing) {
+        cancel(
+          suppressTap: _swipeAction != SwipeAction.none || _held || _boosting,
+        );
+      }
     });
     AppDevice.getBrightness()
         .then((val) {
@@ -64,7 +68,7 @@ class PlayerInteractions extends ChangeNotifier {
   Timer? _holdTimer;
   Timer? _hintTimer;
   Future<void> _rates = Future<void>.value();
-  final Set<int> _pointers = {};
+  final Map<int, DateTime> _pointers = {};
   int? _pointer;
   Offset? _origin;
   VelocityTracker? _velocityTracker;
@@ -208,9 +212,16 @@ class PlayerInteractions extends ChangeNotifier {
     }
   }
 
-  void cancel() {
+  void _pruneStalePointers(DateTime now) {
+    _pointers.removeWhere(
+      (_, started) => now.difference(started) > const Duration(seconds: 10),
+    );
+    if (_pointers.isEmpty) _cancelUntilRelease = false;
+  }
+
+  void cancel({bool suppressTap = true}) {
     if (_disposed) return;
-    if (_pointers.isNotEmpty) {
+    if (suppressTap && _pointers.isNotEmpty) {
       _cancelUntilRelease = true;
       _ignoreTapUntil = DateTime.now().add(const Duration(milliseconds: 600));
     }
@@ -245,7 +256,9 @@ class PlayerInteractions extends ChangeNotifier {
     required double height,
   }) {
     if (_disposed) return;
-    _pointers.add(event.pointer);
+    final now = DateTime.now();
+    _pruneStalePointers(now);
+    _pointers[event.pointer] = now;
     if (_pointers.length != 1 || _cancelUntilRelease) {
       cancel();
       return;
@@ -418,7 +431,7 @@ class PlayerInteractions extends ChangeNotifier {
       _scheduleDismissHud();
     }
 
-    if (_moved || _held) {
+    if (_swipeAction != SwipeAction.none || _held) {
       _ignoreTapUntil = DateTime.now().add(const Duration(milliseconds: 250));
     }
     _episodeDragging = false;

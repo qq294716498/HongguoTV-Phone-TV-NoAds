@@ -136,6 +136,7 @@ class DramaCover extends StatelessWidget {
         ),
       ),
     );
+    final dark = Theme.of(context).brightness == Brightness.dark;
     return ClipRRect(
       borderRadius: BorderRadius.circular(radius),
       child: Stack(
@@ -154,10 +155,12 @@ class DramaCover extends StatelessWidget {
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    begin: Alignment.center,
+                    begin: const Alignment(0, .2),
                     end: Alignment.bottomCenter,
+                    stops: const [0, .55, 1],
                     colors: [
                       Colors.transparent,
+                      Colors.black.withValues(alpha: .28),
                       Colors.black.withValues(alpha: .78),
                     ],
                   ),
@@ -167,11 +170,23 @@ class DramaCover extends StatelessWidget {
           ),
           if (showMetadata && showEpisodeCount && drama.episodes > 0)
             Positioned(
-              left: 9,
-              bottom: 9,
-              child: Text(
-                '共 ${drama.episodes} 集',
-                style: const TextStyle(color: Colors.white, fontSize: 12),
+              left: 8,
+              bottom: 8,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: .54),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '共 ${drama.episodes} 集',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                ),
               ),
             ),
           if (showMetadata && drama.vip)
@@ -181,7 +196,9 @@ class DramaCover extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF6C86B),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFF8D681), Color(0xFFE7AD47)],
+                  ),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: const Text(
@@ -194,6 +211,21 @@ class DramaCover extends StatelessWidget {
                 ),
               ),
             ),
+          Positioned.fill(
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(radius),
+                  border: Border.all(
+                    color: (dark ? Colors.white : Colors.black).withValues(
+                      alpha: dark ? .08 : .06,
+                    ),
+                    width: .6,
+                  ),
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );

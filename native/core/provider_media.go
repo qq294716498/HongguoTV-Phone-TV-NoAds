@@ -60,7 +60,11 @@ func providerSourceForURL(raw string) string {
 	}
 	host := strings.ToLower(parsed.Hostname())
 	switch {
-	case host == "huangguoai.com" || strings.HasSuffix(host, ".ediayikma.cc") || strings.HasSuffix(host, ".agdkczeyx.cc"):
+	case host == "huangguoai.com" ||
+		strings.HasSuffix(host, ".lbvrhyir.cc") ||
+		strings.HasSuffix(host, ".xxbgwypx.cc") ||
+		strings.HasSuffix(host, ".ediayikma.cc") ||
+		strings.HasSuffix(host, ".agdkczeyx.cc"):
 		return sourceHuangguoAI
 	case host == "huangguo.video":
 		return sourceHuangguoVideo
@@ -71,8 +75,12 @@ func providerSourceForURL(raw string) string {
 	case host == "huangju.net" || host == "www.huangju.net" || host == "api.huangju.net":
 		return sourceHuangju
 	case host == "ygdj7.com" || host == "www.ygdj7.com" ||
-		host == "analyze.buxefaex.cc" || strings.HasSuffix(host, ".buxefaex.cc") ||
+		host == "ygdj15.com" || host == "www.ygdj15.com" ||
+		host == "analyze.buxefaex.cc" || host == "attract.vgbyziuz.cc" ||
+		strings.HasSuffix(host, ".buxefaex.cc") ||
 		strings.HasSuffix(host, ".fzchosdi.cc") ||
+		strings.HasSuffix(host, ".lwblvxvy.cc") ||
+		strings.HasSuffix(host, ".vgbyziuz.cc") ||
 		host == "delta.ygrwdsgt.cc" || host == "yeguodj.com" || host == "www.yeguodj.com":
 		return sourceYeguo
 	case host == "dsd.com.se" || host == "www.dsd.com.se":

@@ -1,13 +1,20 @@
 import 'package:duanju_app/danmaku_controller.dart';
 import 'package:duanju_app/danmaku_models.dart';
 import 'package:duanju_app/danmaku_overlay.dart';
+import 'package:duanju_app/local_store.dart';
+import 'package:duanju_app/models.dart';
 import 'package:duanju_app/playback_preferences.dart';
+import 'package:duanju_app/player_screen.dart';
 import 'package:duanju_app/windows_danmaku_overlay.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'danmaku_fixtures.dart';
 import 'danmaku_test.dart' show danmakuPlan, flushDanmaku, updateDanmaku;
+import 'fixtures.dart';
+import 'player_fixtures.dart';
 
 void main() {
   test('弹幕字号与数量偏好默认小号正常，并能持久化与回退', () {
@@ -131,4 +138,57 @@ void main() {
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  testWidgets(
+    'PlayerScreen forwards stored danmakuFontSize and danmakuDensity to DanmakuOverlay',
+    (tester) async {
+      mockPlayerDevice();
+      SharedPreferences.setMockInitialValues({});
+      final store = LocalStore(await SharedPreferences.getInstance());
+      await store.setPlaybackPreferences(
+        const PlaybackPreferences(
+          danmakuFontSize: DanmakuFontSize.large,
+          danmakuDensity: DanmakuDensity.sparse,
+        ),
+      );
+      final platform = ScriptedPlayer();
+      final player = Player(platformPlayer: platform);
+      final repo = FixtureRepository();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: PlayerScreen(
+            detail: DramaDetail(
+              const Drama(
+                id: 'hongguo:size-check',
+                source: 'hongguo',
+                title: '弹幕字号验证剧',
+                category: '甜宠',
+                episodes: 1,
+              ),
+              [
+                Episode({'id': 'ep-1', 'title': '第1集'}, 1),
+              ],
+            ),
+            initialIndex: 0,
+            repository: repo,
+            store: store,
+            playerFactory: () => player,
+            videoBuilder: (controls) =>
+                Stack(fit: StackFit.expand, children: [controls]),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      final overlay = tester.widget<DanmakuOverlay>(
+        find.byType(DanmakuOverlay),
+      );
+      expect(overlay.fontSize, DanmakuFontSize.large);
+      expect(overlay.density, DanmakuDensity.sparse);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(seconds: 3));
+    },
+  );
 }

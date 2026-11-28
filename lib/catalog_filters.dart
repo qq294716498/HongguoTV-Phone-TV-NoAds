@@ -61,13 +61,13 @@ class _CatalogFiltersState extends State<CatalogFilters> {
             child: SingleChildScrollView(
               key: const ValueKey('catalog-categories'),
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(
                 children: [
                   for (final entry in widget.categories)
                     Padding(
                       key: _anchors.putIfAbsent(entry.id, GlobalKey.new),
-                      padding: const EdgeInsets.only(right: 6),
+                      padding: const EdgeInsets.only(right: 8),
                       child: television
                           ? RemoteButton(
                               key: ValueKey('category-${entry.id}'),

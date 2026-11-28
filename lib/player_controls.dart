@@ -316,13 +316,16 @@ class _PlayerControlsState extends State<PlayerControls> {
   void _tap() {
     if (widget.interactions.suppressTap) return;
     widget.onFocusSurface();
-    if (_locked) return;
+    if (_locked) {
+      widget.interactions.hint('屏幕已锁定，点击右上角解锁');
+      return;
+    }
     if (widget.swipeEnabled && !widget.fullscreen && widget.enabled) {
       if (_controlsVisible) widget.onTogglePlayback();
       _show();
       return;
     }
-    setState(() => _visible = !_visible);
+    setState(() => _visible = !_controlsVisible);
     _scheduleHide();
   }
 
@@ -403,7 +406,7 @@ class _PlayerControlsState extends State<PlayerControls> {
                   );
                 },
                 onPointerMove: _locked ? null : widget.interactions.pointerMove,
-                onPointerUp: _locked ? null : widget.interactions.pointerUp,
+                onPointerUp: widget.interactions.pointerUp,
                 onPointerCancel: widget.interactions.pointerCancel,
                 child: RawGestureDetector(
                   gestures: widget.swipeEnabled && widget.enabled && !_locked
@@ -642,8 +645,9 @@ class _PlayerControlsState extends State<PlayerControls> {
     padding: const EdgeInsets.symmetric(horizontal: 2),
     child: DecoratedBox(
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: .36),
+        color: Colors.black.withValues(alpha: .44),
         borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: Colors.white.withValues(alpha: .12)),
       ),
       child: IconButton(
         tooltip: tooltip,
